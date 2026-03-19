@@ -28,6 +28,18 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(e.getStatus().value(), e.getMessage(), LocalDateTime.now()));
     }
 
+    @ExceptionHandler(FriendException.class)
+    ResponseEntity<ErrorResponse> handleFriend(FriendException e) {
+        return ResponseEntity.status(e.getStatus())
+                .body(new ErrorResponse(e.getStatus().value(), e.getMessage(), LocalDateTime.now()));
+    }
+
+    @ExceptionHandler(UserException.class)
+    ResponseEntity<ErrorResponse> handleUser(UserException e) {
+        return ResponseEntity.status(e.getStatus())
+                .body(new ErrorResponse(e.getStatus().value(), e.getMessage(), LocalDateTime.now()));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<Map<String, String>> handleValidation(MethodArgumentNotValidException e) {
         Map<String, String> errors = e.getBindingResult().getFieldErrors().stream()
