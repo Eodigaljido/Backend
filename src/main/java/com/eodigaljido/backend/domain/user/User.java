@@ -64,6 +64,20 @@ public class User extends BaseTimeEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    public void updateLastLoginAt(LocalDateTime at) {
+        this.lastLoginAt = at;
+    }
+
+    public void updatePhone(String phone, LocalDateTime verifiedAt) {
+        this.phone = phone;
+        this.phoneVerifiedAt = verifiedAt;
+    }
+
+    public void markDeleted() {
+        this.status = UserStatus.DELETED;
+        this.deletedAt = LocalDateTime.now();
+    }
+
     public enum Provider {
         LOCAL, GOOGLE, KAKAO
     }

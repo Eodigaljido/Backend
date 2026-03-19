@@ -51,6 +51,14 @@ public class PhoneVerification {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    public void incrementAttempts() {
+        this.attempts++;
+    }
+
+    public void markVerified() {
+        this.verified = true;
+    }
+
     public enum Purpose {
         REGISTER, CHANGE_PHONE
     }

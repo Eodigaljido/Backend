@@ -48,4 +48,8 @@ public class RefreshToken {
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    public void revoke() {
+        this.revokedAt = LocalDateTime.now();
+    }
 }
