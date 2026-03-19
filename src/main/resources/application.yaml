@@ -3,6 +3,11 @@ spring:
     name: backend
   profiles:
     active: local
+  devtools:
+    restart:
+      enabled: true
+    livereload:
+      enabled: true
 
 springdoc:
   swagger-ui:
