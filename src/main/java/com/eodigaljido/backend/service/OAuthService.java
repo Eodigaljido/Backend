@@ -1,10 +1,12 @@
 package com.eodigaljido.backend.service;
 
+import com.eodigaljido.backend.config.JwtProperties;
 import com.eodigaljido.backend.config.OAuthProperties;
 import com.eodigaljido.backend.domain.user.Profile;
 import com.eodigaljido.backend.domain.user.RefreshToken;
 import com.eodigaljido.backend.domain.user.User;
 import com.eodigaljido.backend.dto.auth.LoginResponse;
+import com.eodigaljido.backend.dto.auth.OAuthLoginResponse;
 import com.eodigaljido.backend.exception.AuthException;
 import com.eodigaljido.backend.repository.ProfileRepository;
 import com.eodigaljido.backend.repository.RefreshTokenRepository;
@@ -31,6 +33,7 @@ import java.util.UUID;
 public class OAuthService {
 
     private final OAuthProperties oAuthProperties;
+    private final JwtProperties jwtProperties;
     private final UserRepository userRepository;
     private final ProfileRepository profileRepository;
     private final RefreshTokenRepository refreshTokenRepository;
@@ -41,7 +44,7 @@ public class OAuthService {
     // ── Google ────────────────────────────────────────────────────────────────
 
     @Transactional
-    public LoginResponse loginWithGoogle(String authorizationCode) {
+    public OAuthLoginResponse loginWithGoogle(String authorizationCode) {
         String accessToken = exchangeGoogleCode(authorizationCode);
         JsonNode userInfo = getGoogleUserInfo(accessToken);
 
@@ -71,7 +74,7 @@ public class OAuthService {
     // ── Kakao ────────────────────────────────────────────────────────────────
 
     @Transactional
-    public LoginResponse loginWithKakao(String authorizationCode) {
+    public OAuthLoginResponse loginWithKakao(String authorizationCode) {
         String accessToken = exchangeKakaoCode(authorizationCode);
         JsonNode userInfo = getKakaoUserInfo(accessToken);
 
@@ -101,10 +104,14 @@ public class OAuthService {
 
     // ── 공통 사용자 처리 ─────────────────────────────────────────────────────
 
-    private LoginResponse findOrCreateUser(User.Provider provider, String providerId,
-                                           String email, String name) {
+    private OAuthLoginResponse findOrCreateUser(User.Provider provider, String providerId,
+                                                String email, String name) {
+        boolean[] isNew = {false};
         User user = userRepository.findByProviderAndProviderId(provider, providerId)
-                .orElseGet(() -> createOAuthUser(provider, providerId, email, name));
+                .orElseGet(() -> {
+                    isNew[0] = true;
+                    return createOAuthUser(provider, providerId, email, name);
+                });
 
         user.updateLastLoginAt(LocalDateTime.now());
 
@@ -117,7 +124,11 @@ public class OAuthService {
                 .expiresAt(LocalDateTime.now().plusDays(30))
                 .build());
 
-        return LoginResponse.of(accessToken, refreshTokenStr);
+        long expiresIn = jwtProperties.getAccessTokenExpiry() / 1000;
+        String nickname = profileRepository.findByUser(user)
+                .map(Profile::getNickname)
+                .orElse(null);
+        return OAuthLoginResponse.of(accessToken, refreshTokenStr, expiresIn, isNew[0], user, nickname);
     }
 
     private User createOAuthUser(User.Provider provider, String providerId,

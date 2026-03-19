@@ -1,6 +1,7 @@
 package com.eodigaljido.backend.controller;
 
 import com.eodigaljido.backend.dto.auth.*;
+import org.springframework.http.HttpStatus;
 import com.eodigaljido.backend.service.AuthService;
 import com.eodigaljido.backend.service.OAuthService;
 import com.eodigaljido.backend.service.PhoneVerificationService;
@@ -44,7 +45,7 @@ public class AuthController {
                     """
     )
     ResponseEntity<LoginResponse> register(@Valid @RequestBody RegisterRequest request) {
-        return ResponseEntity.ok(authService.register(request));
+        return ResponseEntity.status(HttpStatus.CREATED).body(authService.register(request));
     }
 
     @PostMapping("/login")
@@ -142,9 +143,10 @@ public class AuthController {
 
                     **Response:**
                     - `accessToken` / `refreshToken` 발급 (신규 유저는 자동 가입 후 발급)
+                    - `isNewUser`: true이면 신규 가입, false이면 기존 계정 로그인
                     """
     )
-    ResponseEntity<LoginResponse> googleOAuth(@Valid @RequestBody OAuthLoginRequest request) {
+    ResponseEntity<OAuthLoginResponse> googleOAuth(@Valid @RequestBody OAuthLoginRequest request) {
         return ResponseEntity.ok(oAuthService.loginWithGoogle(request.code()));
     }
 
@@ -164,9 +166,10 @@ public class AuthController {
 
                     **Response:**
                     - `accessToken` / `refreshToken` 발급 (신규 유저는 자동 가입 후 발급)
+                    - `isNewUser`: true이면 신규 가입, false이면 기존 계정 로그인
                     """
     )
-    ResponseEntity<LoginResponse> kakaoOAuth(@Valid @RequestBody OAuthLoginRequest request) {
+    ResponseEntity<OAuthLoginResponse> kakaoOAuth(@Valid @RequestBody OAuthLoginRequest request) {
         return ResponseEntity.ok(oAuthService.loginWithKakao(request.code()));
     }
 
@@ -186,9 +189,9 @@ public class AuthController {
                     최대 **5회** 오입력 시 코드가 잠기며 재발송이 필요합니다.
                     """
     )
-    ResponseEntity<Void> sendPhoneCode(@Valid @RequestBody PhoneCodeRequest request) {
+    ResponseEntity<PhoneCodeResponse> sendPhoneCode(@Valid @RequestBody PhoneCodeRequest request) {
         phoneVerificationService.sendCode(request.phone(), request.purpose());
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(PhoneCodeResponse.of(180));
     }
 
     @PostMapping("/phone/verify")

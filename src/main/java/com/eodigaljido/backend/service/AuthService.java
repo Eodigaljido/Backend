@@ -1,5 +1,6 @@
 package com.eodigaljido.backend.service;
 
+import com.eodigaljido.backend.config.JwtProperties;
 import com.eodigaljido.backend.domain.user.PhoneVerification;
 import com.eodigaljido.backend.domain.user.Profile;
 import com.eodigaljido.backend.domain.user.RefreshToken;
@@ -27,6 +28,7 @@ public class AuthService {
     private final ProfileRepository profileRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final JwtTokenProvider jwtTokenProvider;
+    private final JwtProperties jwtProperties;
     private final PasswordEncoder passwordEncoder;
     private final PhoneVerificationService phoneVerificationService;
 
@@ -105,7 +107,8 @@ public class AuthService {
 
         User user = stored.getUser();
         String newAccessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getRole().name());
-        return TokenRefreshResponse.of(newAccessToken);
+        long expiresIn = jwtProperties.getAccessTokenExpiry() / 1000;
+        return TokenRefreshResponse.of(newAccessToken, expiresIn);
     }
 
     @Transactional
@@ -160,6 +163,11 @@ public class AuthService {
                 .build();
 
         refreshTokenRepository.save(refreshToken);
-        return LoginResponse.of(accessToken, refreshTokenStr);
+
+        long expiresIn = jwtProperties.getAccessTokenExpiry() / 1000;
+        String nickname = profileRepository.findByUser(user)
+                .map(Profile::getNickname)
+                .orElse(null);
+        return LoginResponse.of(accessToken, refreshTokenStr, expiresIn, user, nickname);
     }
 }
