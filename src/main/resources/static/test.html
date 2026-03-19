@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>어디갈지도 API 테스트</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body { font-family: 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
+
+    header {
+      background: #1a1d2e; border-bottom: 1px solid #2d3748;
+      padding: 16px 32px; display: flex; align-items: center; gap: 12px;
+    }
+    header h1 { font-size: 1.2rem; color: #7c3aed; }
+    header span { font-size: 0.8rem; color: #64748b; }
+
+    .token-bar {
+      background: #12151f; border-bottom: 1px solid #1e2535;
+      padding: 8px 32px; font-size: 0.75rem; color: #64748b;
+      display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+    }
+    .token-bar .token-label { color: #475569; }
+    .token-bar .token-val { color: #34d399; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .token-bar .token-val.empty { color: #4b5563; font-style: italic; }
+
+    .tabs { display: flex; gap: 4px; padding: 16px 32px 0; border-bottom: 1px solid #1e2535; }
+    .tab-btn {
+      padding: 8px 20px; border: none; background: transparent; color: #64748b;
+      cursor: pointer; font-size: 0.9rem; border-radius: 6px 6px 0 0;
+      border-bottom: 2px solid transparent; transition: all 0.15s;
+    }
+    .tab-btn:hover { color: #a78bfa; }
+    .tab-btn.active { color: #7c3aed; border-bottom-color: #7c3aed; background: #1a1d2e; }
+
+    .tab-content { display: none; padding: 24px 32px; }
+    .tab-content.active { display: block; }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px; }
+
+    .card { background: #1a1d2e; border: 1px solid #2d3748; border-radius: 10px; padding: 20px; }
+    .card h3 { font-size: 0.9rem; color: #94a3b8; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 0.8rem; color: #64748b; margin-bottom: 4px; }
+    .form-group input, .form-group select {
+      width: 100%; background: #0f1117; border: 1px solid #2d3748;
+      border-radius: 6px; padding: 8px 12px; color: #e2e8f0;
+      font-size: 0.9rem; outline: none; transition: border-color 0.15s;
+    }
+    .form-group input:focus, .form-group select:focus { border-color: #7c3aed; }
+    .form-group input:disabled { color: #475569; cursor: not-allowed; }
+
+    .inline-row { display: flex; gap: 8px; }
+    .inline-row input { flex: 1; }
+
+    .btn {
+      padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer;
+      font-size: 0.85rem; font-weight: 500; transition: all 0.15s; white-space: nowrap;
+    }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary { background: #7c3aed; color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #6d28d9; }
+    .btn-secondary { background: #1e2535; color: #94a3b8; border: 1px solid #2d3748; }
+    .btn-secondary:hover:not(:disabled) { background: #252d42; }
+    .btn-danger { background: #7f1d1d; color: #fca5a5; }
+    .btn-danger:hover:not(:disabled) { background: #991b1b; }
+    .btn-success { background: #064e3b; color: #6ee7b7; }
+    .btn-success:hover:not(:disabled) { background: #065f46; }
+
+    .btn-row { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; margin-right: 4px; }
+    .badge-post   { background: #1e3a5f; color: #60a5fa; }
+    .badge-patch  { background: #3b2a00; color: #fbbf24; }
+
+    .endpoint { font-size: 0.78rem; color: #475569; margin-bottom: 14px; }
+
+    .info-box {
+      background: #0f172a; border: 1px solid #1e3a5f; border-radius: 6px;
+      padding: 10px 14px; font-size: 0.8rem; color: #60a5fa;
+      margin-bottom: 14px; line-height: 1.6;
+    }
+    .info-box.success { background: #022c22; border-color: #065f46; color: #6ee7b7; }
+    .info-box.warn    { background: #1c1200; border-color: #78350f; color: #fbbf24; }
+
+    .step-divider { border: none; border-top: 1px solid #1e2535; margin: 16px 0; }
+
+    .hidden { display: none !important; }
+
+    .response-panel {
+      position: fixed; bottom: 0; left: 0; right: 0; height: 220px;
+      background: #0a0c14; border-top: 1px solid #1e2535;
+      display: flex; flex-direction: column;
+    }
+    .response-header {
+      padding: 8px 16px; display: flex; align-items: center; gap: 12px;
+      border-bottom: 1px solid #1e2535; flex-shrink: 0;
+    }
+    .response-header span { font-size: 0.8rem; color: #475569; }
+    #responseStatus { font-size: 0.85rem; font-weight: 600; }
+    .status-ok { color: #34d399; }
+    .status-err { color: #f87171; }
+    #responseBody {
+      flex: 1; overflow-y: auto; padding: 12px 16px;
+      font-family: 'Fira Code', 'Consolas', monospace;
+      font-size: 0.78rem; color: #94a3b8; white-space: pre-wrap; word-break: break-all;
+    }
+    .spacer { height: 240px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🗺 어디갈지도</h1>
+  <span>Auth API 테스트 페이지</span>
+</header>
+
+<div class="token-bar">
+  <span class="token-label">Access Token:</span>
+  <span class="token-val empty" id="displayAccess">없음</span>
+  <span class="token-label" style="margin-left:8px">Refresh Token:</span>
+  <span class="token-val empty" id="displayRefresh">없음</span>
+  <button class="btn btn-secondary" style="font-size:0.7rem;padding:3px 10px" onclick="clearTokens()">토큰 초기화</button>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('register', this)">✏️ 회원가입</button>
+  <button class="tab-btn" onclick="switchTab('login', this)">🔑 로그인</button>
+  <button class="tab-btn" onclick="switchTab('manage', this)">⚙️ 인증 관리</button>
+  <button class="tab-btn" onclick="switchTab('sms', this)">🔧 SMS API</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     회원가입 탭 — 전화번호 인증 후 가입
+     ══════════════════════════════════════════════════════════ -->
+<div id="tab-register" class="tab-content active">
+  <div class="grid">
+    <div class="card">
+      <h3>회원가입</h3>
+      <div class="endpoint">
+        <span class="badge badge-post">POST</span>/auth/phone/code &nbsp;
+        <span class="badge badge-post">POST</span>/auth/phone/verify &nbsp;
+        <span class="badge badge-post">POST</span>/auth/register
+      </div>
+
+      <!-- ① 기본 정보 -->
+      <div class="form-group">
+        <label>이메일</label>
+        <input id="regEmail" type="email" placeholder="user@example.com">
+      </div>
+      <div class="form-group">
+        <label>비밀번호 (8자 이상)</label>
+        <input id="regPassword" type="password" placeholder="••••••••">
+      </div>
+      <div class="form-group">
+        <label>닉네임 (2~50자)</label>
+        <input id="regNickname" type="text" placeholder="어디갈지몰라">
+      </div>
+
+      <hr class="step-divider">
+
+      <!-- ② 전화번호 + 인증번호 받기 -->
+      <div class="form-group">
+        <label>휴대폰 번호</label>
+        <div class="inline-row">
+          <input id="regPhone" type="text" placeholder="01012345678">
+          <button class="btn btn-secondary" id="regSendBtn" onclick="regSendCode()">인증번호 받기</button>
+        </div>
+      </div>
+
+      <!-- ③ 인증번호 입력 (발송 후 표시) -->
+      <div id="regCodeSection" class="hidden">
+        <div class="form-group">
+          <label>인증번호 (6자리)</label>
+          <div class="inline-row">
+            <input id="regCode" type="text" placeholder="123456" maxlength="6">
+            <button class="btn btn-success" onclick="regVerifyCode()">인증 확인</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ④ 인증 완료 메시지 (확인 후 표시) -->
+      <div id="regVerifiedBox" class="info-box success hidden">✓ 전화번호 인증이 완료되었습니다.</div>
+
+      <!-- ⑤ 회원가입 버튼 -->
+      <div class="btn-row">
+        <button class="btn btn-primary" id="regSubmitBtn" onclick="register()" disabled>회원가입</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     로그인 탭
+     ══════════════════════════════════════════════════════════ -->
+<div id="tab-login" class="tab-content">
+  <div class="grid">
+
+    <div class="card">
+      <h3>이메일 로그인</h3>
+      <div class="endpoint"><span class="badge badge-post">POST</span>/auth/login</div>
+      <div class="form-group">
+        <label>이메일</label>
+        <input id="loginEmail" type="email" placeholder="user@example.com">
+      </div>
+      <div class="form-group">
+        <label>비밀번호</label>
+        <input id="loginPassword" type="password" placeholder="••••••••">
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="login()">로그인</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Google OAuth</h3>
+      <div class="endpoint"><span class="badge badge-post">POST</span>/auth/oauth/google</div>
+      <div class="info-box">Google Cloud Console에서 발급한 Authorization Code를 입력하세요.</div>
+      <div class="form-group">
+        <label>Authorization Code</label>
+        <input id="googleCode" type="text" placeholder="4/0AeaYSH...">
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="oauthGoogle()">Google 로그인</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Kakao OAuth</h3>
+      <div class="endpoint"><span class="badge badge-post">POST</span>/auth/oauth/kakao</div>
+      <div class="info-box">Kakao Developers에서 발급한 Authorization Code를 입력하세요.</div>
+      <div class="form-group">
+        <label>Authorization Code</label>
+        <input id="kakaoCode" type="text" placeholder="FKqH4z...">
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="oauthKakao()">Kakao 로그인</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     인증 관리 탭
+     ══════════════════════════════════════════════════════════ -->
+<div id="tab-manage" class="tab-content">
+  <div class="grid">
+
+    <div class="card">
+      <h3>토큰 재발급</h3>
+      <div class="endpoint"><span class="badge badge-post">POST</span>/auth/token/refresh</div>
+      <div class="info-box">저장된 Refresh Token으로 새 Access Token을 발급받습니다.</div>
+      <div class="btn-row">
+        <button class="btn btn-success" onclick="tokenRefresh()">Access Token 재발급</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>로그아웃</h3>
+      <div class="endpoint">
+        <span class="badge badge-post">POST</span>/auth/logout &nbsp;
+        <span class="badge badge-post">POST</span>/auth/logout/all-devices
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-danger" onclick="logout()">현재 디바이스 로그아웃</button>
+        <button class="btn btn-danger" onclick="logoutAll()">모든 디바이스 로그아웃</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>전화번호 변경</h3>
+      <div class="endpoint">
+        <span class="badge badge-post">POST</span>/auth/phone/code &nbsp;
+        <span class="badge badge-post">POST</span>/auth/phone/verify &nbsp;
+        <span class="badge badge-patch">PATCH</span>/users/me/phone
+      </div>
+
+      <!-- ① 새 번호 + 인증번호 받기 -->
+      <div class="form-group">
+        <label>새 휴대폰 번호</label>
+        <div class="inline-row">
+          <input id="changePhone" type="text" placeholder="01087654321">
+          <button class="btn btn-secondary" id="changeSendBtn" onclick="changeSendCode()">인증번호 받기</button>
+        </div>
+      </div>
+
+      <!-- ② 인증번호 입력 -->
+      <div id="changeCodeSection" class="hidden">
+        <div class="form-group">
+          <label>인증번호 (6자리)</label>
+          <div class="inline-row">
+            <input id="changeCode" type="text" placeholder="123456" maxlength="6">
+            <button class="btn btn-success" onclick="changeVerifyCode()">인증 확인</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ③ 인증 완료 -->
+      <div id="changeVerifiedBox" class="info-box success hidden">✓ 전화번호 인증이 완료되었습니다.</div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="changeSubmitBtn" onclick="updatePhone()" disabled>번호 변경</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SMS API 탭 — raw 엔드포인트 테스트
+     ══════════════════════════════════════════════════════════ -->
+<div id="tab-sms" class="tab-content">
+  <div class="grid">
+
+    <div class="card">
+      <h3>인증번호 발송 (raw)</h3>
+      <div class="endpoint"><span class="badge badge-post">POST</span>/auth/phone/code</div>
+      <div class="form-group">
+        <label>휴대폰 번호</label>
+        <input id="smsPhone" type="text" placeholder="01012345678">
+      </div>
+      <div class="form-group">
+        <label>용도</label>
+        <select id="smsPurpose">
+          <option value="REGISTER">회원가입 (REGISTER)</option>
+          <option value="CHANGE_PHONE">번호 변경 (CHANGE_PHONE)</option>
+        </select>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="rawSendCode()">발송</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>인증번호 검증 (raw)</h3>
+      <div class="endpoint"><span class="badge badge-post">POST</span>/auth/phone/verify</div>
+      <div class="form-group">
+        <label>휴대폰 번호</label>
+        <input id="rawVerifyPhone" type="text" placeholder="01012345678">
+      </div>
+      <div class="form-group">
+        <label>인증번호 (6자리)</label>
+        <input id="rawVerifyCode" type="text" placeholder="123456" maxlength="6">
+      </div>
+      <div class="form-group">
+        <label>용도</label>
+        <select id="rawVerifyPurpose">
+          <option value="REGISTER">회원가입 (REGISTER)</option>
+          <option value="CHANGE_PHONE">번호 변경 (CHANGE_PHONE)</option>
+        </select>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-success" onclick="rawVerifyCode()">검증</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="spacer"></div>
+
+<div class="response-panel">
+  <div class="response-header">
+    <span>응답</span>
+    <span id="responseStatus">—</span>
+    <span id="responseEndpoint" style="margin-left:auto;font-size:0.75rem;color:#334155"></span>
+    <button class="btn btn-secondary" style="font-size:0.7rem;padding:2px 8px" onclick="clearResponse()">지우기</button>
+  </div>
+  <pre id="responseBody">API를 호출하면 여기에 응답이 표시됩니다.</pre>
+</div>
+
+<script>
+  // ── 토큰 관리 ──────────────────────────────────────────────────────
+
+  const getAccess  = () => localStorage.getItem('accessToken');
+  const getRefresh = () => localStorage.getItem('refreshToken');
+
+  function saveTokens(access, refresh) {
+    if (access)  localStorage.setItem('accessToken',  access);
+    if (refresh) localStorage.setItem('refreshToken', refresh);
+    updateTokenBar();
+  }
+
+  function clearTokens() {
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    updateTokenBar();
+    showResponse(null, null, '— 토큰이 초기화되었습니다 —');
+  }
+
+  function updateTokenBar() {
+    const a = getAccess(), r = getRefresh();
+    const da = document.getElementById('displayAccess');
+    const dr = document.getElementById('displayRefresh');
+    da.textContent = a ? a.substring(0, 40) + '…' : '없음';
+    da.className = 'token-val' + (a ? '' : ' empty');
+    dr.textContent = r ? r.substring(0, 40) + '…' : '없음';
+    dr.className = 'token-val' + (r ? '' : ' empty');
+  }
+
+  // ── 응답 패널 ──────────────────────────────────────────────────────
+
+  function showResponse(status, endpoint, body) {
+    const statusEl = document.getElementById('responseStatus');
+    statusEl.textContent = status ?? '—';
+    statusEl.className = status === null ? '' : (status < 300 ? 'status-ok' : 'status-err');
+    document.getElementById('responseEndpoint').textContent = endpoint || '';
+    document.getElementById('responseBody').textContent =
+      typeof body === 'object' ? JSON.stringify(body, null, 2) : (body || '(빈 응답)');
+  }
+
+  function clearResponse() {
+    showResponse(null, null, 'API를 호출하면 여기에 응답이 표시됩니다.');
+  }
+
+  // ── 공통 fetch ─────────────────────────────────────────────────────
+
+  async function callApi(method, path, body, needAuth) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (needAuth) {
+      const token = getAccess();
+      if (!token) { showResponse(401, path, '❌ 로그인이 필요합니다. 먼저 로그인하세요.'); return null; }
+      headers['Authorization'] = 'Bearer ' + token;
+    }
+    try {
+      const opts = { method, headers };
+      if (body) opts.body = JSON.stringify(body);
+      const res = await fetch(path, opts);
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = text; }
+      showResponse(res.status, `${method} ${path}`, data);
+      return { status: res.status, data };
+    } catch (e) {
+      showResponse(0, path, '❌ 네트워크 오류: ' + e.message);
+      return null;
+    }
+  }
+
+  function show(id)  { document.getElementById(id).classList.remove('hidden'); }
+  function hide(id)  { document.getElementById(id).classList.add('hidden'); }
+  function enable(id)  { document.getElementById(id).disabled = false; }
+  function disable(id) { document.getElementById(id).disabled = true; }
+
+  // ── 회원가입 플로우 ────────────────────────────────────────────────
+
+  async function regSendCode() {
+    const phone = document.getElementById('regPhone').value.trim();
+    if (!phone) { alert('휴대폰 번호를 입력하세요.'); return; }
+
+    const result = await callApi('POST', '/auth/phone/code', { phone, purpose: 'REGISTER' });
+    if (result && result.status === 204) {
+      show('regCodeSection');
+      document.getElementById('regCode').focus();
+    }
+  }
+
+  async function regVerifyCode() {
+    const phone = document.getElementById('regPhone').value.trim();
+    const code  = document.getElementById('regCode').value.trim();
+    if (!code) { alert('인증번호를 입력하세요.'); return; }
+
+    const result = await callApi('POST', '/auth/phone/verify', { phone, code, purpose: 'REGISTER' });
+    if (result && result.status === 204) {
+      hide('regCodeSection');
+      show('regVerifiedBox');
+      document.getElementById('regPhone').disabled = true;
+      disable('regSendBtn');
+      enable('regSubmitBtn');
+    }
+  }
+
+  async function register() {
+    const email    = document.getElementById('regEmail').value.trim();
+    const password = document.getElementById('regPassword').value;
+    const nickname = document.getElementById('regNickname').value.trim();
+    const phone    = document.getElementById('regPhone').value.trim();
+    if (!email || !password || !nickname || !phone) { alert('모든 항목을 입력해주세요.'); return; }
+
+    const result = await callApi('POST', '/auth/register', { email, password, nickname, phone });
+    if (result && result.status === 200 && result.data.accessToken) {
+      saveTokens(result.data.accessToken, result.data.refreshToken);
+      // 폼 초기화
+      ['regEmail','regPassword','regNickname','regCode'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('regPhone').value = '';
+      document.getElementById('regPhone').disabled = false;
+      hide('regVerifiedBox');
+      hide('regCodeSection');
+      enable('regSendBtn');
+      disable('regSubmitBtn');
+    }
+  }
+
+  // ── 로그인 ─────────────────────────────────────────────────────────
+
+  async function login() {
+    const email    = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    if (!email || !password) { alert('이메일과 비밀번호를 입력하세요.'); return; }
+
+    const result = await callApi('POST', '/auth/login', { email, password });
+    if (result && result.status === 200 && result.data.accessToken) {
+      saveTokens(result.data.accessToken, result.data.refreshToken);
+    }
+  }
+
+  async function oauthGoogle() {
+    const code = document.getElementById('googleCode').value.trim();
+    if (!code) { alert('Authorization Code를 입력하세요.'); return; }
+    const result = await callApi('POST', '/auth/oauth/google', { code });
+    if (result && result.status === 200 && result.data?.accessToken) saveTokens(result.data.accessToken, result.data.refreshToken);
+  }
+
+  async function oauthKakao() {
+    const code = document.getElementById('kakaoCode').value.trim();
+    if (!code) { alert('Authorization Code를 입력하세요.'); return; }
+    const result = await callApi('POST', '/auth/oauth/kakao', { code });
+    if (result && result.status === 200 && result.data?.accessToken) saveTokens(result.data.accessToken, result.data.refreshToken);
+  }
+
+  // ── 인증 관리 ──────────────────────────────────────────────────────
+
+  async function tokenRefresh() {
+    const refreshToken = getRefresh();
+    if (!refreshToken) { showResponse(401, 'POST /auth/token/refresh', '❌ Refresh Token이 없습니다.'); return; }
+    const result = await callApi('POST', '/auth/token/refresh', { refreshToken });
+    if (result && result.status === 200 && result.data.accessToken) saveTokens(result.data.accessToken, null);
+  }
+
+  async function logout() {
+    const refreshToken = getRefresh();
+    if (!refreshToken) { showResponse(401, 'POST /auth/logout', '❌ Refresh Token이 없습니다.'); return; }
+    const result = await callApi('POST', '/auth/logout', { refreshToken }, true);
+    if (result && result.status === 204) clearTokens();
+  }
+
+  async function logoutAll() {
+    const result = await callApi('POST', '/auth/logout/all-devices', null, true);
+    if (result && result.status === 204) clearTokens();
+  }
+
+  async function changeSendCode() {
+    const phone = document.getElementById('changePhone').value.trim();
+    if (!phone) { alert('새 휴대폰 번호를 입력하세요.'); return; }
+
+    const result = await callApi('POST', '/auth/phone/code', { phone, purpose: 'CHANGE_PHONE' });
+    if (result && result.status === 204) {
+      show('changeCodeSection');
+      document.getElementById('changeCode').focus();
+    }
+  }
+
+  async function changeVerifyCode() {
+    const phone = document.getElementById('changePhone').value.trim();
+    const code  = document.getElementById('changeCode').value.trim();
+    if (!code) { alert('인증번호를 입력하세요.'); return; }
+
+    const result = await callApi('POST', '/auth/phone/verify', { phone, code, purpose: 'CHANGE_PHONE' });
+    if (result && result.status === 204) {
+      hide('changeCodeSection');
+      show('changeVerifiedBox');
+      document.getElementById('changePhone').disabled = true;
+      disable('changeSendBtn');
+      enable('changeSubmitBtn');
+    }
+  }
+
+  async function updatePhone() {
+    const phone = document.getElementById('changePhone').value.trim();
+    const result = await callApi('PATCH', '/users/me/phone', { phone }, true);
+    if (result && result.status === 204) {
+      document.getElementById('changePhone').value = '';
+      document.getElementById('changePhone').disabled = false;
+      document.getElementById('changeCode').value = '';
+      hide('changeVerifiedBox');
+      hide('changeCodeSection');
+      enable('changeSendBtn');
+      disable('changeSubmitBtn');
+    }
+  }
+
+  // ── SMS API raw 테스트 ──────────────────────────────────────────────
+
+  async function rawSendCode() {
+    const phone   = document.getElementById('smsPhone').value.trim();
+    const purpose = document.getElementById('smsPurpose').value;
+    if (!phone) { alert('휴대폰 번호를 입력하세요.'); return; }
+    const result = await callApi('POST', '/auth/phone/code', { phone, purpose });
+    if (result && result.status === 204) {
+      document.getElementById('rawVerifyPhone').value = phone;
+      document.getElementById('rawVerifyPurpose').value = purpose;
+    }
+  }
+
+  async function rawVerifyCode() {
+    const phone   = document.getElementById('rawVerifyPhone').value.trim();
+    const code    = document.getElementById('rawVerifyCode').value.trim();
+    const purpose = document.getElementById('rawVerifyPurpose').value;
+    if (!phone || !code) { alert('번호와 인증번호를 입력하세요.'); return; }
+    await callApi('POST', '/auth/phone/verify', { phone, code, purpose });
+  }
+
+  // ── 탭 전환 ────────────────────────────────────────────────────────
+
+  function switchTab(name, btn) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    btn.classList.add('active');
+  }
+
+  // 초기화
+  updateTokenBar();
+</script>
+</body>
+</html>
