@@ -74,6 +74,21 @@
     .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; margin-right: 4px; }
     .badge-post   { background: #1e3a5f; color: #60a5fa; }
     .badge-patch  { background: #3b2a00; color: #fbbf24; }
+    .badge-delete { background: #3b0000; color: #f87171; }
+
+    .btn-kakao {
+      background: #FEE500; color: #191919;
+      display: flex; align-items: center; gap: 8px; justify-content: center;
+    }
+    .btn-kakao:hover:not(:disabled) { background: #f0d800; }
+
+    .kakao-status {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 12px; border-radius: 6px; font-size: 0.82rem;
+      margin-bottom: 12px;
+    }
+    .kakao-status.linked   { background: #1c2d0a; border: 1px solid #166534; color: #86efac; }
+    .kakao-status.unlinked { background: #1c1200; border: 1px solid #78350f; color: #fcd34d; }
 
     .endpoint { font-size: 0.78rem; color: #475569; margin-bottom: 14px; }
 
@@ -128,6 +143,7 @@
 <div class="tabs">
   <button class="tab-btn active" onclick="switchTab('register', this)">✏️ 회원가입</button>
   <button class="tab-btn" onclick="switchTab('login', this)">🔑 로그인</button>
+  <button class="tab-btn" onclick="switchTab('kakao', this)">🟡 카카오</button>
   <button class="tab-btn" onclick="switchTab('manage', this)">⚙️ 인증 관리</button>
   <button class="tab-btn" onclick="switchTab('sms', this)">🔧 SMS API</button>
 </div>
@@ -238,6 +254,80 @@
       <div class="btn-row">
         <button class="btn btn-primary" onclick="oauthKakao()">Kakao 로그인</button>
       </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     카카오 탭
+     ══════════════════════════════════════════════════════════ -->
+<div id="tab-kakao" class="tab-content">
+
+  <!-- 설정 안내 -->
+  <div class="info-box warn" style="margin-bottom:20px">
+    ⚠️ <strong>사전 설정 필요</strong><br>
+    카카오 개발자 콘솔 → 앱 → 카카오 로그인 → Redirect URI에
+    <code style="background:#2d2000;padding:1px 6px;border-radius:3px">http://localhost:8080/test.html</code>
+    을 추가하고, <code>.env</code>의 <code>KAKAO_REDIRECT_URI</code> 값도 동일하게 변경하세요.
+  </div>
+
+  <div class="grid">
+
+    <!-- 카카오 로그인/회원가입 -->
+    <div class="card">
+      <h3>카카오 로그인 / 회원가입</h3>
+      <div class="endpoint">
+        <span class="badge badge-post">POST</span>/auth/oauth/kakao
+      </div>
+      <div class="info-box">
+        버튼 클릭 → 카카오 로그인 페이지로 이동 → 완료 시 이 페이지로 돌아와 자동으로 API를 호출합니다.<br>
+        기존에 이메일 계정과 카카오를 <strong>연동</strong>한 경우에도 이 버튼으로 로그인됩니다.
+      </div>
+      <div id="kakaoLoginResult" class="hidden"></div>
+      <div class="btn-row">
+        <button class="btn btn-kakao" onclick="startKakaoLogin()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="#191919">
+            <path d="M12 3C7.03 3 3 6.36 3 10.5c0 2.64 1.68 4.96 4.22 6.35L6.1 20.1c-.1.37.3.66.62.46L11 17.9c.33.04.66.06 1 .06 4.97 0 9-3.36 9-7.5S16.97 3 12 3z"/>
+          </svg>
+          카카오로 로그인
+        </button>
+      </div>
+    </div>
+
+    <!-- 카카오 계정 연동 -->
+    <div class="card">
+      <h3>카카오 계정 연동</h3>
+      <div class="endpoint">
+        <span class="badge badge-post">POST</span>/auth/oauth/kakao/link &nbsp;
+        <span class="badge badge-delete">DELETE</span>/auth/oauth/kakao/link
+      </div>
+      <div class="info-box">
+        이메일(LOCAL)로 가입한 계정에 카카오를 연동합니다.<br>
+        연동 후에는 카카오 로그인으로도 이 계정에 접근할 수 있습니다.<br>
+        <strong>먼저 로그인(Access Token)이 필요합니다.</strong>
+      </div>
+
+      <!-- 연동 상태 표시 -->
+      <div id="kakaoLinkStatus" class="kakao-status unlinked">
+        🔗 연동 상태: 미확인 (프로필 조회 필요)
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-kakao" onclick="startKakaoLink()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="#191919">
+            <path d="M12 3C7.03 3 3 6.36 3 10.5c0 2.64 1.68 4.96 4.22 6.35L6.1 20.1c-.1.37.3.66.62.46L11 17.9c.33.04.66.06 1 .06 4.97 0 9-3.36 9-7.5S16.97 3 12 3z"/>
+          </svg>
+          카카오 계정 연동하기
+        </button>
+        <button class="btn btn-danger" onclick="unlinkKakao()">연동 해제</button>
+      </div>
+    </div>
+
+    <!-- 자동 처리 상태 -->
+    <div class="card" id="kakaoCallbackCard" style="display:none">
+      <h3>카카오 콜백 처리 중</h3>
+      <div id="kakaoCallbackMsg" class="info-box">처리 중...</div>
     </div>
 
   </div>
@@ -603,6 +693,88 @@
     await callApi('POST', '/auth/phone/verify', { phone, code, purpose });
   }
 
+  // ── 카카오 OAuth ───────────────────────────────────────────────────
+
+  // 카카오 앱 KEY (.env의 KAKAO_CLIENT_ID 값과 동일하게)
+  const KAKAO_CLIENT_ID = '936eb09e0b3005cc294145845992ba80';
+  const KAKAO_REDIRECT_URI = window.location.origin + '/test.html';
+
+  function buildKakaoAuthUrl(state) {
+    return 'https://kauth.kakao.com/oauth/authorize'
+      + '?client_id=' + KAKAO_CLIENT_ID
+      + '&redirect_uri=' + encodeURIComponent(KAKAO_REDIRECT_URI)
+      + '&response_type=code'
+      + '&state=' + state;
+  }
+
+  function startKakaoLogin() {
+    window.location.href = buildKakaoAuthUrl('kakao_login');
+  }
+
+  function startKakaoLink() {
+    if (!getAccess()) {
+      showResponse(401, 'POST /auth/oauth/kakao/link', '❌ 먼저 로그인하세요. Access Token이 필요합니다.');
+      return;
+    }
+    window.location.href = buildKakaoAuthUrl('kakao_link');
+  }
+
+  async function unlinkKakao() {
+    const result = await callApi('DELETE', '/auth/oauth/kakao/link', null, true);
+    if (result && result.status === 204) {
+      document.getElementById('kakaoLinkStatus').className = 'kakao-status unlinked';
+      document.getElementById('kakaoLinkStatus').textContent = '🔗 연동 상태: 연동 해제됨';
+    }
+  }
+
+  // 페이지 로드 시 카카오 콜백 코드 자동 처리
+  async function handleKakaoCallback() {
+    const params = new URLSearchParams(window.location.search);
+    const code  = params.get('code');
+    const state = params.get('state');
+    if (!code) return;
+
+    // URL에서 파라미터 제거 (히스토리 오염 방지)
+    window.history.replaceState({}, document.title, window.location.pathname);
+
+    // 카카오 탭으로 자동 이동
+    const kakaoTabBtn = document.querySelector('.tab-btn:nth-child(3)');
+    switchTab('kakao', kakaoTabBtn);
+
+    const card = document.getElementById('kakaoCallbackCard');
+    const msg  = document.getElementById('kakaoCallbackMsg');
+    card.style.display = 'block';
+
+    const redirectUri = KAKAO_REDIRECT_URI;
+
+    if (state === 'kakao_login') {
+      msg.textContent = '카카오 로그인 처리 중...';
+      const result = await callApi('POST', '/auth/oauth/kakao', { code, redirectUri });
+      if (result && result.status === 200 && result.data?.accessToken) {
+        saveTokens(result.data.accessToken, result.data.refreshToken);
+        msg.className = 'info-box success';
+        msg.textContent = result.data.isNewUser
+          ? '✓ 카카오 회원가입 및 로그인 성공!'
+          : '✓ 카카오 로그인 성공!';
+      } else {
+        msg.className = 'info-box warn';
+        msg.textContent = '❌ 카카오 로그인 실패. 응답 패널을 확인하세요.';
+      }
+    } else if (state === 'kakao_link') {
+      msg.textContent = '카카오 연동 처리 중...';
+      const result = await callApi('POST', '/auth/oauth/kakao/link', { code, redirectUri }, true);
+      if (result && result.status === 204) {
+        msg.className = 'info-box success';
+        msg.textContent = '✓ 카카오 계정 연동 성공!';
+        document.getElementById('kakaoLinkStatus').className = 'kakao-status linked';
+        document.getElementById('kakaoLinkStatus').textContent = '🔗 연동 상태: 연동됨';
+      } else {
+        msg.className = 'info-box warn';
+        msg.textContent = '❌ 카카오 연동 실패. 응답 패널을 확인하세요.';
+      }
+    }
+  }
+
   // ── 탭 전환 ────────────────────────────────────────────────────────
 
   function switchTab(name, btn) {
@@ -614,6 +786,7 @@
 
   // 초기화
   updateTokenBar();
+  handleKakaoCallback();
 </script>
 </body>
 </html>
