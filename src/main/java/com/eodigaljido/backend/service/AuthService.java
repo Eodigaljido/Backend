@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -34,17 +35,35 @@ public class AuthService {
 
     @Transactional
     public LoginResponse register(RegisterRequest request) {
-        if (userRepository.existsByEmail(request.email())) {
-            throw new AuthException("이미 사용 중인 이메일입니다.", HttpStatus.CONFLICT);
+        Optional<User> existingByEmail = userRepository.findByEmail(request.email());
+
+        // 동일 이메일로 OAuth 계정이 이미 있으면 LOCAL 자격증명을 추가(연동)
+        if (existingByEmail.isPresent()) {
+            User existing = existingByEmail.get();
+            if (existing.getPasswordHash() != null) {
+                throw new AuthException("이미 이메일/비밀번호로 가입된 계정입니다.", HttpStatus.CONFLICT);
+            }
+            if (userRepository.existsByPhone(request.phone())) {
+                throw new AuthException("이미 사용 중인 전화번호입니다.", HttpStatus.CONFLICT);
+            }
+            if (profileRepository.existsByNicknameAndUserNot(request.nickname(), existing)) {
+                throw new AuthException("이미 사용 중인 닉네임입니다.", HttpStatus.CONFLICT);
+            }
+            if (!phoneVerificationService.checkVerified(request.phone(), PhoneVerification.Purpose.REGISTER)) {
+                throw new AuthException("전화번호 인증이 완료되지 않았습니다.", HttpStatus.BAD_REQUEST);
+            }
+            existing.linkLocalCredentials(passwordEncoder.encode(request.password()), request.phone(), LocalDateTime.now());
+            profileRepository.findByUser(existing).ifPresent(p -> p.updateNickname(request.nickname()));
+            phoneVerificationService.clearVerified(request.phone(), PhoneVerification.Purpose.REGISTER);
+            return issueTokens(existing, null, null);
         }
+
         if (userRepository.existsByPhone(request.phone())) {
             throw new AuthException("이미 사용 중인 전화번호입니다.", HttpStatus.CONFLICT);
         }
         if (profileRepository.existsByNickname(request.nickname())) {
             throw new AuthException("이미 사용 중인 닉네임입니다.", HttpStatus.CONFLICT);
         }
-
-        // 전화번호 인증 완료 여부 확인
         if (!phoneVerificationService.checkVerified(request.phone(), PhoneVerification.Purpose.REGISTER)) {
             throw new AuthException("전화번호 인증이 완료되지 않았습니다.", HttpStatus.BAD_REQUEST);
         }
@@ -59,15 +78,7 @@ public class AuthService {
                 .build();
 
         userRepository.save(user);
-
-        Profile profile = Profile.builder()
-                .user(user)
-                .nickname(request.nickname())
-                .build();
-
-        profileRepository.save(profile);
-
-        // 인증 플래그 제거
+        profileRepository.save(Profile.builder().user(user).nickname(request.nickname()).build());
         phoneVerificationService.clearVerified(request.phone(), PhoneVerification.Purpose.REGISTER);
 
         return issueTokens(user, null, null);
@@ -78,6 +89,9 @@ public class AuthService {
         User user = userRepository.findByEmail(request.email())
                 .orElseThrow(() -> new AuthException("이메일 또는 비밀번호가 올바르지 않습니다.", HttpStatus.UNAUTHORIZED));
 
+        if (user.getPasswordHash() == null) {
+            throw new AuthException("소셜 로그인으로 가입된 계정입니다. 구글 또는 카카오 로그인을 이용해주세요.", HttpStatus.UNAUTHORIZED);
+        }
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw new AuthException("이메일 또는 비밀번호가 올바르지 않습니다.", HttpStatus.UNAUTHORIZED);
         }
