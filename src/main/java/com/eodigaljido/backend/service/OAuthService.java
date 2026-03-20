@@ -26,6 +26,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -54,7 +55,64 @@ public class OAuthService {
         String email = userInfo.path("email").asText(null);
         String name = userInfo.path("name").asText("Google User");
 
-        return findOrCreateUser(User.Provider.GOOGLE, providerId, email, name);
+        // 구글 전용 계정 먼저 검색, 없으면 연동된 LOCAL 계정 검색
+        return userRepository.findByProviderAndProviderId(User.Provider.GOOGLE, providerId)
+                .map(user -> issueTokens(user, false))
+                .orElseGet(() -> userRepository.findByLinkedGoogleId(providerId)
+                        .map(user -> issueTokens(user, false))
+                        .orElseGet(() -> findOrCreateUser(User.Provider.GOOGLE, providerId, email, name)));
+    }
+
+    // ── 구글 연동 ──────────────────────────────────────────────────────────────
+
+    @Transactional
+    public void linkGoogle(Long userId, String authorizationCode, String redirectUri) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AuthException("존재하지 않는 사용자입니다.", HttpStatus.NOT_FOUND));
+
+        if (user.getStatus() != User.UserStatus.ACTIVE) {
+            throw new AuthException("이미 탈퇴한 계정입니다.", HttpStatus.GONE);
+        }
+        if (user.getLinkedGoogleId() != null) {
+            throw new AuthException("이미 구글 계정이 연동되어 있습니다.", HttpStatus.CONFLICT);
+        }
+        if (user.getProvider() == User.Provider.GOOGLE) {
+            throw new AuthException("구글로 가입한 계정은 연동이 필요하지 않습니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        String effectiveRedirectUri = redirectUri != null ? redirectUri : oAuthProperties.getGoogle().getRedirectUri();
+        String googleAccessToken = exchangeGoogleCode(authorizationCode, effectiveRedirectUri);
+        JsonNode userInfo = getGoogleUserInfo(googleAccessToken);
+        String googleId = userInfo.get("sub").asText();
+
+        if (userRepository.existsByProviderAndProviderId(User.Provider.GOOGLE, googleId)) {
+            throw new AuthException("해당 구글 계정은 이미 다른 계정에 연결되어 있습니다.", HttpStatus.CONFLICT);
+        }
+        if (userRepository.existsByLinkedGoogleId(googleId)) {
+            throw new AuthException("해당 구글 계정은 이미 다른 계정에 연결되어 있습니다.", HttpStatus.CONFLICT);
+        }
+
+        user.linkGoogle(googleId);
+    }
+
+    // ── 구글 연동 해제 ─────────────────────────────────────────────────────────
+
+    @Transactional
+    public void unlinkGoogle(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AuthException("존재하지 않는 사용자입니다.", HttpStatus.NOT_FOUND));
+
+        if (user.getStatus() != User.UserStatus.ACTIVE) {
+            throw new AuthException("이미 탈퇴한 계정입니다.", HttpStatus.GONE);
+        }
+        if (user.getProvider() == User.Provider.GOOGLE) {
+            throw new AuthException("구글로 가입한 계정은 연동 해제가 불가능합니다.", HttpStatus.BAD_REQUEST);
+        }
+        if (user.getLinkedGoogleId() == null) {
+            throw new AuthException("연동된 구글 계정이 없습니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        user.unlinkGoogle();
     }
 
     private String exchangeGoogleCode(String code, String redirectUri) {
@@ -66,7 +124,14 @@ public class OAuthService {
                 + "&grant_type=authorization_code";
 
         JsonNode json = postForm("https://oauth2.googleapis.com/token", body);
-        return json.get("access_token").asText();
+        JsonNode tokenNode = json.get("access_token");
+        if (tokenNode == null || tokenNode.isNull()) {
+            String error = json.path("error_description").asText(json.path("error").asText("access_token 없음"));
+            log.error("[구글 토큰 교환 실패] 응답: {}", json);
+            throw new AuthException("구글 토큰 발급 실패: " + error, HttpStatus.BAD_REQUEST);
+        }
+        log.debug("[구글 토큰 교환 성공] redirect_uri={}", redirectUri);
+        return tokenNode.asText();
     }
 
     private JsonNode getGoogleUserInfo(String accessToken) {
@@ -153,6 +218,21 @@ public class OAuthService {
         boolean[] isNew = {false};
         User user = userRepository.findByProviderAndProviderId(provider, providerId)
                 .orElseGet(() -> {
+                    // 동일 이메일 계정이 있으면 자동 연동 후 로그인
+                    if (email != null) {
+                        Optional<User> byEmail = userRepository.findByEmail(email);
+                        if (byEmail.isPresent()) {
+                            User existing = byEmail.get();
+                            if (provider == User.Provider.GOOGLE && existing.getLinkedGoogleId() == null) {
+                                existing.linkGoogle(providerId);
+                                log.info("[OAuth 자동 연동] provider=GOOGLE, email={}", email);
+                            } else if (provider == User.Provider.KAKAO && existing.getLinkedKakaoId() == null) {
+                                existing.linkKakao(providerId);
+                                log.info("[OAuth 자동 연동] provider=KAKAO, email={}", email);
+                            }
+                            return existing;
+                        }
+                    }
                     isNew[0] = true;
                     return createOAuthUser(provider, providerId, email, name);
                 });
@@ -272,10 +352,12 @@ public class OAuthService {
             JsonNode json = objectMapper.readTree(response.body());
 
             if (response.statusCode() >= 400) {
-                // 카카오는 오류 시 {"msg": "...", "code": -401} 형식으로 반환
-                String kakaoMsg = json.path("msg").asText(json.path("error_description").asText("사용자 정보 조회 실패"));
-                log.error("[카카오 사용자 정보 조회 실패] status={}, body={}", response.statusCode(), json);
-                throw new AuthException("카카오 사용자 정보 조회 실패: " + kakaoMsg, HttpStatus.valueOf(response.statusCode()));
+                // 카카오는 {"msg": "...", "code": -401}, 구글은 {"error": "...", "error_description": "..."} 형식
+                String errMsg = json.path("msg").asText(
+                        json.path("error_description").asText(
+                                json.path("error").asText("사용자 정보 조회 실패")));
+                log.error("[OAuth 사용자 정보 조회 실패] url={}, status={}, body={}", url, response.statusCode(), json);
+                throw new AuthException("OAuth 사용자 정보 조회 실패: " + errMsg, HttpStatus.valueOf(response.statusCode()));
             }
             return json;
         } catch (AuthException e) {
