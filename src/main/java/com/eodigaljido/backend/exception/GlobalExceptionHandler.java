@@ -28,6 +28,12 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(e.getStatus().value(), e.getMessage(), LocalDateTime.now()));
     }
 
+    @ExceptionHandler(RouteException.class)
+    ResponseEntity<ErrorResponse> handleRoute(RouteException e) {
+        return ResponseEntity.status(e.getStatus())
+                .body(new ErrorResponse(e.getStatus().value(), e.getMessage(), LocalDateTime.now()));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<Map<String, String>> handleValidation(MethodArgumentNotValidException e) {
         Map<String, String> errors = e.getBindingResult().getFieldErrors().stream()
