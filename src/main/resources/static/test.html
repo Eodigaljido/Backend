@@ -82,13 +82,19 @@
     }
     .btn-kakao:hover:not(:disabled) { background: #f0d800; }
 
-    .kakao-status {
+    .btn-google {
+      background: #fff; color: #3c4043; border: 1px solid #dadce0;
+      display: flex; align-items: center; gap: 8px; justify-content: center;
+    }
+    .btn-google:hover:not(:disabled) { background: #f8f9fa; }
+
+    .kakao-status, .google-status {
       display: flex; align-items: center; gap: 8px;
       padding: 8px 12px; border-radius: 6px; font-size: 0.82rem;
       margin-bottom: 12px;
     }
-    .kakao-status.linked   { background: #1c2d0a; border: 1px solid #166534; color: #86efac; }
-    .kakao-status.unlinked { background: #1c1200; border: 1px solid #78350f; color: #fcd34d; }
+    .kakao-status.linked, .google-status.linked   { background: #1c2d0a; border: 1px solid #166534; color: #86efac; }
+    .kakao-status.unlinked, .google-status.unlinked { background: #1c1200; border: 1px solid #78350f; color: #fcd34d; }
 
     .endpoint { font-size: 0.78rem; color: #475569; margin-bottom: 14px; }
 
@@ -144,6 +150,7 @@
   <button class="tab-btn active" onclick="switchTab('register', this)">✏️ 회원가입</button>
   <button class="tab-btn" onclick="switchTab('login', this)">🔑 로그인</button>
   <button class="tab-btn" onclick="switchTab('kakao', this)">🟡 카카오</button>
+  <button class="tab-btn" onclick="switchTab('google', this)">🔵 구글</button>
   <button class="tab-btn" onclick="switchTab('manage', this)">⚙️ 인증 관리</button>
   <button class="tab-btn" onclick="switchTab('sms', this)">🔧 SMS API</button>
 </div>
@@ -328,6 +335,87 @@
     <div class="card" id="kakaoCallbackCard" style="display:none">
       <h3>카카오 콜백 처리 중</h3>
       <div id="kakaoCallbackMsg" class="info-box">처리 중...</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     구글 탭
+     ══════════════════════════════════════════════════════════ -->
+<div id="tab-google" class="tab-content">
+
+  <!-- 설정 안내 -->
+  <div class="info-box warn" style="margin-bottom:20px">
+    ⚠️ <strong>사전 설정 필요</strong><br>
+    1. Google Cloud Console → 사용자 인증 정보 → OAuth 2.0 클라이언트 ID → 승인된 리디렉션 URI에
+    <code style="background:#2d2000;padding:1px 6px;border-radius:3px">http://localhost:8080/test.html</code>
+    을 추가하세요.<br>
+    2. 아래 <strong>GOOGLE_CLIENT_ID</strong>를 실제 클라이언트 ID로 변경하세요 (스크립트 상단 상수).
+  </div>
+
+  <div class="grid">
+
+    <!-- 구글 로그인/회원가입 -->
+    <div class="card">
+      <h3>구글 로그인 / 회원가입</h3>
+      <div class="endpoint">
+        <span class="badge badge-post">POST</span>/auth/oauth/google
+      </div>
+      <div class="info-box">
+        버튼 클릭 → 구글 로그인 페이지로 이동 → 완료 시 이 페이지로 돌아와 자동으로 API를 호출합니다.<br>
+        기존에 이메일 계정과 구글을 <strong>연동</strong>한 경우에도 이 버튼으로 로그인됩니다.
+      </div>
+      <div id="googleLoginResult" class="hidden"></div>
+      <div class="btn-row">
+        <button class="btn btn-google" onclick="startGoogleLogin()">
+          <svg width="18" height="18" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+          </svg>
+          Google로 로그인
+        </button>
+      </div>
+    </div>
+
+    <!-- 구글 계정 연동 -->
+    <div class="card">
+      <h3>구글 계정 연동</h3>
+      <div class="endpoint">
+        <span class="badge badge-post">POST</span>/auth/oauth/google/link &nbsp;
+        <span class="badge badge-delete">DELETE</span>/auth/oauth/google/link
+      </div>
+      <div class="info-box">
+        이메일(LOCAL)로 가입한 계정에 구글을 연동합니다.<br>
+        연동 후에는 구글 로그인으로도 이 계정에 접근할 수 있습니다.<br>
+        <strong>먼저 로그인(Access Token)이 필요합니다.</strong>
+      </div>
+
+      <!-- 연동 상태 표시 -->
+      <div id="googleLinkStatus" class="google-status unlinked">
+        🔗 연동 상태: 미확인 (프로필 조회 필요)
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-google" onclick="startGoogleLink()">
+          <svg width="18" height="18" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+          </svg>
+          구글 계정 연동하기
+        </button>
+        <button class="btn btn-danger" onclick="unlinkGoogle()">연동 해제</button>
+      </div>
+    </div>
+
+    <!-- 자동 처리 상태 -->
+    <div class="card" id="googleCallbackCard" style="display:none">
+      <h3>구글 콜백 처리 중</h3>
+      <div id="googleCallbackMsg" class="info-box">처리 중...</div>
     </div>
 
   </div>
@@ -693,10 +781,66 @@
     await callApi('POST', '/auth/phone/verify', { phone, code, purpose });
   }
 
+  // ── OAuth 공개 설정 ────────────────────────────────────────────────
+
+  let GOOGLE_CLIENT_ID = null;
+  const GOOGLE_REDIRECT_URI = window.location.origin + '/test.html';
+
+  async function loadOAuthConfig() {
+    try {
+      const res = await fetch('/auth/oauth/config');
+      if (!res.ok) throw new Error('설정 조회 실패');
+      const cfg = await res.json();
+      GOOGLE_CLIENT_ID = cfg.googleClientId || null;
+      KAKAO_CLIENT_ID  = cfg.kakaoClientId  || KAKAO_CLIENT_ID;
+    } catch (e) {
+      console.warn('[OAuth Config] 서버에서 클라이언트 ID를 불러오지 못했습니다:', e.message);
+    }
+  }
+
+  // ── 구글 OAuth ─────────────────────────────────────────────────────
+
+  function buildGoogleAuthUrl(state) {
+    return 'https://accounts.google.com/o/oauth2/v2/auth'
+      + '?client_id=' + encodeURIComponent(GOOGLE_CLIENT_ID)
+      + '&redirect_uri=' + encodeURIComponent(GOOGLE_REDIRECT_URI)
+      + '&response_type=code'
+      + '&scope=' + encodeURIComponent('openid email profile')
+      + '&access_type=offline'
+      + '&state=' + state;
+  }
+
+  function startGoogleLogin() {
+    if (!GOOGLE_CLIENT_ID) {
+      alert('.env의 GOOGLE_CLIENT_ID가 설정되지 않았습니다. 서버를 확인하세요.');
+      return;
+    }
+    window.location.href = buildGoogleAuthUrl('google_login');
+  }
+
+  function startGoogleLink() {
+    if (!getAccess()) {
+      showResponse(401, 'POST /auth/oauth/google/link', '❌ 먼저 로그인하세요. Access Token이 필요합니다.');
+      return;
+    }
+    if (!GOOGLE_CLIENT_ID) {
+      alert('.env의 GOOGLE_CLIENT_ID가 설정되지 않았습니다. 서버를 확인하세요.');
+      return;
+    }
+    window.location.href = buildGoogleAuthUrl('google_link');
+  }
+
+  async function unlinkGoogle() {
+    const result = await callApi('DELETE', '/auth/oauth/google/link', null, true);
+    if (result && result.status === 204) {
+      document.getElementById('googleLinkStatus').className = 'google-status unlinked';
+      document.getElementById('googleLinkStatus').textContent = '🔗 연동 상태: 연동 해제됨';
+    }
+  }
+
   // ── 카카오 OAuth ───────────────────────────────────────────────────
 
-  // 카카오 앱 KEY (.env의 KAKAO_CLIENT_ID 값과 동일하게)
-  const KAKAO_CLIENT_ID = '936eb09e0b3005cc294145845992ba80';
+  let KAKAO_CLIENT_ID = null;
   const KAKAO_REDIRECT_URI = window.location.origin + '/test.html';
 
   function buildKakaoAuthUrl(state) {
@@ -708,12 +852,20 @@
   }
 
   function startKakaoLogin() {
+    if (!KAKAO_CLIENT_ID) {
+      alert('.env의 KAKAO_CLIENT_ID가 설정되지 않았습니다. 서버를 확인하세요.');
+      return;
+    }
     window.location.href = buildKakaoAuthUrl('kakao_login');
   }
 
   function startKakaoLink() {
     if (!getAccess()) {
       showResponse(401, 'POST /auth/oauth/kakao/link', '❌ 먼저 로그인하세요. Access Token이 필요합니다.');
+      return;
+    }
+    if (!KAKAO_CLIENT_ID) {
+      alert('.env의 KAKAO_CLIENT_ID가 설정되지 않았습니다. 서버를 확인하세요.');
       return;
     }
     window.location.href = buildKakaoAuthUrl('kakao_link');
@@ -727,8 +879,8 @@
     }
   }
 
-  // 페이지 로드 시 카카오 콜백 코드 자동 처리
-  async function handleKakaoCallback() {
+  // 페이지 로드 시 OAuth 콜백 코드 자동 처리
+  async function handleOAuthCallback() {
     const params = new URLSearchParams(window.location.search);
     const code  = params.get('code');
     const state = params.get('state');
@@ -737,40 +889,80 @@
     // URL에서 파라미터 제거 (히스토리 오염 방지)
     window.history.replaceState({}, document.title, window.location.pathname);
 
-    // 카카오 탭으로 자동 이동
-    const kakaoTabBtn = document.querySelector('.tab-btn:nth-child(3)');
-    switchTab('kakao', kakaoTabBtn);
+    if (state === 'kakao_login' || state === 'kakao_link') {
+      // 카카오 탭으로 자동 이동
+      const kakaoTabBtn = document.querySelector('.tab-btn:nth-child(3)');
+      switchTab('kakao', kakaoTabBtn);
 
-    const card = document.getElementById('kakaoCallbackCard');
-    const msg  = document.getElementById('kakaoCallbackMsg');
-    card.style.display = 'block';
+      const card = document.getElementById('kakaoCallbackCard');
+      const msg  = document.getElementById('kakaoCallbackMsg');
+      card.style.display = 'block';
 
-    const redirectUri = KAKAO_REDIRECT_URI;
+      const redirectUri = KAKAO_REDIRECT_URI;
 
-    if (state === 'kakao_login') {
-      msg.textContent = '카카오 로그인 처리 중...';
-      const result = await callApi('POST', '/auth/oauth/kakao', { code, redirectUri });
-      if (result && result.status === 200 && result.data?.accessToken) {
-        saveTokens(result.data.accessToken, result.data.refreshToken);
-        msg.className = 'info-box success';
-        msg.textContent = result.data.isNewUser
-          ? '✓ 카카오 회원가입 및 로그인 성공!'
-          : '✓ 카카오 로그인 성공!';
+      if (state === 'kakao_login') {
+        msg.textContent = '카카오 로그인 처리 중...';
+        const result = await callApi('POST', '/auth/oauth/kakao', { code, redirectUri });
+        if (result && result.status === 200 && result.data?.accessToken) {
+          saveTokens(result.data.accessToken, result.data.refreshToken);
+          msg.className = 'info-box success';
+          msg.textContent = result.data.isNewUser
+            ? '✓ 카카오 회원가입 및 로그인 성공!'
+            : '✓ 카카오 로그인 성공!';
+        } else {
+          msg.className = 'info-box warn';
+          msg.textContent = '❌ 카카오 로그인 실패. 응답 패널을 확인하세요.';
+        }
       } else {
-        msg.className = 'info-box warn';
-        msg.textContent = '❌ 카카오 로그인 실패. 응답 패널을 확인하세요.';
+        msg.textContent = '카카오 연동 처리 중...';
+        const result = await callApi('POST', '/auth/oauth/kakao/link', { code, redirectUri }, true);
+        if (result && result.status === 204) {
+          msg.className = 'info-box success';
+          msg.textContent = '✓ 카카오 계정 연동 성공!';
+          document.getElementById('kakaoLinkStatus').className = 'kakao-status linked';
+          document.getElementById('kakaoLinkStatus').textContent = '🔗 연동 상태: 연동됨';
+        } else {
+          msg.className = 'info-box warn';
+          msg.textContent = '❌ 카카오 연동 실패. 응답 패널을 확인하세요.';
+        }
       }
-    } else if (state === 'kakao_link') {
-      msg.textContent = '카카오 연동 처리 중...';
-      const result = await callApi('POST', '/auth/oauth/kakao/link', { code, redirectUri }, true);
-      if (result && result.status === 204) {
-        msg.className = 'info-box success';
-        msg.textContent = '✓ 카카오 계정 연동 성공!';
-        document.getElementById('kakaoLinkStatus').className = 'kakao-status linked';
-        document.getElementById('kakaoLinkStatus').textContent = '🔗 연동 상태: 연동됨';
+
+    } else if (state === 'google_login' || state === 'google_link') {
+      // 구글 탭으로 자동 이동
+      const googleTabBtn = document.querySelector('.tab-btn:nth-child(4)');
+      switchTab('google', googleTabBtn);
+
+      const card = document.getElementById('googleCallbackCard');
+      const msg  = document.getElementById('googleCallbackMsg');
+      card.style.display = 'block';
+
+      const redirectUri = GOOGLE_REDIRECT_URI;
+
+      if (state === 'google_login') {
+        msg.textContent = '구글 로그인 처리 중...';
+        const result = await callApi('POST', '/auth/oauth/google', { code, redirectUri });
+        if (result && result.status === 200 && result.data?.accessToken) {
+          saveTokens(result.data.accessToken, result.data.refreshToken);
+          msg.className = 'info-box success';
+          msg.textContent = result.data.isNewUser
+            ? '✓ 구글 회원가입 및 로그인 성공!'
+            : '✓ 구글 로그인 성공!';
+        } else {
+          msg.className = 'info-box warn';
+          msg.textContent = '❌ 구글 로그인 실패. 응답 패널을 확인하세요.';
+        }
       } else {
-        msg.className = 'info-box warn';
-        msg.textContent = '❌ 카카오 연동 실패. 응답 패널을 확인하세요.';
+        msg.textContent = '구글 연동 처리 중...';
+        const result = await callApi('POST', '/auth/oauth/google/link', { code, redirectUri }, true);
+        if (result && result.status === 204) {
+          msg.className = 'info-box success';
+          msg.textContent = '✓ 구글 계정 연동 성공!';
+          document.getElementById('googleLinkStatus').className = 'google-status linked';
+          document.getElementById('googleLinkStatus').textContent = '🔗 연동 상태: 연동됨';
+        } else {
+          msg.className = 'info-box warn';
+          msg.textContent = '❌ 구글 연동 실패. 응답 패널을 확인하세요.';
+        }
       }
     }
   }
@@ -786,7 +978,10 @@
 
   // 초기화
   updateTokenBar();
-  handleKakaoCallback();
+  (async () => {
+    await loadOAuthConfig();
+    await handleOAuthCallback();
+  })();
 </script>
 </body>
 </html>
