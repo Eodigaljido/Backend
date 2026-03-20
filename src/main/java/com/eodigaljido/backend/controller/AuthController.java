@@ -1,11 +1,16 @@
 package com.eodigaljido.backend.controller;
 
 import com.eodigaljido.backend.dto.auth.*;
+import com.eodigaljido.backend.dto.common.ErrorResponse;
 import org.springframework.http.HttpStatus;
 import com.eodigaljido.backend.service.AuthService;
 import com.eodigaljido.backend.service.OAuthService;
 import com.eodigaljido.backend.service.PhoneVerificationService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -44,6 +49,13 @@ public class AuthController {
                     - `phone` (필수): 하이픈 없는 휴대폰 번호 (예: 01012345678), 인증 완료된 번호와 일치해야 함
                     """
     )
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "회원가입 성공"),
+            @ApiResponse(responseCode = "400", description = "요청 값이 올바르지 않음 (유효성 검사 실패 또는 전화번호 미인증)",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "이미 사용 중인 이메일, 전화번호 또는 닉네임",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     ResponseEntity<LoginResponse> register(@Valid @RequestBody RegisterRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(authService.register(request));
     }
@@ -63,6 +75,13 @@ public class AuthController {
                     - `refreshToken`: 만료된 access token 재발급용 JWT (유효기간 30일)
                     """
     )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "로그인 성공, accessToken / refreshToken 반환"),
+            @ApiResponse(responseCode = "400", description = "요청 값이 올바르지 않음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "이메일 또는 비밀번호가 일치하지 않음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request,
                                         HttpServletRequest httpRequest) {
         String deviceInfo = httpRequest.getHeader("User-Agent");
@@ -85,6 +104,13 @@ public class AuthController {
                     refresh token이 만료되었거나 폐기된 경우 401을 반환합니다. 이 경우 재로그인이 필요합니다.
                     """
     )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "토큰 재발급 성공, 새 accessToken 반환"),
+            @ApiResponse(responseCode = "400", description = "요청 값이 올바르지 않음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "refresh token이 만료되었거나 폐기됨 — 재로그인 필요",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     ResponseEntity<TokenRefreshResponse> refresh(@Valid @RequestBody TokenRefreshRequest request) {
         return ResponseEntity.ok(authService.refreshToken(request));
     }
@@ -103,6 +129,13 @@ public class AuthController {
                     토큰이 폐기되면 해당 refresh token으로 더 이상 access token을 재발급받을 수 없습니다.
                     """
     )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "로그아웃 성공"),
+            @ApiResponse(responseCode = "400", description = "요청 값이 올바르지 않음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     ResponseEntity<Void> logout(@AuthenticationPrincipal UserDetails userDetails,
                                 @Valid @RequestBody TokenRefreshRequest request) {
         authService.logout(Long.parseLong(userDetails.getUsername()), request.refreshToken());
@@ -122,6 +155,11 @@ public class AuthController {
                     비밀번호 변경, 계정 탈취 의심 등의 상황에서 사용합니다.
                     """
     )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "모든 디바이스 로그아웃 성공"),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     ResponseEntity<Void> logoutAllDevices(@AuthenticationPrincipal UserDetails userDetails) {
         authService.logoutAllDevices(Long.parseLong(userDetails.getUsername()));
         return ResponseEntity.noContent().build();
@@ -146,6 +184,11 @@ public class AuthController {
                     - `isNewUser`: true이면 신규 가입, false이면 기존 계정 로그인
                     """
     )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "로그인/회원가입 성공"),
+            @ApiResponse(responseCode = "400", description = "유효하지 않은 Google 인가 코드",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     ResponseEntity<OAuthLoginResponse> googleOAuth(@Valid @RequestBody OAuthLoginRequest request) {
         return ResponseEntity.ok(oAuthService.loginWithGoogle(request.code()));
     }
@@ -169,6 +212,11 @@ public class AuthController {
                     - `isNewUser`: true이면 신규 가입, false이면 기존 계정 로그인
                     """
     )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "로그인/회원가입 성공"),
+            @ApiResponse(responseCode = "400", description = "유효하지 않은 Kakao 인가 코드",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     ResponseEntity<OAuthLoginResponse> kakaoOAuth(@Valid @RequestBody OAuthLoginRequest request) {
         return ResponseEntity.ok(oAuthService.loginWithKakao(request.code()));
     }
@@ -189,6 +237,11 @@ public class AuthController {
                     최대 **5회** 오입력 시 코드가 잠기며 재발송이 필요합니다.
                     """
     )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "SMS 발송 성공, 유효 시간(초) 반환"),
+            @ApiResponse(responseCode = "400", description = "요청 값이 올바르지 않음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     ResponseEntity<PhoneCodeResponse> sendPhoneCode(@Valid @RequestBody PhoneCodeRequest request) {
         phoneVerificationService.sendCode(request.phone(), request.purpose());
         return ResponseEntity.ok(PhoneCodeResponse.of(180));
@@ -209,6 +262,11 @@ public class AuthController {
                     이 시간 내에 회원가입(`/auth/register`) 또는 전화번호 변경(`/users/me/phone`)을 완료해야 합니다.
                     """
     )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "인증 성공"),
+            @ApiResponse(responseCode = "400", description = "인증번호가 틀렸거나 만료됨, 또는 시도 횟수 초과",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     ResponseEntity<Void> verifyPhoneCode(@Valid @RequestBody PhoneVerifyRequest request) {
         phoneVerificationService.verifyCode(request.phone(), request.code(), request.purpose());
         return ResponseEntity.noContent().build();
