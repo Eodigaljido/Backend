@@ -5,10 +5,13 @@ import com.eodigaljido.backend.config.OAuthProperties;
 import com.eodigaljido.backend.domain.user.Profile;
 import com.eodigaljido.backend.domain.user.RefreshToken;
 import com.eodigaljido.backend.domain.user.User;
+import com.eodigaljido.backend.domain.user.UserOAuthProvider;
+import com.eodigaljido.backend.domain.user.UserOAuthProvider.OAuthProvider;
 import com.eodigaljido.backend.dto.auth.OAuthLoginResponse;
 import com.eodigaljido.backend.exception.AuthException;
 import com.eodigaljido.backend.repository.ProfileRepository;
 import com.eodigaljido.backend.repository.RefreshTokenRepository;
+import com.eodigaljido.backend.repository.UserOAuthProviderRepository;
 import com.eodigaljido.backend.repository.UserRepository;
 import com.eodigaljido.backend.security.JwtTokenProvider;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -39,6 +42,7 @@ public class OAuthService {
     private final UserRepository userRepository;
     private final ProfileRepository profileRepository;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final UserOAuthProviderRepository oAuthProviderRepository;
     private final JwtTokenProvider jwtTokenProvider;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -55,65 +59,172 @@ public class OAuthService {
         String email = userInfo.path("email").asText(null);
         String name = userInfo.path("name").asText("Google User");
 
-        // 구글 전용 계정 먼저 검색, 없으면 연동된 LOCAL 계정 검색
-        return userRepository.findByProviderAndProviderId(User.Provider.GOOGLE, providerId)
-                .map(user -> issueTokens(user, false))
-                .orElseGet(() -> userRepository.findByLinkedGoogleId(providerId)
-                        .map(user -> issueTokens(user, false))
-                        .orElseGet(() -> findOrCreateUser(User.Provider.GOOGLE, providerId, email, name)));
+        return oAuthProviderRepository.findByProviderAndProviderId(OAuthProvider.GOOGLE, providerId)
+                .map(oap -> issueTokens(oap.getUser(), false))
+                .orElseGet(() -> findOrCreateUser(OAuthProvider.GOOGLE, providerId, email, name));
+    }
+
+    // ── Kakao ────────────────────────────────────────────────────────────────
+
+    @Transactional
+    public OAuthLoginResponse loginWithKakao(String authorizationCode, String redirectUri) {
+        String effectiveRedirectUri = redirectUri != null ? redirectUri : oAuthProperties.getKakao().getRedirectUri();
+        String accessToken = exchangeKakaoCode(authorizationCode, effectiveRedirectUri);
+        JsonNode userInfo = getKakaoUserInfo(accessToken);
+
+        String providerId = userInfo.get("id").asText();
+        JsonNode account = userInfo.path("kakao_account");
+        String email = account.path("email").asText(null);
+        String name = account.path("profile").path("nickname").asText("Kakao User");
+
+        return oAuthProviderRepository.findByProviderAndProviderId(OAuthProvider.KAKAO, providerId)
+                .map(oap -> issueTokens(oap.getUser(), false))
+                .orElseGet(() -> findOrCreateUser(OAuthProvider.KAKAO, providerId, email, name));
     }
 
     // ── 구글 연동 ──────────────────────────────────────────────────────────────
 
     @Transactional
     public void linkGoogle(Long userId, String authorizationCode, String redirectUri) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new AuthException("존재하지 않는 사용자입니다.", HttpStatus.NOT_FOUND));
+        User user = getActiveUser(userId);
 
-        if (user.getStatus() != User.UserStatus.ACTIVE) {
-            throw new AuthException("이미 탈퇴한 계정입니다.", HttpStatus.GONE);
-        }
-        if (user.getLinkedGoogleId() != null) {
+        if (oAuthProviderRepository.existsByUserAndProvider(user, OAuthProvider.GOOGLE)) {
             throw new AuthException("이미 구글 계정이 연동되어 있습니다.", HttpStatus.CONFLICT);
-        }
-        if (user.getProvider() == User.Provider.GOOGLE) {
-            throw new AuthException("구글로 가입한 계정은 연동이 필요하지 않습니다.", HttpStatus.BAD_REQUEST);
         }
 
         String effectiveRedirectUri = redirectUri != null ? redirectUri : oAuthProperties.getGoogle().getRedirectUri();
         String googleAccessToken = exchangeGoogleCode(authorizationCode, effectiveRedirectUri);
-        JsonNode userInfo = getGoogleUserInfo(googleAccessToken);
-        String googleId = userInfo.get("sub").asText();
+        String googleId = getGoogleUserInfo(googleAccessToken).get("sub").asText();
 
-        if (userRepository.existsByProviderAndProviderId(User.Provider.GOOGLE, googleId)) {
-            throw new AuthException("해당 구글 계정은 이미 다른 계정에 연결되어 있습니다.", HttpStatus.CONFLICT);
-        }
-        if (userRepository.existsByLinkedGoogleId(googleId)) {
+        if (oAuthProviderRepository.existsByProviderAndProviderId(OAuthProvider.GOOGLE, googleId)) {
             throw new AuthException("해당 구글 계정은 이미 다른 계정에 연결되어 있습니다.", HttpStatus.CONFLICT);
         }
 
-        user.linkGoogle(googleId);
+        oAuthProviderRepository.save(UserOAuthProvider.of(user, OAuthProvider.GOOGLE, googleId));
     }
 
     // ── 구글 연동 해제 ─────────────────────────────────────────────────────────
 
     @Transactional
     public void unlinkGoogle(Long userId) {
+        User user = getActiveUser(userId);
+
+        UserOAuthProvider oauthLink = oAuthProviderRepository.findByUserAndProvider(user, OAuthProvider.GOOGLE)
+                .orElseThrow(() -> new AuthException("연동된 구글 계정이 없습니다.", HttpStatus.BAD_REQUEST));
+
+        if (!user.isLocal() && oAuthProviderRepository.countByUser(user) <= 1) {
+            throw new AuthException("마지막 로그인 수단은 해제할 수 없습니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        oAuthProviderRepository.delete(oauthLink);
+    }
+
+    // ── 카카오 연동 ──────────────────────────────────────────────────────────
+
+    @Transactional
+    public void linkKakao(Long userId, String authorizationCode, String redirectUri) {
+        User user = getActiveUser(userId);
+
+        if (oAuthProviderRepository.existsByUserAndProvider(user, OAuthProvider.KAKAO)) {
+            throw new AuthException("이미 카카오 계정이 연동되어 있습니다.", HttpStatus.CONFLICT);
+        }
+
+        String effectiveRedirectUri = redirectUri != null ? redirectUri : oAuthProperties.getKakao().getRedirectUri();
+        String kakaoAccessToken = exchangeKakaoCode(authorizationCode, effectiveRedirectUri);
+        String kakaoId = getKakaoUserInfo(kakaoAccessToken).get("id").asText();
+
+        if (oAuthProviderRepository.existsByProviderAndProviderId(OAuthProvider.KAKAO, kakaoId)) {
+            throw new AuthException("해당 카카오 계정은 이미 다른 계정에 연결되어 있습니다.", HttpStatus.CONFLICT);
+        }
+
+        oAuthProviderRepository.save(UserOAuthProvider.of(user, OAuthProvider.KAKAO, kakaoId));
+    }
+
+    // ── 카카오 연동 해제 ─────────────────────────────────────────────────────
+
+    @Transactional
+    public void unlinkKakao(Long userId) {
+        User user = getActiveUser(userId);
+
+        UserOAuthProvider oauthLink = oAuthProviderRepository.findByUserAndProvider(user, OAuthProvider.KAKAO)
+                .orElseThrow(() -> new AuthException("연동된 카카오 계정이 없습니다.", HttpStatus.BAD_REQUEST));
+
+        if (!user.isLocal() && oAuthProviderRepository.countByUser(user) <= 1) {
+            throw new AuthException("마지막 로그인 수단은 해제할 수 없습니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        oAuthProviderRepository.delete(oauthLink);
+    }
+
+    // ── 공통 사용자 처리 ─────────────────────────────────────────────────────
+
+    private OAuthLoginResponse findOrCreateUser(OAuthProvider provider, String providerId,
+                                                String email, String name) {
+        // 동일 이메일 계정이 있으면 자동 연동 후 로그인
+        if (email != null) {
+            Optional<User> byEmail = userRepository.findByEmail(email);
+            if (byEmail.isPresent()) {
+                User existing = byEmail.get();
+                if (!oAuthProviderRepository.existsByUserAndProvider(existing, provider)) {
+                    oAuthProviderRepository.save(UserOAuthProvider.of(existing, provider, providerId));
+                    log.info("[OAuth 자동 연동] provider={}, email={}", provider, email);
+                }
+                return issueTokens(existing, false);
+            }
+        }
+
+        // 신규 계정 생성
+        User newUser = User.builder()
+                .uuid(UUID.randomUUID().toString())
+                .email(email)
+                .build();
+        userRepository.save(newUser);
+        profileRepository.save(Profile.builder()
+                .user(newUser)
+                .nickname(generateUniqueNickname(name))
+                .build());
+        oAuthProviderRepository.save(UserOAuthProvider.of(newUser, provider, providerId));
+        return issueTokens(newUser, true);
+    }
+
+    private OAuthLoginResponse issueTokens(User user, boolean isNew) {
+        user.updateLastLoginAt(LocalDateTime.now());
+
+        String accessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getRole().name());
+        String refreshTokenStr = jwtTokenProvider.generateRefreshToken(user.getId());
+
+        refreshTokenRepository.save(RefreshToken.builder()
+                .user(user)
+                .tokenHash(jwtTokenProvider.hashToken(refreshTokenStr))
+                .expiresAt(LocalDateTime.now().plusDays(30))
+                .build());
+
+        long expiresIn = jwtProperties.getAccessTokenExpiry() / 1000;
+        String nickname = profileRepository.findByUser(user)
+                .map(Profile::getNickname)
+                .orElse(null);
+        return OAuthLoginResponse.of(accessToken, refreshTokenStr, expiresIn, isNew, user, nickname);
+    }
+
+    private User getActiveUser(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new AuthException("존재하지 않는 사용자입니다.", HttpStatus.NOT_FOUND));
-
         if (user.getStatus() != User.UserStatus.ACTIVE) {
             throw new AuthException("이미 탈퇴한 계정입니다.", HttpStatus.GONE);
         }
-        if (user.getProvider() == User.Provider.GOOGLE) {
-            throw new AuthException("구글로 가입한 계정은 연동 해제가 불가능합니다.", HttpStatus.BAD_REQUEST);
-        }
-        if (user.getLinkedGoogleId() == null) {
-            throw new AuthException("연동된 구글 계정이 없습니다.", HttpStatus.BAD_REQUEST);
-        }
-
-        user.unlinkGoogle();
+        return user;
     }
+
+    private String generateUniqueNickname(String base) {
+        String candidate = base;
+        int suffix = 1;
+        while (profileRepository.existsByNickname(candidate)) {
+            candidate = base + suffix++;
+        }
+        return candidate;
+    }
+
+    // ── Google 내부 ──────────────────────────────────────────────────────────
 
     private String exchangeGoogleCode(String code, String redirectUri) {
         OAuthProperties.Provider cfg = oAuthProperties.getGoogle();
@@ -136,155 +247,6 @@ public class OAuthService {
 
     private JsonNode getGoogleUserInfo(String accessToken) {
         return getWithBearer("https://www.googleapis.com/oauth2/v3/userinfo", accessToken);
-    }
-
-    // ── Kakao ────────────────────────────────────────────────────────────────
-
-    @Transactional
-    public OAuthLoginResponse loginWithKakao(String authorizationCode, String redirectUri) {
-        String effectiveRedirectUri = redirectUri != null ? redirectUri : oAuthProperties.getKakao().getRedirectUri();
-        String accessToken = exchangeKakaoCode(authorizationCode, effectiveRedirectUri);
-        JsonNode userInfo = getKakaoUserInfo(accessToken);
-
-        String providerId = userInfo.get("id").asText();
-        JsonNode account = userInfo.path("kakao_account");
-        String email = account.path("email").asText(null);
-        String name = account.path("profile").path("nickname").asText("Kakao User");
-
-        // 카카오 전용 계정 먼저 검색, 없으면 연동된 LOCAL 계정 검색
-        return userRepository.findByProviderAndProviderId(User.Provider.KAKAO, providerId)
-                .map(user -> issueTokens(user, false))
-                .orElseGet(() -> userRepository.findByLinkedKakaoId(providerId)
-                        .map(user -> issueTokens(user, false))
-                        .orElseGet(() -> findOrCreateUser(User.Provider.KAKAO, providerId, email, name)));
-    }
-
-    // ── 카카오 연동 ──────────────────────────────────────────────────────────
-
-    @Transactional
-    public void linkKakao(Long userId, String authorizationCode, String redirectUri) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new AuthException("존재하지 않는 사용자입니다.", HttpStatus.NOT_FOUND));
-
-        if (user.getStatus() != User.UserStatus.ACTIVE) {
-            throw new AuthException("이미 탈퇴한 계정입니다.", HttpStatus.GONE);
-        }
-        if (user.getLinkedKakaoId() != null) {
-            throw new AuthException("이미 카카오 계정이 연동되어 있습니다.", HttpStatus.CONFLICT);
-        }
-        if (user.getProvider() == User.Provider.KAKAO) {
-            throw new AuthException("카카오로 가입한 계정은 연동이 필요하지 않습니다.", HttpStatus.BAD_REQUEST);
-        }
-
-        String effectiveRedirectUri = redirectUri != null ? redirectUri : oAuthProperties.getKakao().getRedirectUri();
-        String kakaoAccessToken = exchangeKakaoCode(authorizationCode, effectiveRedirectUri);
-        JsonNode userInfo = getKakaoUserInfo(kakaoAccessToken);
-        String kakaoId = userInfo.get("id").asText();
-
-        if (userRepository.existsByProviderAndProviderId(User.Provider.KAKAO, kakaoId)) {
-            throw new AuthException("해당 카카오 계정은 이미 다른 계정에 연결되어 있습니다.", HttpStatus.CONFLICT);
-        }
-        if (userRepository.existsByLinkedKakaoId(kakaoId)) {
-            throw new AuthException("해당 카카오 계정은 이미 다른 계정에 연결되어 있습니다.", HttpStatus.CONFLICT);
-        }
-
-        user.linkKakao(kakaoId);
-    }
-
-    // ── 카카오 연동 해제 ─────────────────────────────────────────────────────
-
-    @Transactional
-    public void unlinkKakao(Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new AuthException("존재하지 않는 사용자입니다.", HttpStatus.NOT_FOUND));
-
-        if (user.getStatus() != User.UserStatus.ACTIVE) {
-            throw new AuthException("이미 탈퇴한 계정입니다.", HttpStatus.GONE);
-        }
-        if (user.getProvider() == User.Provider.KAKAO) {
-            throw new AuthException("카카오로 가입한 계정은 연동 해제가 불가능합니다.", HttpStatus.BAD_REQUEST);
-        }
-        if (user.getLinkedKakaoId() == null) {
-            throw new AuthException("연동된 카카오 계정이 없습니다.", HttpStatus.BAD_REQUEST);
-        }
-
-        user.unlinkKakao();
-    }
-
-    // ── 공통 사용자 처리 ─────────────────────────────────────────────────────
-
-    private OAuthLoginResponse findOrCreateUser(User.Provider provider, String providerId,
-                                                String email, String name) {
-        boolean[] isNew = {false};
-        User user = userRepository.findByProviderAndProviderId(provider, providerId)
-                .orElseGet(() -> {
-                    // 동일 이메일 계정이 있으면 자동 연동 후 로그인
-                    if (email != null) {
-                        Optional<User> byEmail = userRepository.findByEmail(email);
-                        if (byEmail.isPresent()) {
-                            User existing = byEmail.get();
-                            if (provider == User.Provider.GOOGLE && existing.getLinkedGoogleId() == null) {
-                                existing.linkGoogle(providerId);
-                                log.info("[OAuth 자동 연동] provider=GOOGLE, email={}", email);
-                            } else if (provider == User.Provider.KAKAO && existing.getLinkedKakaoId() == null) {
-                                existing.linkKakao(providerId);
-                                log.info("[OAuth 자동 연동] provider=KAKAO, email={}", email);
-                            }
-                            return existing;
-                        }
-                    }
-                    isNew[0] = true;
-                    return createOAuthUser(provider, providerId, email, name);
-                });
-
-        return issueTokens(user, isNew[0]);
-    }
-
-    private OAuthLoginResponse issueTokens(User user, boolean isNew) {
-        user.updateLastLoginAt(LocalDateTime.now());
-
-        String accessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getRole().name());
-        String refreshTokenStr = jwtTokenProvider.generateRefreshToken(user.getId());
-
-        refreshTokenRepository.save(RefreshToken.builder()
-                .user(user)
-                .tokenHash(jwtTokenProvider.hashToken(refreshTokenStr))
-                .expiresAt(LocalDateTime.now().plusDays(30))
-                .build());
-
-        long expiresIn = jwtProperties.getAccessTokenExpiry() / 1000;
-        String nickname = profileRepository.findByUser(user)
-                .map(Profile::getNickname)
-                .orElse(null);
-        return OAuthLoginResponse.of(accessToken, refreshTokenStr, expiresIn, isNew, user, nickname);
-    }
-
-    private User createOAuthUser(User.Provider provider, String providerId,
-                                 String email, String name) {
-        User user = User.builder()
-                .uuid(UUID.randomUUID().toString())
-                .email(email)
-                .provider(provider)
-                .providerId(providerId)
-                .build();
-
-        userRepository.save(user);
-
-        profileRepository.save(Profile.builder()
-                .user(user)
-                .nickname(generateUniqueNickname(name))
-                .build());
-
-        return user;
-    }
-
-    private String generateUniqueNickname(String base) {
-        String candidate = base;
-        int suffix = 1;
-        while (profileRepository.existsByNickname(candidate)) {
-            candidate = base + suffix++;
-        }
-        return candidate;
     }
 
     // ── Kakao 내부 ───────────────────────────────────────────────────────────
@@ -352,7 +314,6 @@ public class OAuthService {
             JsonNode json = objectMapper.readTree(response.body());
 
             if (response.statusCode() >= 400) {
-                // 카카오는 {"msg": "...", "code": -401}, 구글은 {"error": "...", "error_description": "..."} 형식
                 String errMsg = json.path("msg").asText(
                         json.path("error_description").asText(
                                 json.path("error").asText("사용자 정보 조회 실패")));

@@ -630,7 +630,7 @@
     if (!phone) { alert('휴대폰 번호를 입력하세요.'); return; }
 
     const result = await callApi('POST', '/auth/phone/code', { phone, purpose: 'REGISTER' });
-    if (result && result.status === 204) {
+    if (result && result.status === 200) {
       show('regCodeSection');
       document.getElementById('regCode').focus();
     }
@@ -725,7 +725,7 @@
     if (!phone) { alert('새 휴대폰 번호를 입력하세요.'); return; }
 
     const result = await callApi('POST', '/auth/phone/code', { phone, purpose: 'CHANGE_PHONE' });
-    if (result && result.status === 204) {
+    if (result && result.status === 200) {
       show('changeCodeSection');
       document.getElementById('changeCode').focus();
     }
@@ -767,7 +767,7 @@
     const purpose = document.getElementById('smsPurpose').value;
     if (!phone) { alert('휴대폰 번호를 입력하세요.'); return; }
     const result = await callApi('POST', '/auth/phone/code', { phone, purpose });
-    if (result && result.status === 204) {
+    if (result && result.status === 200) {
       document.getElementById('rawVerifyPhone').value = phone;
       document.getElementById('rawVerifyPurpose').value = purpose;
     }

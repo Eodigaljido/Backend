@@ -74,7 +74,6 @@ public class AuthService {
                 .passwordHash(passwordEncoder.encode(request.password()))
                 .phone(request.phone())
                 .phoneVerifiedAt(LocalDateTime.now())
-                .provider(User.Provider.LOCAL)
                 .build();
 
         userRepository.save(user);

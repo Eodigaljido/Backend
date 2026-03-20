@@ -12,8 +12,7 @@ import java.time.LocalDateTime;
     indexes = {
         @Index(name = "idx_users_uuid", columnList = "uuid"),
         @Index(name = "idx_users_email", columnList = "email"),
-        @Index(name = "idx_users_phone", columnList = "phone"),
-        @Index(name = "idx_users_provider", columnList = "provider, provider_id")
+        @Index(name = "idx_users_phone", columnList = "phone")
     }
 )
 @Getter
@@ -43,13 +42,6 @@ public class User extends BaseTimeEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
-    private Provider provider;
-
-    @Column(name = "provider_id", length = 255)
-    private String providerId;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 10)
     @Builder.Default
     private Role role = Role.USER;
 
@@ -64,11 +56,9 @@ public class User extends BaseTimeEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
-    @Column(name = "linked_kakao_id", length = 255)
-    private String linkedKakaoId;
-
-    @Column(name = "linked_google_id", length = 255)
-    private String linkedGoogleId;
+    public boolean isLocal() {
+        return this.passwordHash != null;
+    }
 
     public void updateLastLoginAt(LocalDateTime at) {
         this.lastLoginAt = at;
@@ -84,30 +74,10 @@ public class User extends BaseTimeEntity {
         this.deletedAt = LocalDateTime.now();
     }
 
-    public void linkKakao(String kakaoId) {
-        this.linkedKakaoId = kakaoId;
-    }
-
-    public void unlinkKakao() {
-        this.linkedKakaoId = null;
-    }
-
     public void linkLocalCredentials(String passwordHash, String phone, LocalDateTime verifiedAt) {
         this.passwordHash = passwordHash;
         this.phone = phone;
         this.phoneVerifiedAt = verifiedAt;
-    }
-
-    public void linkGoogle(String googleId) {
-        this.linkedGoogleId = googleId;
-    }
-
-    public void unlinkGoogle() {
-        this.linkedGoogleId = null;
-    }
-
-    public enum Provider {
-        LOCAL, GOOGLE, KAKAO
     }
 
     public enum Role {
