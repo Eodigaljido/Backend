@@ -67,6 +67,9 @@ public class User extends BaseTimeEntity {
     @Column(name = "linked_kakao_id", length = 255)
     private String linkedKakaoId;
 
+    @Column(name = "linked_google_id", length = 255)
+    private String linkedGoogleId;
+
     public void updateLastLoginAt(LocalDateTime at) {
         this.lastLoginAt = at;
     }
@@ -87,6 +90,20 @@ public class User extends BaseTimeEntity {
 
     public void unlinkKakao() {
         this.linkedKakaoId = null;
+    }
+
+    public void linkLocalCredentials(String passwordHash, String phone, LocalDateTime verifiedAt) {
+        this.passwordHash = passwordHash;
+        this.phone = phone;
+        this.phoneVerifiedAt = verifiedAt;
+    }
+
+    public void linkGoogle(String googleId) {
+        this.linkedGoogleId = googleId;
+    }
+
+    public void unlinkGoogle() {
+        this.linkedGoogleId = null;
     }
 
     public enum Provider {
