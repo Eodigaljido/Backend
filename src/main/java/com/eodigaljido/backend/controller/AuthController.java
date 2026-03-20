@@ -1,5 +1,6 @@
 package com.eodigaljido.backend.controller;
 
+import com.eodigaljido.backend.config.OAuthProperties;
 import com.eodigaljido.backend.dto.auth.*;
 import com.eodigaljido.backend.dto.common.ErrorResponse;
 import com.eodigaljido.backend.service.AuthService;
@@ -29,6 +30,7 @@ public class AuthController {
     private final AuthService authService;
     private final OAuthService oAuthService;
     private final PhoneVerificationService phoneVerificationService;
+    private final OAuthProperties oAuthProperties;
 
     @PostMapping("/register")
     @Operation(
@@ -257,6 +259,70 @@ public class AuthController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/oauth/google/link")
+    @Operation(
+            summary = "구글 계정 연동",
+            description = """
+                    이미 이메일(LOCAL)로 가입한 계정에 구글 계정을 연동합니다.
+                    연동 후에는 구글 로그인으로도 이 계정에 접근할 수 있습니다.
+
+                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
+
+                    **Request Body:**
+                    - `code` (필수): 구글 인가 코드
+                    - `redirectUri` (선택): 인가 코드 발급 시 사용한 redirect_uri (생략 시 서버 설정값 사용)
+
+                    **제약 조건:**
+                    - 이미 구글로 가입한 계정은 연동 불필요 (400)
+                    - 이미 연동된 계정은 중복 연동 불가 (409)
+                    - 해당 구글 계정이 다른 계정에 연결되어 있으면 불가 (409)
+                    """
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "구글 연동 성공"),
+            @ApiResponse(responseCode = "400", description = "유효하지 않은 코드 또는 구글 가입 계정",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "이미 연동된 구글 계정 있음 또는 해당 구글 ID가 다른 계정에 연결됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "410", description = "이미 탈퇴한 계정",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    ResponseEntity<Void> linkGoogle(@AuthenticationPrincipal UserDetails userDetails,
+                                    @Valid @RequestBody GoogleLinkRequest request) {
+        oAuthService.linkGoogle(Long.valueOf(userDetails.getUsername()), request.code(), request.redirectUri());
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/oauth/google/link")
+    @Operation(
+            summary = "구글 계정 연동 해제",
+            description = """
+                    연동된 구글 계정을 해제합니다.
+                    해제 후에는 구글 로그인으로 이 계정에 접근할 수 없습니다.
+
+                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
+
+                    **제약 조건:**
+                    - 구글로 가입한 계정은 연동 해제 불가 (400)
+                    - 연동된 구글 계정이 없으면 오류 (400)
+                    """
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "구글 연동 해제 성공"),
+            @ApiResponse(responseCode = "400", description = "연동된 구글 계정 없음 또는 구글 가입 계정",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "410", description = "이미 탈퇴한 계정",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    ResponseEntity<Void> unlinkGoogle(@AuthenticationPrincipal UserDetails userDetails) {
+        oAuthService.unlinkGoogle(Long.valueOf(userDetails.getUsername()));
+        return ResponseEntity.noContent().build();
+    }
+
     @DeleteMapping("/oauth/kakao/link")
     @Operation(
             summary = "카카오 계정 연동 해제",
@@ -283,6 +349,21 @@ public class AuthController {
     ResponseEntity<Void> unlinkKakao(@AuthenticationPrincipal UserDetails userDetails) {
         oAuthService.unlinkKakao(Long.valueOf(userDetails.getUsername()));
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/oauth/config")
+    @Operation(
+            summary = "OAuth 공개 설정 조회",
+            description = "테스트 페이지 등 클라이언트에서 OAuth 인증 URL을 구성하는 데 필요한 공개 설정값(클라이언트 ID)을 반환합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "설정 조회 성공")
+    })
+    ResponseEntity<OAuthConfigResponse> oauthConfig() {
+        return ResponseEntity.ok(new OAuthConfigResponse(
+                oAuthProperties.getGoogle().getClientId(),
+                oAuthProperties.getKakao().getClientId()
+        ));
     }
 
     @PostMapping("/phone/code")
