@@ -64,6 +64,9 @@ public class User extends BaseTimeEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    @Column(name = "linked_kakao_id", length = 255)
+    private String linkedKakaoId;
+
     public void updateLastLoginAt(LocalDateTime at) {
         this.lastLoginAt = at;
     }
@@ -76,6 +79,14 @@ public class User extends BaseTimeEntity {
     public void markDeleted() {
         this.status = UserStatus.DELETED;
         this.deletedAt = LocalDateTime.now();
+    }
+
+    public void linkKakao(String kakaoId) {
+        this.linkedKakaoId = kakaoId;
+    }
+
+    public void unlinkKakao() {
+        this.linkedKakaoId = null;
     }
 
     public enum Provider {
