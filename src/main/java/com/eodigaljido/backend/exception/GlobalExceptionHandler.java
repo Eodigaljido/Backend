@@ -34,6 +34,12 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(e.getStatus().value(), e.getMessage(), LocalDateTime.now()));
     }
 
+    @ExceptionHandler(NumberFormatException.class)
+    ResponseEntity<ErrorResponse> handleNumberFormat(NumberFormatException e) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(new ErrorResponse(HttpStatus.UNAUTHORIZED.value(), "인증 정보가 올바르지 않습니다.", LocalDateTime.now()));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<Map<String, String>> handleValidation(MethodArgumentNotValidException e) {
         Map<String, String> errors = e.getBindingResult().getFieldErrors().stream()

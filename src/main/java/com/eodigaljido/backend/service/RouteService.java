@@ -133,7 +133,9 @@ public class RouteService {
     public List<RouteSummaryResponse> getSavedRoutes(Long userId) {
         return savedRouteRepository.findByUserIdOrderByCreatedAtDesc(userId)
                 .stream()
-                .map(sr -> RouteSummaryResponse.from(sr.getRoute()))
+                .map(SavedRoute::getRoute)
+                .filter(route -> route.getStatus() != RouteStatus.DELETED)
+                .map(RouteSummaryResponse::from)
                 .toList();
     }
 
@@ -158,7 +160,7 @@ public class RouteService {
     }
 
     public RouteResponse getSharedRoute(String shareToken) {
-        Route route = routeRepository.findByShareTokenAndIsSharedTrue(shareToken)
+        Route route = routeRepository.findByShareTokenAndIsSharedTrueAndStatusNot(shareToken, RouteStatus.DELETED)
                 .orElseThrow(() -> new RouteException("공유된 루트를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
         return toRouteResponse(route);
     }

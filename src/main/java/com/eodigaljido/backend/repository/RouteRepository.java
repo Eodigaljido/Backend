@@ -15,5 +15,5 @@ public interface RouteRepository extends JpaRepository<Route, Long> {
 
     List<Route> findByUserIdAndIsSharedTrue(Long userId);
 
-    Optional<Route> findByShareTokenAndIsSharedTrue(String shareToken);
+    Optional<Route> findByShareTokenAndIsSharedTrueAndStatusNot(String shareToken, RouteStatus status);
 }

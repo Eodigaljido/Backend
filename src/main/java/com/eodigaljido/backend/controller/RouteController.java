@@ -354,9 +354,9 @@ public class RouteController {
     @Operation(
             summary = "공유 루트 조회",
             description = """
-                    공유 토큰으로 공유된 루트를 조회합니다.
+                    공유 토큰으로 공유된 루트를 조회합니다. 인증 없이 접근 가능합니다.
 
-                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
+                    **헤더:** 없음 (인증 불필요)
 
                     **Path Variable:**
                     - `shareToken`: 공유 활성화 시 발급받은 토큰
@@ -366,8 +366,7 @@ public class RouteController {
                     **Response:** 루트 상세 정보 + 경유지 목록
 
                     공유가 비활성화되었거나 존재하지 않는 토큰인 경우 404를 반환합니다.
-                    """,
-            security = @SecurityRequirement(name = "bearerAuth")
+                    """
     )
     public ResponseEntity<RouteResponse> getSharedRoute(@PathVariable String shareToken) {
         return ResponseEntity.ok(routeService.getSharedRoute(shareToken));
