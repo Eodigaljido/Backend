@@ -25,7 +25,7 @@ public class SecurityConfig {
             "/test.html",
             "/auth/login", "/auth/register",
             "/auth/token/refresh",
-            "/auth/oauth/google", "/auth/oauth/kakao",
+            "/auth/oauth/google", "/auth/oauth/kakao", "/auth/oauth/config",
             "/auth/phone/code", "/auth/phone/verify"
     };
 
