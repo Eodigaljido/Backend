@@ -5,7 +5,6 @@ import com.eodigaljido.backend.config.OAuthProperties;
 import com.eodigaljido.backend.domain.user.Profile;
 import com.eodigaljido.backend.domain.user.RefreshToken;
 import com.eodigaljido.backend.domain.user.User;
-import com.eodigaljido.backend.dto.auth.LoginResponse;
 import com.eodigaljido.backend.dto.auth.OAuthLoginResponse;
 import com.eodigaljido.backend.exception.AuthException;
 import com.eodigaljido.backend.repository.ProfileRepository;
@@ -15,6 +14,7 @@ import com.eodigaljido.backend.security.JwtTokenProvider;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +28,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class OAuthService {
@@ -44,8 +45,9 @@ public class OAuthService {
     // ── Google ────────────────────────────────────────────────────────────────
 
     @Transactional
-    public OAuthLoginResponse loginWithGoogle(String authorizationCode) {
-        String accessToken = exchangeGoogleCode(authorizationCode);
+    public OAuthLoginResponse loginWithGoogle(String authorizationCode, String redirectUri) {
+        String effectiveRedirectUri = redirectUri != null ? redirectUri : oAuthProperties.getGoogle().getRedirectUri();
+        String accessToken = exchangeGoogleCode(authorizationCode, effectiveRedirectUri);
         JsonNode userInfo = getGoogleUserInfo(accessToken);
 
         String providerId = userInfo.get("sub").asText();
@@ -55,12 +57,12 @@ public class OAuthService {
         return findOrCreateUser(User.Provider.GOOGLE, providerId, email, name);
     }
 
-    private String exchangeGoogleCode(String code) {
+    private String exchangeGoogleCode(String code, String redirectUri) {
         OAuthProperties.Provider cfg = oAuthProperties.getGoogle();
         String body = "code=" + encode(code)
                 + "&client_id=" + encode(cfg.getClientId())
                 + "&client_secret=" + encode(cfg.getClientSecret())
-                + "&redirect_uri=" + encode(cfg.getRedirectUri())
+                + "&redirect_uri=" + encode(redirectUri)
                 + "&grant_type=authorization_code";
 
         JsonNode json = postForm("https://oauth2.googleapis.com/token", body);
@@ -74,8 +76,9 @@ public class OAuthService {
     // ── Kakao ────────────────────────────────────────────────────────────────
 
     @Transactional
-    public OAuthLoginResponse loginWithKakao(String authorizationCode) {
-        String accessToken = exchangeKakaoCode(authorizationCode);
+    public OAuthLoginResponse loginWithKakao(String authorizationCode, String redirectUri) {
+        String effectiveRedirectUri = redirectUri != null ? redirectUri : oAuthProperties.getKakao().getRedirectUri();
+        String accessToken = exchangeKakaoCode(authorizationCode, effectiveRedirectUri);
         JsonNode userInfo = getKakaoUserInfo(accessToken);
 
         String providerId = userInfo.get("id").asText();
@@ -83,23 +86,64 @@ public class OAuthService {
         String email = account.path("email").asText(null);
         String name = account.path("profile").path("nickname").asText("Kakao User");
 
-        return findOrCreateUser(User.Provider.KAKAO, providerId, email, name);
+        // 카카오 전용 계정 먼저 검색, 없으면 연동된 LOCAL 계정 검색
+        return userRepository.findByProviderAndProviderId(User.Provider.KAKAO, providerId)
+                .map(user -> issueTokens(user, false))
+                .orElseGet(() -> userRepository.findByLinkedKakaoId(providerId)
+                        .map(user -> issueTokens(user, false))
+                        .orElseGet(() -> findOrCreateUser(User.Provider.KAKAO, providerId, email, name)));
     }
 
-    private String exchangeKakaoCode(String code) {
-        OAuthProperties.Provider cfg = oAuthProperties.getKakao();
-        String body = "grant_type=authorization_code"
-                + "&client_id=" + encode(cfg.getClientId())
-                + "&client_secret=" + encode(cfg.getClientSecret())
-                + "&redirect_uri=" + encode(cfg.getRedirectUri())
-                + "&code=" + encode(code);
+    // ── 카카오 연동 ──────────────────────────────────────────────────────────
 
-        JsonNode json = postForm("https://kauth.kakao.com/oauth/token", body);
-        return json.get("access_token").asText();
+    @Transactional
+    public void linkKakao(Long userId, String authorizationCode, String redirectUri) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AuthException("존재하지 않는 사용자입니다.", HttpStatus.NOT_FOUND));
+
+        if (user.getStatus() != User.UserStatus.ACTIVE) {
+            throw new AuthException("이미 탈퇴한 계정입니다.", HttpStatus.GONE);
+        }
+        if (user.getLinkedKakaoId() != null) {
+            throw new AuthException("이미 카카오 계정이 연동되어 있습니다.", HttpStatus.CONFLICT);
+        }
+        if (user.getProvider() == User.Provider.KAKAO) {
+            throw new AuthException("카카오로 가입한 계정은 연동이 필요하지 않습니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        String effectiveRedirectUri = redirectUri != null ? redirectUri : oAuthProperties.getKakao().getRedirectUri();
+        String kakaoAccessToken = exchangeKakaoCode(authorizationCode, effectiveRedirectUri);
+        JsonNode userInfo = getKakaoUserInfo(kakaoAccessToken);
+        String kakaoId = userInfo.get("id").asText();
+
+        if (userRepository.existsByProviderAndProviderId(User.Provider.KAKAO, kakaoId)) {
+            throw new AuthException("해당 카카오 계정은 이미 다른 계정에 연결되어 있습니다.", HttpStatus.CONFLICT);
+        }
+        if (userRepository.existsByLinkedKakaoId(kakaoId)) {
+            throw new AuthException("해당 카카오 계정은 이미 다른 계정에 연결되어 있습니다.", HttpStatus.CONFLICT);
+        }
+
+        user.linkKakao(kakaoId);
     }
 
-    private JsonNode getKakaoUserInfo(String accessToken) {
-        return getWithBearer("https://kapi.kakao.com/v2/user/me", accessToken);
+    // ── 카카오 연동 해제 ─────────────────────────────────────────────────────
+
+    @Transactional
+    public void unlinkKakao(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AuthException("존재하지 않는 사용자입니다.", HttpStatus.NOT_FOUND));
+
+        if (user.getStatus() != User.UserStatus.ACTIVE) {
+            throw new AuthException("이미 탈퇴한 계정입니다.", HttpStatus.GONE);
+        }
+        if (user.getProvider() == User.Provider.KAKAO) {
+            throw new AuthException("카카오로 가입한 계정은 연동 해제가 불가능합니다.", HttpStatus.BAD_REQUEST);
+        }
+        if (user.getLinkedKakaoId() == null) {
+            throw new AuthException("연동된 카카오 계정이 없습니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        user.unlinkKakao();
     }
 
     // ── 공통 사용자 처리 ─────────────────────────────────────────────────────
@@ -113,6 +157,10 @@ public class OAuthService {
                     return createOAuthUser(provider, providerId, email, name);
                 });
 
+        return issueTokens(user, isNew[0]);
+    }
+
+    private OAuthLoginResponse issueTokens(User user, boolean isNew) {
         user.updateLastLoginAt(LocalDateTime.now());
 
         String accessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getRole().name());
@@ -128,7 +176,7 @@ public class OAuthService {
         String nickname = profileRepository.findByUser(user)
                 .map(Profile::getNickname)
                 .orElse(null);
-        return OAuthLoginResponse.of(accessToken, refreshTokenStr, expiresIn, isNew[0], user, nickname);
+        return OAuthLoginResponse.of(accessToken, refreshTokenStr, expiresIn, isNew, user, nickname);
     }
 
     private User createOAuthUser(User.Provider provider, String providerId,
@@ -157,6 +205,31 @@ public class OAuthService {
             candidate = base + suffix++;
         }
         return candidate;
+    }
+
+    // ── Kakao 내부 ───────────────────────────────────────────────────────────
+
+    private String exchangeKakaoCode(String code, String redirectUri) {
+        OAuthProperties.Provider cfg = oAuthProperties.getKakao();
+        String body = "grant_type=authorization_code"
+                + "&client_id=" + encode(cfg.getClientId())
+                + "&client_secret=" + encode(cfg.getClientSecret())
+                + "&redirect_uri=" + encode(redirectUri)
+                + "&code=" + encode(code);
+
+        JsonNode json = postForm("https://kauth.kakao.com/oauth/token", body);
+        JsonNode tokenNode = json.get("access_token");
+        if (tokenNode == null || tokenNode.isNull()) {
+            String error = json.path("error_description").asText(json.path("error").asText("access_token 없음"));
+            log.error("[카카오 토큰 교환 실패] 응답: {}", json);
+            throw new AuthException("카카오 토큰 발급 실패: " + error, HttpStatus.BAD_REQUEST);
+        }
+        log.debug("[카카오 토큰 교환 성공] redirect_uri={}", redirectUri);
+        return tokenNode.asText();
+    }
+
+    private JsonNode getKakaoUserInfo(String accessToken) {
+        return getWithBearer("https://kapi.kakao.com/v2/user/me", accessToken);
     }
 
     // ── HTTP 유틸 ────────────────────────────────────────────────────────────
@@ -199,7 +272,10 @@ public class OAuthService {
             JsonNode json = objectMapper.readTree(response.body());
 
             if (response.statusCode() >= 400) {
-                throw new AuthException("사용자 정보 조회 실패", HttpStatus.valueOf(response.statusCode()));
+                // 카카오는 오류 시 {"msg": "...", "code": -401} 형식으로 반환
+                String kakaoMsg = json.path("msg").asText(json.path("error_description").asText("사용자 정보 조회 실패"));
+                log.error("[카카오 사용자 정보 조회 실패] status={}, body={}", response.statusCode(), json);
+                throw new AuthException("카카오 사용자 정보 조회 실패: " + kakaoMsg, HttpStatus.valueOf(response.statusCode()));
             }
             return json;
         } catch (AuthException e) {
