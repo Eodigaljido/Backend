@@ -5,6 +5,7 @@ import com.eodigaljido.backend.domain.user.User;
 import com.eodigaljido.backend.dto.user.*;
 import com.eodigaljido.backend.exception.UserException;
 import com.eodigaljido.backend.repository.ProfileRepository;
+import com.eodigaljido.backend.repository.UserOAuthProviderRepository;
 import com.eodigaljido.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -19,13 +20,14 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final ProfileRepository profileRepository;
+    private final UserOAuthProviderRepository oAuthProviderRepository;
 
     // 내 프로필 전체 조회
     @Transactional(readOnly = true)
     public MyProfileResponse getMyProfile(Long userId) {
         User user = findActiveUser(userId);
         Profile profile = profileRepository.findByUser(user).orElse(null);
-        return MyProfileResponse.of(user, profile);
+        return MyProfileResponse.of(user, profile, oAuthProviderRepository.findAllByUser(user));
     }
 
     // 다른 유저 프로필 조회

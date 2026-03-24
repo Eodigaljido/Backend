@@ -2,26 +2,33 @@ package com.eodigaljido.backend.dto.user;
 
 import com.eodigaljido.backend.domain.user.Profile;
 import com.eodigaljido.backend.domain.user.User;
+import com.eodigaljido.backend.domain.user.UserOAuthProvider;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 public record MyProfileResponse(
         String uuid,
         String email,
         String phone,
-        String provider,
+        List<String> loginMethods,
         String nickname,
         String profileImageUrl,
         boolean isDefaultImage,
         String bio,
         LocalDateTime createdAt
 ) {
-    public static MyProfileResponse of(User user, Profile profile) {
+    public static MyProfileResponse of(User user, Profile profile, List<UserOAuthProvider> oauthProviders) {
+        List<String> methods = new ArrayList<>();
+        if (user.isLocal()) methods.add("LOCAL");
+        oauthProviders.forEach(op -> methods.add(op.getProvider().name()));
+
         return new MyProfileResponse(
                 user.getUuid(),
                 user.getEmail(),
                 user.getPhone(),
-                user.getProvider().name(),
+                methods,
                 profile != null ? profile.getNickname() : null,
                 profile != null ? profile.getProfileImageUrl() : null,
                 profile == null || profile.isDefaultImage(),

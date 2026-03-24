@@ -9,7 +9,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email);
     Optional<User> findByPhone(String phone);
     Optional<User> findByUuid(String uuid);
-    Optional<User> findByProviderAndProviderId(User.Provider provider, String providerId);
     boolean existsByEmail(String email);
     boolean existsByPhone(String phone);
 }
