@@ -14,5 +14,4 @@ public interface UserOAuthProviderRepository extends JpaRepository<UserOAuthProv
     boolean existsByUserAndProvider(User user, UserOAuthProvider.OAuthProvider provider);
     List<UserOAuthProvider> findAllByUser(User user);
     long countByUser(User user);
-    void deleteByUserAndProvider(User user, UserOAuthProvider.OAuthProvider provider);
 }

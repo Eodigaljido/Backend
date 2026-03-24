@@ -29,7 +29,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
-import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -47,11 +47,9 @@ public class OAuthService {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    // ── Google ────────────────────────────────────────────────────────────────
-
     @Transactional
     public OAuthLoginResponse loginWithGoogle(String authorizationCode, String redirectUri) {
-        String effectiveRedirectUri = redirectUri != null ? redirectUri : oAuthProperties.getGoogle().getRedirectUri();
+        String effectiveRedirectUri = resolveAndValidateRedirectUri(redirectUri, oAuthProperties.getGoogle());
         String accessToken = exchangeGoogleCode(authorizationCode, effectiveRedirectUri);
         JsonNode userInfo = getGoogleUserInfo(accessToken);
 
@@ -64,11 +62,9 @@ public class OAuthService {
                 .orElseGet(() -> findOrCreateUser(OAuthProvider.GOOGLE, providerId, email, name));
     }
 
-    // ── Kakao ────────────────────────────────────────────────────────────────
-
     @Transactional
     public OAuthLoginResponse loginWithKakao(String authorizationCode, String redirectUri) {
-        String effectiveRedirectUri = redirectUri != null ? redirectUri : oAuthProperties.getKakao().getRedirectUri();
+        String effectiveRedirectUri = resolveAndValidateRedirectUri(redirectUri, oAuthProperties.getKakao());
         String accessToken = exchangeKakaoCode(authorizationCode, effectiveRedirectUri);
         JsonNode userInfo = getKakaoUserInfo(accessToken);
 
@@ -82,8 +78,6 @@ public class OAuthService {
                 .orElseGet(() -> findOrCreateUser(OAuthProvider.KAKAO, providerId, email, name));
     }
 
-    // ── 구글 연동 ──────────────────────────────────────────────────────────────
-
     @Transactional
     public void linkGoogle(Long userId, String authorizationCode, String redirectUri) {
         User user = getActiveUser(userId);
@@ -92,7 +86,7 @@ public class OAuthService {
             throw new AuthException("이미 구글 계정이 연동되어 있습니다.", HttpStatus.CONFLICT);
         }
 
-        String effectiveRedirectUri = redirectUri != null ? redirectUri : oAuthProperties.getGoogle().getRedirectUri();
+        String effectiveRedirectUri = resolveAndValidateRedirectUri(redirectUri, oAuthProperties.getGoogle());
         String googleAccessToken = exchangeGoogleCode(authorizationCode, effectiveRedirectUri);
         String googleId = getGoogleUserInfo(googleAccessToken).get("sub").asText();
 
@@ -102,8 +96,6 @@ public class OAuthService {
 
         oAuthProviderRepository.save(UserOAuthProvider.of(user, OAuthProvider.GOOGLE, googleId));
     }
-
-    // ── 구글 연동 해제 ─────────────────────────────────────────────────────────
 
     @Transactional
     public void unlinkGoogle(Long userId) {
@@ -119,7 +111,6 @@ public class OAuthService {
         oAuthProviderRepository.delete(oauthLink);
     }
 
-    // ── 카카오 연동 ──────────────────────────────────────────────────────────
 
     @Transactional
     public void linkKakao(Long userId, String authorizationCode, String redirectUri) {
@@ -129,7 +120,7 @@ public class OAuthService {
             throw new AuthException("이미 카카오 계정이 연동되어 있습니다.", HttpStatus.CONFLICT);
         }
 
-        String effectiveRedirectUri = redirectUri != null ? redirectUri : oAuthProperties.getKakao().getRedirectUri();
+        String effectiveRedirectUri = resolveAndValidateRedirectUri(redirectUri, oAuthProperties.getKakao());
         String kakaoAccessToken = exchangeKakaoCode(authorizationCode, effectiveRedirectUri);
         String kakaoId = getKakaoUserInfo(kakaoAccessToken).get("id").asText();
 
@@ -160,17 +151,11 @@ public class OAuthService {
 
     private OAuthLoginResponse findOrCreateUser(OAuthProvider provider, String providerId,
                                                 String email, String name) {
-        // 동일 이메일 계정이 있으면 자동 연동 후 로그인
-        if (email != null) {
-            Optional<User> byEmail = userRepository.findByEmail(email);
-            if (byEmail.isPresent()) {
-                User existing = byEmail.get();
-                if (!oAuthProviderRepository.existsByUserAndProvider(existing, provider)) {
-                    oAuthProviderRepository.save(UserOAuthProvider.of(existing, provider, providerId));
-                    log.info("[OAuth 자동 연동] provider={}, email={}", provider, email);
-                }
-                return issueTokens(existing, false);
-            }
+        // 동일 이메일 계정 존재 시 자동 연동 금지 — 명시적 연동 엔드포인트 사용 안내
+        if (email != null && userRepository.findByEmail(email).isPresent()) {
+            throw new AuthException(
+                    "동일한 이메일로 이미 가입된 계정이 있습니다. 기존 계정으로 로그인한 후 소셜 계정 연동 기능을 이용해 주세요.",
+                    HttpStatus.CONFLICT);
         }
 
         // 신규 계정 생성
@@ -272,6 +257,25 @@ public class OAuthService {
 
     private JsonNode getKakaoUserInfo(String accessToken) {
         return getWithBearer("https://kapi.kakao.com/v2/user/me", accessToken);
+    }
+
+    // ── redirect_uri 검증 ────────────────────────────────────────────────────
+
+    private String resolveAndValidateRedirectUri(String requestedUri, OAuthProperties.Provider cfg) {
+        // 공백·빈 문자열 → null 정규화
+        String normalized = (requestedUri != null && !requestedUri.isBlank()) ? requestedUri : null;
+        if (normalized == null) {
+            return cfg.getRedirectUri();
+        }
+        // 허용 목록 검사 (목록이 비어 있으면 기본 redirectUri만 허용)
+        List<String> allowlist = cfg.getAllowedRedirectUris();
+        boolean permitted = (allowlist != null && !allowlist.isEmpty())
+                ? allowlist.contains(normalized)
+                : normalized.equals(cfg.getRedirectUri());
+        if (!permitted) {
+            throw new AuthException("허용되지 않은 redirect_uri 입니다.", HttpStatus.BAD_REQUEST);
+        }
+        return normalized;
     }
 
     // ── HTTP 유틸 ────────────────────────────────────────────────────────────
