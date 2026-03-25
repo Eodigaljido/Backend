@@ -24,6 +24,28 @@ public class OnboardingController {
 
     private final OnboardingService onboardingService;
 
+    @PostMapping("/start")
+    @Operation(
+            summary = "온보딩 시작",
+            description = """
+                    '시작하기' 버튼 클릭 시 호출합니다. 온보딩 진행 기록을 생성합니다.
+
+                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
+                    """
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "온보딩 시작 성공"),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "이미 온보딩을 시작한 사용자",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<Void> start(
+            @AuthenticationPrincipal UserDetails userDetails) {
+        onboardingService.start(Long.valueOf(userDetails.getUsername()));
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/status")
     @Operation(
             summary = "온보딩 상태 확인",
@@ -147,6 +169,31 @@ public class OnboardingController {
             @Valid @RequestBody OnboardingSubmitRequest request) {
         return ResponseEntity.ok(
                 onboardingService.submit(Long.valueOf(userDetails.getUsername()), request));
+    }
+
+    @GetMapping("/answers")
+    @Operation(
+            summary = "저장된 답변 조회",
+            description = """
+                    현재까지 저장된 온보딩 답변을 조회합니다.
+
+                    중간 이탈 후 재진입 시 이전 선택 상태를 UI에 복원하는 데 사용합니다.
+                    미답변 항목은 null로 반환됩니다.
+
+                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
+                    """
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "저장된 답변 반환"),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "온보딩을 시작하지 않은 사용자",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<OnboardingAnswersResponse> getAnswers(
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(
+                onboardingService.getAnswers(Long.valueOf(userDetails.getUsername())));
     }
 
     @DeleteMapping("/answers")

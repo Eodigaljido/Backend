@@ -34,6 +34,25 @@ public class OnboardingService {
                 .orElse(OnboardingStatusResponse.notStarted());
     }
 
+    // 온보딩 시작
+    @Transactional
+    public void start(Long userId) {
+        User user = findActiveUser(userId);
+        if (onboardingAnswerRepository.existsByUser(user)) {
+            throw new OnboardingException("이미 온보딩을 시작한 사용자입니다.", HttpStatus.CONFLICT);
+        }
+        onboardingAnswerRepository.save(OnboardingAnswer.builder().user(user).build());
+    }
+
+    // 저장된 답변 조회
+    @Transactional(readOnly = true)
+    public OnboardingAnswersResponse getAnswers(Long userId) {
+        User user = findActiveUser(userId);
+        OnboardingAnswer answer = onboardingAnswerRepository.findByUser(user)
+                .orElseThrow(() -> new OnboardingException("온보딩을 시작하지 않은 사용자입니다.", HttpStatus.NOT_FOUND));
+        return OnboardingAnswersResponse.of(answer);
+    }
+
     // 온보딩 건너뛰기
     @Transactional
     public void skip(Long userId) {
