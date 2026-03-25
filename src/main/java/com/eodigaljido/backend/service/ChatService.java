@@ -14,6 +14,9 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -36,6 +39,7 @@ public class ChatService {
         User me = getUser(userId);
 
         List<User> invitees = req.memberUuids().stream()
+                .distinct()
                 .filter(uuid -> !uuid.equals(me.getUuid()))
                 .map(uuid -> userRepository.findByUuid(uuid)
                         .orElseThrow(() -> new ChatException("존재하지 않는 유저입니다: " + uuid, HttpStatus.NOT_FOUND)))
@@ -93,16 +97,19 @@ public class ChatService {
         ChatRoomMember membership = getMembership(room, userId);
         membership.leave();
 
-        long remaining = chatRoomMemberRepository.findByRoomAndLeftAtIsNull(room).size();
-        if (remaining == 0) {
+        List<ChatRoomMember> remaining = chatRoomMemberRepository.findByRoomAndLeftAtIsNull(room);
+        if (remaining.isEmpty()) {
             room.delete();
+        } else if (membership.getRole() == ChatRoomMember.MemberRole.ADMIN) {
+            remaining.get(0).promoteToAdmin();
         }
     }
 
     @Transactional
     public ChatMessageResponse sendMessage(Long userId, String roomUuid, SendMessageRequest req) {
         ChatRoom room = getActiveRoom(roomUuid);
-        User me = getMembership(room, userId).getUser();
+        ChatRoomMember senderMembership = getMembership(room, userId);
+        User me = senderMembership.getUser();
 
         ChatMessage message = ChatMessage.builder()
                 .uuid(UUID.randomUUID().toString())
@@ -112,9 +119,15 @@ public class ChatService {
                 .content(req.content())
                 .build();
         chatMessageRepository.save(message);
+        senderMembership.updateLastReadAt();
 
         ChatMessageResponse response = toMessageResponse(message);
-        messagingTemplate.convertAndSend("/topic/chat/" + roomUuid, response);
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                messagingTemplate.convertAndSend("/topic/chat/" + roomUuid, response);
+            }
+        });
         return response;
     }
 
@@ -145,7 +158,9 @@ public class ChatService {
         }
 
         message.edit(req.content());
-        return toMessageResponse(message);
+        ChatMessageResponse response = toMessageResponse(message);
+        messagingTemplate.convertAndSend("/topic/chat/" + roomUuid, response);
+        return response;
     }
 
     @Transactional
@@ -164,6 +179,7 @@ public class ChatService {
         }
 
         message.delete();
+        messagingTemplate.convertAndSend("/topic/chat/" + roomUuid, toMessageResponse(message));
     }
 
     @Transactional

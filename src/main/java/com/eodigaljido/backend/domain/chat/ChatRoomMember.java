@@ -57,6 +57,10 @@ public class ChatRoomMember {
         this.leftAt = LocalDateTime.now();
     }
 
+    public void promoteToAdmin() {
+        this.role = MemberRole.ADMIN;
+    }
+
     public void updateLastReadAt() {
         this.lastReadAt = LocalDateTime.now();
     }
