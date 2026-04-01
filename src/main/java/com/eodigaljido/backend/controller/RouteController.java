@@ -376,7 +376,7 @@ public class RouteController {
     @Operation(
             summary = "내가 공유 중인 루트 목록 조회",
             description = """
-                    내가 공유 활성화한 루트 목록을 반환합니다.
+                    내가 공유 활성화한 루트 목록을 반환합니다. 삭제된 루트(status=DELETED)는 포함되지 않습니다.
 
                     **헤더:** `Authorization: Bearer {accessToken}` (필수)
 

@@ -166,7 +166,7 @@ public class RouteService {
     }
 
     public List<RouteSummaryResponse> getSharingRoutes(Long userId) {
-        return routeRepository.findByUserIdAndIsSharedTrue(userId)
+        return routeRepository.findByUserIdAndIsSharedTrueAndStatusNot(userId, RouteStatus.DELETED)
                 .stream()
                 .map(RouteSummaryResponse::from)
                 .toList();

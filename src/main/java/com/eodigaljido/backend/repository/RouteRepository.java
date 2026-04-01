@@ -13,7 +13,7 @@ public interface RouteRepository extends JpaRepository<Route, Long> {
 
     List<Route> findByUserIdAndStatusNot(Long userId, RouteStatus status);
 
-    List<Route> findByUserIdAndIsSharedTrue(Long userId);
+    List<Route> findByUserIdAndIsSharedTrueAndStatusNot(Long userId, RouteStatus status);
 
     Optional<Route> findByShareTokenAndIsSharedTrueAndStatusNot(String shareToken, RouteStatus status);
 }
