@@ -45,6 +45,16 @@ public class Friend extends BaseTimeEntity {
     @Column(name = "responded_at")
     private LocalDateTime respondedAt;
 
+    public void accept() {
+        this.status = FriendStatus.ACCEPTED;
+        this.respondedAt = LocalDateTime.now();
+    }
+
+    public void reject() {
+        this.status = FriendStatus.REJECTED;
+        this.respondedAt = LocalDateTime.now();
+    }
+
     public enum FriendStatus {
         PENDING, ACCEPTED, REJECTED, BLOCKED
     }

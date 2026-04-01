@@ -62,6 +62,18 @@ public class ChatMessage {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "edited_at")
+    private LocalDateTime editedAt;
+
+    public void edit(String newContent) {
+        this.content = newContent;
+        this.editedAt = LocalDateTime.now();
+    }
+
+    public void delete() {
+        this.isDeleted = true;
+    }
+
     public enum MessageType {
         TEXT, IMAGE, ROUTE, SYSTEM
     }

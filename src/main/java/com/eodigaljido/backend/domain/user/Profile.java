@@ -37,4 +37,22 @@ public class Profile extends BaseTimeEntity {
 
     @Column(length = 255)
     private String bio;
+
+    public void updateNickname(String nickname) {
+        this.nickname = nickname;
+    }
+
+    public void updateBio(String bio) {
+        this.bio = bio;
+    }
+
+    public void updateProfileImage(String imageUrl) {
+        this.profileImageUrl = imageUrl;
+        this.isDefaultImage = false;
+    }
+
+    public void resetToDefaultImage() {
+        this.profileImageUrl = null;
+        this.isDefaultImage = true;
+    }
 }

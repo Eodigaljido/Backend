@@ -1,15 +1,21 @@
 package com.eodigaljido.backend.controller;
 
+import com.eodigaljido.backend.config.OAuthProperties;
 import com.eodigaljido.backend.dto.auth.*;
-import org.springframework.http.HttpStatus;
+import com.eodigaljido.backend.dto.common.ErrorResponse;
 import com.eodigaljido.backend.service.AuthService;
 import com.eodigaljido.backend.service.OAuthService;
 import com.eodigaljido.backend.service.PhoneVerificationService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -24,6 +30,7 @@ public class AuthController {
     private final AuthService authService;
     private final OAuthService oAuthService;
     private final PhoneVerificationService phoneVerificationService;
+    private final OAuthProperties oAuthProperties;
 
     @PostMapping("/register")
     @Operation(
@@ -44,6 +51,13 @@ public class AuthController {
                     - `phone` (필수): 하이픈 없는 휴대폰 번호 (예: 01012345678), 인증 완료된 번호와 일치해야 함
                     """
     )
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "회원가입 성공"),
+            @ApiResponse(responseCode = "400", description = "요청 값이 올바르지 않음 (유효성 검사 실패 또는 전화번호 미인증)",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "이미 사용 중인 이메일, 전화번호 또는 닉네임",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     ResponseEntity<LoginResponse> register(@Valid @RequestBody RegisterRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(authService.register(request));
     }
@@ -63,6 +77,13 @@ public class AuthController {
                     - `refreshToken`: 만료된 access token 재발급용 JWT (유효기간 30일)
                     """
     )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "로그인 성공, accessToken / refreshToken 반환"),
+            @ApiResponse(responseCode = "400", description = "요청 값이 올바르지 않음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "이메일 또는 비밀번호가 일치하지 않음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request,
                                         HttpServletRequest httpRequest) {
         String deviceInfo = httpRequest.getHeader("User-Agent");
@@ -85,6 +106,13 @@ public class AuthController {
                     refresh token이 만료되었거나 폐기된 경우 401을 반환합니다. 이 경우 재로그인이 필요합니다.
                     """
     )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "토큰 재발급 성공, 새 accessToken 반환"),
+            @ApiResponse(responseCode = "400", description = "요청 값이 올바르지 않음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "refresh token이 만료되었거나 폐기됨 — 재로그인 필요",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     ResponseEntity<TokenRefreshResponse> refresh(@Valid @RequestBody TokenRefreshRequest request) {
         return ResponseEntity.ok(authService.refreshToken(request));
     }
@@ -103,6 +131,13 @@ public class AuthController {
                     토큰이 폐기되면 해당 refresh token으로 더 이상 access token을 재발급받을 수 없습니다.
                     """
     )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "로그아웃 성공"),
+            @ApiResponse(responseCode = "400", description = "요청 값이 올바르지 않음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     ResponseEntity<Void> logout(@AuthenticationPrincipal UserDetails userDetails,
                                 @Valid @RequestBody TokenRefreshRequest request) {
         authService.logout(Long.parseLong(userDetails.getUsername()), request.refreshToken());
@@ -122,6 +157,11 @@ public class AuthController {
                     비밀번호 변경, 계정 탈취 의심 등의 상황에서 사용합니다.
                     """
     )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "모든 디바이스 로그아웃 성공"),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     ResponseEntity<Void> logoutAllDevices(@AuthenticationPrincipal UserDetails userDetails) {
         authService.logoutAllDevices(Long.parseLong(userDetails.getUsername()));
         return ResponseEntity.noContent().build();
@@ -146,8 +186,13 @@ public class AuthController {
                     - `isNewUser`: true이면 신규 가입, false이면 기존 계정 로그인
                     """
     )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "로그인/회원가입 성공"),
+            @ApiResponse(responseCode = "400", description = "유효하지 않은 Google 인가 코드",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     ResponseEntity<OAuthLoginResponse> googleOAuth(@Valid @RequestBody OAuthLoginRequest request) {
-        return ResponseEntity.ok(oAuthService.loginWithGoogle(request.code()));
+        return ResponseEntity.ok(oAuthService.loginWithGoogle(request.code(), request.redirectUri()));
     }
 
     @PostMapping("/oauth/kakao")
@@ -169,8 +214,156 @@ public class AuthController {
                     - `isNewUser`: true이면 신규 가입, false이면 기존 계정 로그인
                     """
     )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "로그인/회원가입 성공"),
+            @ApiResponse(responseCode = "400", description = "유효하지 않은 Kakao 인가 코드",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     ResponseEntity<OAuthLoginResponse> kakaoOAuth(@Valid @RequestBody OAuthLoginRequest request) {
-        return ResponseEntity.ok(oAuthService.loginWithKakao(request.code()));
+        return ResponseEntity.ok(oAuthService.loginWithKakao(request.code(), request.redirectUri()));
+    }
+
+    @PostMapping("/oauth/kakao/link")
+    @Operation(
+            summary = "카카오 계정 연동",
+            description = """
+                    이미 이메일(LOCAL)로 가입한 계정에 카카오 계정을 연동합니다.
+                    연동 후에는 카카오 로그인으로도 이 계정에 접근할 수 있습니다.
+
+                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
+
+                    **Request Body:**
+                    - `code` (필수): 카카오 인가 코드
+                    - `redirectUri` (선택): 인가 코드 발급 시 사용한 redirect_uri (생략 시 서버 설정값 사용)
+
+                    **제약 조건:**
+                    - 이미 카카오로 가입한 계정은 연동 불필요 (400)
+                    - 이미 연동된 계정은 중복 연동 불가 (409)
+                    - 해당 카카오 계정이 다른 계정에 연결되어 있으면 불가 (409)
+                    """
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "카카오 연동 성공"),
+            @ApiResponse(responseCode = "400", description = "유효하지 않은 코드 또는 카카오 가입 계정",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "이미 연동된 카카오 계정 있음 또는 해당 카카오 ID가 다른 계정에 연결됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "410", description = "이미 탈퇴한 계정",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    ResponseEntity<Void> linkKakao(@AuthenticationPrincipal UserDetails userDetails,
+                                   @Valid @RequestBody KakaoLinkRequest request) {
+        oAuthService.linkKakao(Long.valueOf(userDetails.getUsername()), request.code(), request.redirectUri());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/oauth/google/link")
+    @Operation(
+            summary = "구글 계정 연동",
+            description = """
+                    이미 이메일(LOCAL)로 가입한 계정에 구글 계정을 연동합니다.
+                    연동 후에는 구글 로그인으로도 이 계정에 접근할 수 있습니다.
+
+                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
+
+                    **Request Body:**
+                    - `code` (필수): 구글 인가 코드
+                    - `redirectUri` (선택): 인가 코드 발급 시 사용한 redirect_uri (생략 시 서버 설정값 사용)
+
+                    **제약 조건:**
+                    - 이미 구글로 가입한 계정은 연동 불필요 (400)
+                    - 이미 연동된 계정은 중복 연동 불가 (409)
+                    - 해당 구글 계정이 다른 계정에 연결되어 있으면 불가 (409)
+                    """
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "구글 연동 성공"),
+            @ApiResponse(responseCode = "400", description = "유효하지 않은 코드 또는 구글 가입 계정",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "이미 연동된 구글 계정 있음 또는 해당 구글 ID가 다른 계정에 연결됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "410", description = "이미 탈퇴한 계정",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    ResponseEntity<Void> linkGoogle(@AuthenticationPrincipal UserDetails userDetails,
+                                    @Valid @RequestBody GoogleLinkRequest request) {
+        oAuthService.linkGoogle(Long.valueOf(userDetails.getUsername()), request.code(), request.redirectUri());
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/oauth/google/link")
+    @Operation(
+            summary = "구글 계정 연동 해제",
+            description = """
+                    연동된 구글 계정을 해제합니다.
+                    해제 후에는 구글 로그인으로 이 계정에 접근할 수 없습니다.
+
+                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
+
+                    **제약 조건:**
+                    - 구글로 가입한 계정은 연동 해제 불가 (400)
+                    - 연동된 구글 계정이 없으면 오류 (400)
+                    """
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "구글 연동 해제 성공"),
+            @ApiResponse(responseCode = "400", description = "연동된 구글 계정 없음 또는 구글 가입 계정",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "410", description = "이미 탈퇴한 계정",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    ResponseEntity<Void> unlinkGoogle(@AuthenticationPrincipal UserDetails userDetails) {
+        oAuthService.unlinkGoogle(Long.valueOf(userDetails.getUsername()));
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/oauth/kakao/link")
+    @Operation(
+            summary = "카카오 계정 연동 해제",
+            description = """
+                    연동된 카카오 계정을 해제합니다.
+                    해제 후에는 카카오 로그인으로 이 계정에 접근할 수 없습니다.
+
+                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
+
+                    **제약 조건:**
+                    - 카카오로 가입한 계정은 연동 해제 불가 (400)
+                    - 연동된 카카오 계정이 없으면 오류 (400)
+                    """
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "카카오 연동 해제 성공"),
+            @ApiResponse(responseCode = "400", description = "연동된 카카오 계정 없음 또는 카카오 가입 계정",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "410", description = "이미 탈퇴한 계정",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    ResponseEntity<Void> unlinkKakao(@AuthenticationPrincipal UserDetails userDetails) {
+        oAuthService.unlinkKakao(Long.valueOf(userDetails.getUsername()));
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/oauth/config")
+    @Operation(
+            summary = "OAuth 공개 설정 조회",
+            description = "테스트 페이지 등 클라이언트에서 OAuth 인증 URL을 구성하는 데 필요한 공개 설정값(클라이언트 ID)을 반환합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "설정 조회 성공")
+    })
+    ResponseEntity<OAuthConfigResponse> oauthConfig() {
+        return ResponseEntity.ok(new OAuthConfigResponse(
+                oAuthProperties.getGoogle().getClientId(),
+                oAuthProperties.getKakao().getClientId()
+        ));
     }
 
     @PostMapping("/phone/code")
@@ -189,6 +382,11 @@ public class AuthController {
                     최대 **5회** 오입력 시 코드가 잠기며 재발송이 필요합니다.
                     """
     )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "SMS 발송 성공, 유효 시간(초) 반환"),
+            @ApiResponse(responseCode = "400", description = "요청 값이 올바르지 않음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     ResponseEntity<PhoneCodeResponse> sendPhoneCode(@Valid @RequestBody PhoneCodeRequest request) {
         phoneVerificationService.sendCode(request.phone(), request.purpose());
         return ResponseEntity.ok(PhoneCodeResponse.of(180));
@@ -209,6 +407,11 @@ public class AuthController {
                     이 시간 내에 회원가입(`/auth/register`) 또는 전화번호 변경(`/users/me/phone`)을 완료해야 합니다.
                     """
     )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "인증 성공"),
+            @ApiResponse(responseCode = "400", description = "인증번호가 틀렸거나 만료됨, 또는 시도 횟수 초과",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     ResponseEntity<Void> verifyPhoneCode(@Valid @RequestBody PhoneVerifyRequest request) {
         phoneVerificationService.verifyCode(request.phone(), request.code(), request.purpose());
         return ResponseEntity.noContent().build();

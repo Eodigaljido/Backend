@@ -53,6 +53,18 @@ public class ChatRoomMember {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    public void leave() {
+        this.leftAt = LocalDateTime.now();
+    }
+
+    public void promoteToAdmin() {
+        this.role = MemberRole.ADMIN;
+    }
+
+    public void updateLastReadAt() {
+        this.lastReadAt = LocalDateTime.now();
+    }
+
     public enum MemberRole {
         ADMIN, MEMBER
     }
