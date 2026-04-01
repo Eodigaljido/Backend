@@ -36,6 +36,13 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(e.getStatus().value(), e.getMessage(), LocalDateTime.now()));
     }
 
+    @ExceptionHandler(ChatException.class)
+    ResponseEntity<ErrorResponse> handleChat(ChatException e) {
+        log.warn("[채팅 오류] {} (status={})", e.getMessage(), e.getStatus().value());
+        return ResponseEntity.status(e.getStatus())
+                .body(new ErrorResponse(e.getStatus().value(), e.getMessage(), LocalDateTime.now()));
+    }
+
     @ExceptionHandler(UserException.class)
     ResponseEntity<ErrorResponse> handleUser(UserException e) {
         log.warn("[유저 오류] {} (status={})", e.getMessage(), e.getStatus().value());

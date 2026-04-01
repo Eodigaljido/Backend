@@ -44,6 +44,14 @@ public class ChatRoom extends BaseTimeEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    public void updateName(String name) {
+        this.name = name;
+    }
+
+    public void delete() {
+        this.deletedAt = LocalDateTime.now();
+    }
+
     public enum RoomType {
         DIRECT, GROUP
     }
