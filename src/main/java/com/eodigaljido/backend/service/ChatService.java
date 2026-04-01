@@ -6,6 +6,7 @@ import com.eodigaljido.backend.domain.chat.ChatRoomMember;
 import com.eodigaljido.backend.domain.user.Profile;
 import com.eodigaljido.backend.domain.user.User;
 import com.eodigaljido.backend.dto.chat.*;
+import com.eodigaljido.backend.dto.chat.ChatEventEnvelope.EventType;
 import com.eodigaljido.backend.exception.ChatException;
 import com.eodigaljido.backend.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -125,7 +126,8 @@ public class ChatService {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                messagingTemplate.convertAndSend("/topic/chat/" + roomUuid, response);
+                messagingTemplate.convertAndSend("/topic/chat/" + roomUuid,
+                        new ChatEventEnvelope(EventType.MESSAGE_CREATED, response));
             }
         });
         return response;
@@ -159,7 +161,13 @@ public class ChatService {
 
         message.edit(req.content());
         ChatMessageResponse response = toMessageResponse(message);
-        messagingTemplate.convertAndSend("/topic/chat/" + roomUuid, response);
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                messagingTemplate.convertAndSend("/topic/chat/" + roomUuid,
+                        new ChatEventEnvelope(EventType.MESSAGE_EDITED, response));
+            }
+        });
         return response;
     }
 
@@ -179,7 +187,14 @@ public class ChatService {
         }
 
         message.delete();
-        messagingTemplate.convertAndSend("/topic/chat/" + roomUuid, toMessageResponse(message));
+        ChatMessageResponse deleteResponse = toMessageResponse(message);
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                messagingTemplate.convertAndSend("/topic/chat/" + roomUuid,
+                        new ChatEventEnvelope(EventType.MESSAGE_DELETED, deleteResponse));
+            }
+        });
     }
 
     @Transactional
