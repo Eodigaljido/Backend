@@ -37,50 +37,53 @@ public class AuthService {
     public LoginResponse register(RegisterRequest request) {
         Optional<User> existingByEmail = userRepository.findByEmail(request.email());
 
-        // 동일 이메일로 OAuth 계정이 이미 있으면 LOCAL 자격증명을 추가(연동)
+        // 동일 이메일로 OAuth 계정이 이미 있으면 LOCAL 비밀번호를 추가(연동)
         if (existingByEmail.isPresent()) {
             User existing = existingByEmail.get();
             if (existing.getPasswordHash() != null) {
                 throw new AuthException("이미 이메일/비밀번호로 가입된 계정입니다.", HttpStatus.CONFLICT);
             }
-            if (userRepository.existsByPhone(request.phone())) {
-                throw new AuthException("이미 사용 중인 전화번호입니다.", HttpStatus.CONFLICT);
-            }
             if (profileRepository.existsByNicknameAndUserNot(request.nickname(), existing)) {
                 throw new AuthException("이미 사용 중인 닉네임입니다.", HttpStatus.CONFLICT);
             }
-            if (!phoneVerificationService.checkVerified(request.phone(), PhoneVerification.Purpose.REGISTER)) {
-                throw new AuthException("전화번호 인증이 완료되지 않았습니다.", HttpStatus.BAD_REQUEST);
-            }
-            existing.linkLocalCredentials(passwordEncoder.encode(request.password()), request.phone(), LocalDateTime.now());
+            existing.linkLocalPassword(passwordEncoder.encode(request.password()));
             profileRepository.findByUser(existing).ifPresent(p -> p.updateNickname(request.nickname()));
-            phoneVerificationService.clearVerified(request.phone(), PhoneVerification.Purpose.REGISTER);
             return issueTokens(existing, null, null);
         }
 
-        if (userRepository.existsByPhone(request.phone())) {
-            throw new AuthException("이미 사용 중인 전화번호입니다.", HttpStatus.CONFLICT);
-        }
         if (profileRepository.existsByNickname(request.nickname())) {
             throw new AuthException("이미 사용 중인 닉네임입니다.", HttpStatus.CONFLICT);
-        }
-        if (!phoneVerificationService.checkVerified(request.phone(), PhoneVerification.Purpose.REGISTER)) {
-            throw new AuthException("전화번호 인증이 완료되지 않았습니다.", HttpStatus.BAD_REQUEST);
         }
 
         User user = User.builder()
                 .uuid(UUID.randomUUID().toString())
                 .email(request.email())
                 .passwordHash(passwordEncoder.encode(request.password()))
-                .phone(request.phone())
-                .phoneVerifiedAt(LocalDateTime.now())
                 .build();
 
         userRepository.save(user);
         profileRepository.save(Profile.builder().user(user).nickname(request.nickname()).build());
-        phoneVerificationService.clearVerified(request.phone(), PhoneVerification.Purpose.REGISTER);
 
         return issueTokens(user, null, null);
+    }
+
+    @Transactional
+    public void registerPhone(Long userId, String phone) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AuthException("사용자를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+
+        if (user.getPhone() != null) {
+            throw new AuthException("이미 전화번호가 등록된 계정입니다.", HttpStatus.CONFLICT);
+        }
+        if (userRepository.existsByPhone(phone)) {
+            throw new AuthException("이미 사용 중인 전화번호입니다.", HttpStatus.CONFLICT);
+        }
+        if (!phoneVerificationService.checkVerified(phone, PhoneVerification.Purpose.REGISTER)) {
+            throw new AuthException("전화번호 인증이 완료되지 않았습니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        user.updatePhone(phone, LocalDateTime.now());
+        phoneVerificationService.clearVerified(phone, PhoneVerification.Purpose.REGISTER);
     }
 
     @Transactional
