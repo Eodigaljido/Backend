@@ -35,15 +35,23 @@ public class StompJwtChannelInterceptor implements ChannelInterceptor {
             throw new ChatException("WebSocket 인증에 실패했습니다.", HttpStatus.UNAUTHORIZED);
         }
 
-        Long userId = jwtTokenProvider.getUserId(token);
+        Long userId;
+        try {
+            userId = jwtTokenProvider.getUserId(token);
+        } catch (NumberFormatException e) {
+            log.warn("[STOMP] JWT subject 파싱 실패 - 연결 거부");
+            throw new ChatException("WebSocket 인증에 실패했습니다.", HttpStatus.UNAUTHORIZED);
+        }
         accessor.setUser(() -> String.valueOf(userId));
         log.debug("[STOMP] 인증 성공 - userId={}", userId);
         return message;
     }
 
     private String resolveToken(String authHeader) {
-        if (StringUtils.hasText(authHeader) && authHeader.startsWith("Bearer ")) {
-            return authHeader.substring(7);
+        if (!StringUtils.hasText(authHeader)) return null;
+        String[] parts = authHeader.trim().split("\\s+");
+        if (parts.length == 2 && parts[0].equalsIgnoreCase("Bearer")) {
+            return parts[1];
         }
         return null;
     }
