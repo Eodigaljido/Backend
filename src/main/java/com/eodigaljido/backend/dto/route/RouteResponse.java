@@ -22,7 +22,7 @@ public record RouteResponse(
         @Schema(description = "상태 (DRAFT | PUBLISHED)", example = "PUBLISHED")
         RouteStatus status,
 
-        @Schema(description = "공유 여부", example = "false")
+        @Schema(description = "공유 여부", example = "true")
         boolean isShared,
 
         @Schema(description = "총 거리 (km)", example = "3.50")
