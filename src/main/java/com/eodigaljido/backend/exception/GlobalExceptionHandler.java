@@ -36,6 +36,13 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(e.getStatus().value(), e.getMessage(), LocalDateTime.now()));
     }
 
+    @ExceptionHandler(ChatException.class)
+    ResponseEntity<ErrorResponse> handleChat(ChatException e) {
+        log.warn("[채팅 오류] {} (status={})", e.getMessage(), e.getStatus().value());
+        return ResponseEntity.status(e.getStatus())
+                .body(new ErrorResponse(e.getStatus().value(), e.getMessage(), LocalDateTime.now()));
+    }
+
     @ExceptionHandler(UserException.class)
     ResponseEntity<ErrorResponse> handleUser(UserException e) {
         log.warn("[유저 오류] {} (status={})", e.getMessage(), e.getStatus().value());
@@ -48,6 +55,18 @@ public class GlobalExceptionHandler {
         log.warn("[온보딩 오류] {} (status={})", e.getMessage(), e.getStatus().value());
         return ResponseEntity.status(e.getStatus())
                 .body(new ErrorResponse(e.getStatus().value(), e.getMessage(), LocalDateTime.now()));
+    }
+
+    @ExceptionHandler(RouteException.class)
+    ResponseEntity<ErrorResponse> handleRoute(RouteException e) {
+        return ResponseEntity.status(e.getStatus())
+                .body(new ErrorResponse(e.getStatus().value(), e.getMessage(), LocalDateTime.now()));
+    }
+
+    @ExceptionHandler(NumberFormatException.class)
+    ResponseEntity<ErrorResponse> handleNumberFormat(NumberFormatException e) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(new ErrorResponse(HttpStatus.UNAUTHORIZED.value(), "인증 정보가 올바르지 않습니다.", LocalDateTime.now()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
