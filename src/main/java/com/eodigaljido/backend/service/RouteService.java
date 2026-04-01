@@ -56,8 +56,8 @@ public class RouteService {
         return RouteResponse.of(route, waypoints.stream().map(WaypointResponse::from).toList());
     }
 
-    public RouteResponse getRoute(Long userId, String uuid) {
-        Route route = findActiveRoute(uuid);
+    public RouteResponse getRoute(Long userId, Long id) {
+        Route route = findActiveRouteById(id);
         if (!route.getUser().getId().equals(userId)) {
             throw new RouteException("해당 루트에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN);
         }
@@ -72,8 +72,8 @@ public class RouteService {
     }
 
     @Transactional
-    public RouteResponse updateRoute(Long userId, String uuid, UpdateRouteRequest req) {
-        Route route = findActiveRoute(uuid);
+    public RouteResponse updateRoute(Long userId, Long id, UpdateRouteRequest req) {
+        Route route = findActiveRouteById(id);
         verifyOwner(route, userId);
 
         waypointRepository.deleteAllByRoute(route);
@@ -88,18 +88,18 @@ public class RouteService {
     }
 
     @Transactional
-    public void deleteRoute(Long userId, String uuid) {
-        Route route = findActiveRoute(uuid);
+    public void deleteRoute(Long userId, Long id) {
+        Route route = findActiveRouteById(id);
         verifyOwner(route, userId);
         route.markDeleted();
     }
 
     @Transactional
-    public RouteResponse updateRouteStatus(Long userId, String uuid, RouteStatus status) {
+    public RouteResponse updateRouteStatus(Long userId, Long id, RouteStatus status) {
         if (status == RouteStatus.DELETED) {
             throw new RouteException("상태를 DELETED로 변경할 수 없습니다.", HttpStatus.BAD_REQUEST);
         }
-        Route route = findActiveRoute(uuid);
+        Route route = findActiveRouteById(id);
         verifyOwner(route, userId);
         route.updateStatus(status);
         return toRouteResponse(route);
@@ -110,8 +110,8 @@ public class RouteService {
     // ──────────────────────────────────────────────────────────
 
     @Transactional
-    public void saveRoute(Long userId, String uuid) {
-        Route route = findActiveRoute(uuid);
+    public void saveRoute(Long userId, Long id) {
+        Route route = findActiveRouteById(id);
         if (savedRouteRepository.existsByUserIdAndRouteId(userId, route.getId())) {
             throw new RouteException("이미 저장된 루트입니다.", HttpStatus.CONFLICT);
         }
@@ -123,8 +123,8 @@ public class RouteService {
     }
 
     @Transactional
-    public void unsaveRoute(Long userId, String uuid) {
-        Route route = findActiveRoute(uuid);
+    public void unsaveRoute(Long userId, Long id) {
+        Route route = findActiveRouteById(id);
         SavedRoute saved = savedRouteRepository.findByUserIdAndRouteId(userId, route.getId())
                 .orElseThrow(() -> new RouteException("저장된 루트가 아닙니다.", HttpStatus.NOT_FOUND));
         savedRouteRepository.delete(saved);
@@ -144,23 +144,44 @@ public class RouteService {
     // ──────────────────────────────────────────────────────────
 
     @Transactional
-    public String enableSharing(Long userId, String uuid) {
-        Route route = findActiveRoute(uuid);
+    public void enableSharing(Long userId, Long id) {
+        Route route = findActiveRouteById(id);
         verifyOwner(route, userId);
-        String shareToken = UUID.randomUUID().toString();
-        route.enableSharing(shareToken);
-        return shareToken;
+        route.enableSharing();
     }
 
     @Transactional
-    public void disableSharing(Long userId, String uuid) {
-        Route route = findActiveRoute(uuid);
+    public void disableSharing(Long userId, Long id) {
+        Route route = findActiveRouteById(id);
         verifyOwner(route, userId);
         route.disableSharing();
     }
 
-    public RouteResponse getSharedRoute(String shareToken) {
-        Route route = routeRepository.findByShareTokenAndIsSharedTrueAndStatusNot(shareToken, RouteStatus.DELETED)
+    public List<SharedRouteSummaryResponse> getPublicSharedRoutes() {
+        return routeRepository.findByIsSharedTrueAndStatusNot(RouteStatus.DELETED)
+                .stream()
+                .map(route -> {
+                    String firstName = waypointRepository.findTopByRouteOrderBySequenceAsc(route)
+                            .map(RouteWaypoint::getName)
+                            .orElse(null);
+                    return new SharedRouteSummaryResponse(
+                            route.getUuid(),
+                            route.getTitle(),
+                            route.getDescription(),
+                            route.getStatus(),
+                            route.getTotalDistance(),
+                            route.getEstimatedTime(),
+                            route.getThumbnailUrl(),
+                            firstName,
+                            route.getUser().getUuid()
+                    );
+                })
+                .toList();
+    }
+
+    public RouteResponse getPublicSharedRoute(String uuid) {
+        Route route = routeRepository.findByUuidAndStatusNot(uuid, RouteStatus.DELETED)
+                .filter(Route::isShared)
                 .orElseThrow(() -> new RouteException("공유된 루트를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
         return toRouteResponse(route);
     }
@@ -181,8 +202,8 @@ public class RouteService {
                 .orElseThrow(() -> new RouteException("사용자를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
     }
 
-    private Route findActiveRoute(String uuid) {
-        return routeRepository.findByUuidAndStatusNot(uuid, RouteStatus.DELETED)
+    private Route findActiveRouteById(Long id) {
+        return routeRepository.findByIdAndStatusNot(id, RouteStatus.DELETED)
                 .orElseThrow(() -> new RouteException("루트를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
     }
 

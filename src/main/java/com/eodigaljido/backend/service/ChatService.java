@@ -18,6 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import org.springframework.data.domain.PageRequest;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -133,11 +135,18 @@ public class ChatService {
         return response;
     }
 
-    public List<ChatMessageResponse> getMessages(Long userId, String roomUuid) {
+    public List<ChatMessageResponse> getMessages(Long userId, String roomUuid, String beforeMessageUuid, int limit) {
         ChatRoom room = getActiveRoom(roomUuid);
         getMembership(room, userId);
 
-        List<ChatMessage> messages = chatMessageRepository.findTop50ByRoomOrderByCreatedAtDesc(room);
+        int clampedLimit = Math.min(Math.max(limit, 1), 100);
+        List<ChatMessage> messages;
+        if (beforeMessageUuid != null && !beforeMessageUuid.isBlank()) {
+            ChatMessage cursor = getMessage(beforeMessageUuid);
+            messages = chatMessageRepository.findByRoomBeforeId(room, cursor.getId(), PageRequest.of(0, clampedLimit));
+        } else {
+            messages = chatMessageRepository.findByRoomOrderByCreatedAtDesc(room, PageRequest.of(0, clampedLimit));
+        }
         return messages.stream()
                 .map(this::toMessageResponse)
                 .collect(Collectors.toList());

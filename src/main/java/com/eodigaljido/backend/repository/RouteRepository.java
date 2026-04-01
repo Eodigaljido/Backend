@@ -10,13 +10,15 @@ import java.util.Optional;
 
 public interface RouteRepository extends JpaRepository<Route, Long> {
 
+    Optional<Route> findByIdAndStatusNot(Long id, RouteStatus status);
+
     Optional<Route> findByUuidAndStatusNot(String uuid, RouteStatus status);
 
     List<Route> findByUserIdAndStatusNot(Long userId, RouteStatus status);
 
     List<Route> findByUserIdAndIsSharedTrueAndStatusNot(Long userId, RouteStatus status);
 
-    Optional<Route> findByShareTokenAndIsSharedTrueAndStatusNot(String shareToken, RouteStatus status);
+    List<Route> findByIsSharedTrueAndStatusNot(RouteStatus status);
 
     List<Route> findByStatusAndIsSharedAndDeletedAtIsNull(RouteStatus status, boolean isShared, Pageable pageable);
 }

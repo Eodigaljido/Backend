@@ -15,8 +15,7 @@ import java.time.LocalDateTime;
         @Index(name = "idx_routes_uuid", columnList = "uuid"),
         @Index(name = "idx_routes_user_id", columnList = "user_id"),
         @Index(name = "idx_routes_status", columnList = "status"),
-        @Index(name = "idx_routes_is_shared", columnList = "is_shared"),
-        @Index(name = "idx_routes_share_token", columnList = "share_token")
+        @Index(name = "idx_routes_is_shared", columnList = "is_shared")
     }
 )
 @Getter
@@ -51,9 +50,6 @@ public class Route extends BaseTimeEntity {
     @Builder.Default
     private boolean isShared = false;
 
-    @Column(name = "share_token", length = 100, unique = true)
-    private String shareToken;
-
     @Column(name = "total_distance", precision = 10, scale = 2)
     private BigDecimal totalDistance;
 
@@ -83,9 +79,8 @@ public class Route extends BaseTimeEntity {
         this.status = status;
     }
 
-    public void enableSharing(String shareToken) {
+    public void enableSharing() {
         this.isShared = true;
-        this.shareToken = shareToken;
     }
 
     public void disableSharing() {

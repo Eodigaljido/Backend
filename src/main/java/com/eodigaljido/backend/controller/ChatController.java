@@ -203,28 +203,34 @@ public class ChatController {
     @Operation(
             summary = "메시지 목록 조회",
             description = """
-                    채팅방의 최근 메시지 목록을 조회합니다 (최대 50건, 최신순).
+                    채팅방의 메시지 목록을 조회합니다 (최신순, 최대 100건).
 
                     **헤더:** `Authorization: Bearer {accessToken}` (필수)
 
                     **Path Variable:**
                     - `roomUuid`: 조회할 채팅방의 UUID
+
+                    **Query Parameters:**
+                    - `beforeMessageUuid` (선택): 이 UUID 메시지보다 이전 메시지를 조회합니다. 무한 스크롤 시 마지막으로 받은 메시지의 UUID를 전달하세요. 미입력 시 최신 메시지부터 반환합니다.
+                    - `limit` (선택): 조회할 메시지 수 (기본값 50, 최대 100)
                     """
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "메시지 목록 반환"),
+            @ApiResponse(responseCode = "200", description = "메시지 목록 반환 (결과가 비어 있으면 더 이상 이전 메시지 없음)"),
             @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "403", description = "해당 채팅방의 멤버가 아님",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "존재하지 않는 채팅방",
+            @ApiResponse(responseCode = "404", description = "존재하지 않는 채팅방 또는 beforeMessageUuid에 해당하는 메시지",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<List<ChatMessageResponse>> getMessages(
             @AuthenticationPrincipal UserDetails userDetails,
-            @PathVariable String roomUuid) {
+            @PathVariable String roomUuid,
+            @RequestParam(required = false) String beforeMessageUuid,
+            @RequestParam(defaultValue = "50") int limit) {
         Long userId = Long.valueOf(userDetails.getUsername());
-        return ResponseEntity.ok(chatService.getMessages(userId, roomUuid));
+        return ResponseEntity.ok(chatService.getMessages(userId, roomUuid, beforeMessageUuid, limit));
     }
 
     @PatchMapping("/{roomUuid}/messages/{messageUuid}")
