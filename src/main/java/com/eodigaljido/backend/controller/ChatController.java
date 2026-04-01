@@ -165,7 +165,7 @@ public class ChatController {
     @Operation(
             summary = "메시지 전송",
             description = """
-                    채팅방에 메시지를 전송합니다. WebSocket으로도 실시간 브로드캐스트됩니다.
+                    채팅방에 메시지를 전송합니다. 전송 시 WebSocket 구독자(`/topic/chat/{roomUuid}`)에게도 실시간 브로드캐스트됩니다.
 
                     **헤더:** `Authorization: Bearer {accessToken}` (필수)
 
@@ -174,6 +174,10 @@ public class ChatController {
 
                     **Request Body:**
                     - `content` (필수): 메시지 내용 (최대 2000자)
+
+                    **WebSocket 연결 인증:**
+                    STOMP CONNECT 프레임의 `Authorization` 헤더에 `Bearer {accessToken}`을 포함해야 합니다.
+                    토큰이 없거나 유효하지 않으면 연결이 즉시 거부됩니다 (401).
                     """
     )
     @ApiResponses({
