@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 
 import java.time.LocalDateTime;
 import java.util.stream.Collectors;
@@ -78,6 +79,11 @@ public class GlobalExceptionHandler {
         log.warn("[유효성 검사 실패] {}", message);
         return ResponseEntity.badRequest()
                 .body(new ErrorResponse(400, message, LocalDateTime.now()));
+    }
+
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    void handleClientAbort(AsyncRequestNotUsableException e) {
+        log.debug("[클라이언트 연결 끊김] {}", e.getMessage());
     }
 
     @ExceptionHandler(Exception.class)
