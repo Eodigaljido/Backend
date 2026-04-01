@@ -69,4 +69,31 @@ public class Route extends BaseTimeEntity {
     public enum RouteStatus {
         DRAFT, PUBLISHED, DELETED
     }
+
+    public void update(String title, String description, BigDecimal totalDistance,
+                       Integer estimatedTime, String thumbnailUrl) {
+        this.title = title;
+        this.description = description;
+        this.totalDistance = totalDistance;
+        this.estimatedTime = estimatedTime;
+        this.thumbnailUrl = thumbnailUrl;
+    }
+
+    public void updateStatus(RouteStatus status) {
+        this.status = status;
+    }
+
+    public void enableSharing(String shareToken) {
+        this.isShared = true;
+        this.shareToken = shareToken;
+    }
+
+    public void disableSharing() {
+        this.isShared = false;
+    }
+
+    public void markDeleted() {
+        this.status = RouteStatus.DELETED;
+        this.deletedAt = LocalDateTime.now();
+    }
 }
