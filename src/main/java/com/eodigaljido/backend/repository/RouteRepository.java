@@ -2,6 +2,7 @@ package com.eodigaljido.backend.repository;
 
 import com.eodigaljido.backend.domain.route.Route;
 import com.eodigaljido.backend.domain.route.Route.RouteStatus;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -16,4 +17,6 @@ public interface RouteRepository extends JpaRepository<Route, Long> {
     List<Route> findByUserIdAndIsSharedTrueAndStatusNot(Long userId, RouteStatus status);
 
     Optional<Route> findByShareTokenAndIsSharedTrueAndStatusNot(String shareToken, RouteStatus status);
+
+    List<Route> findByStatusAndIsSharedAndDeletedAtIsNull(RouteStatus status, boolean isShared, Pageable pageable);
 }
