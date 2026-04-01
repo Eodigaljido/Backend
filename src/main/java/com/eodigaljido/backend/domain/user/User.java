@@ -74,6 +74,10 @@ public class User extends BaseTimeEntity {
         this.deletedAt = LocalDateTime.now();
     }
 
+    public void linkLocalPassword(String passwordHash) {
+        this.passwordHash = passwordHash;
+    }
+
     public void linkLocalCredentials(String passwordHash, String phone, LocalDateTime verifiedAt) {
         this.passwordHash = passwordHash;
         this.phone = phone;

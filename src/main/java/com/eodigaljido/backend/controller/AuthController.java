@@ -1,6 +1,7 @@
 package com.eodigaljido.backend.controller;
 
 import com.eodigaljido.backend.config.OAuthProperties;
+import com.eodigaljido.backend.domain.user.PhoneVerification;
 import com.eodigaljido.backend.dto.auth.*;
 import com.eodigaljido.backend.dto.common.ErrorResponse;
 import com.eodigaljido.backend.service.AuthService;
@@ -38,24 +39,21 @@ public class AuthController {
             description = """
                     이메일/비밀번호로 신규 회원을 등록합니다.
 
-                    **사전 조건:** 요청 전에 아래 두 단계를 반드시 완료해야 합니다.
-                    1. `POST /auth/phone/code` — phone, purpose=REGISTER 로 인증번호 발송
-                    2. `POST /auth/phone/verify` — 수신한 6자리 코드 검증
-
-                    인증 완료 후 10분 이내에 본 API를 호출해야 합니다.
-
                     **Request Body:**
                     - `email` (필수): 가입할 이메일 주소 (중복 불가)
                     - `password` (필수): 8~100자 비밀번호
                     - `nickname` (필수): 2~50자 닉네임 (중복 불가)
-                    - `phone` (필수): 하이픈 없는 휴대폰 번호 (예: 01012345678), 인증 완료된 번호와 일치해야 함
+
+                    **이후 절차:** 회원가입 후 아래 두 단계를 완료해야 전화번호가 등록됩니다.
+                    1. `POST /auth/phone/code` — phone, purpose=REGISTER 로 인증번호 발송
+                    2. `POST /auth/phone/verify` — 수신한 6자리 코드 검증 (Authorization 헤더 포함 시 자동으로 전화번호 저장)
                     """
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "회원가입 성공"),
-            @ApiResponse(responseCode = "400", description = "요청 값이 올바르지 않음 (유효성 검사 실패 또는 전화번호 미인증)",
+            @ApiResponse(responseCode = "400", description = "요청 값이 올바르지 않음",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "409", description = "이미 사용 중인 이메일, 전화번호 또는 닉네임",
+            @ApiResponse(responseCode = "409", description = "이미 사용 중인 이메일 또는 닉네임",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     ResponseEntity<LoginResponse> register(@Valid @RequestBody RegisterRequest request) {
@@ -403,17 +401,28 @@ public class AuthController {
                     - `code` (필수): SMS로 수신한 6자리 숫자 인증번호 (예: 123456)
                     - `purpose` (필수): 인증 목적 (`REGISTER` 또는 `CHANGE_PHONE`), 발송 시 사용한 값과 동일해야 함
 
+                    **purpose=REGISTER + Authorization 헤더 포함 시:**
+                    검증 성공과 동시에 인증된 사용자의 전화번호가 자동으로 저장됩니다.
+                    회원가입 이후 이 방식으로 전화번호를 등록하세요.
+
+                    **purpose=CHANGE_PHONE 또는 비인증 요청 시:**
                     검증 성공 시 **10분간** 인증 완료 상태가 유지됩니다.
-                    이 시간 내에 회원가입(`/auth/register`) 또는 전화번호 변경(`/users/me/phone`)을 완료해야 합니다.
+                    이 시간 내에 전화번호 변경(`/users/me/phone`)을 완료해야 합니다.
                     """
     )
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "인증 성공"),
             @ApiResponse(responseCode = "400", description = "인증번호가 틀렸거나 만료됨, 또는 시도 횟수 초과",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "이미 전화번호가 등록된 계정이거나 다른 계정에서 사용 중인 번호",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    ResponseEntity<Void> verifyPhoneCode(@Valid @RequestBody PhoneVerifyRequest request) {
+    ResponseEntity<Void> verifyPhoneCode(@AuthenticationPrincipal UserDetails userDetails,
+                                         @Valid @RequestBody PhoneVerifyRequest request) {
         phoneVerificationService.verifyCode(request.phone(), request.code(), request.purpose());
+        if (userDetails != null && request.purpose() == PhoneVerification.Purpose.REGISTER) {
+            authService.registerPhone(Long.parseLong(userDetails.getUsername()), request.phone());
+        }
         return ResponseEntity.noContent().build();
     }
 }
