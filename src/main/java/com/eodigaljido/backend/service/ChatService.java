@@ -22,6 +22,7 @@ import org.springframework.data.domain.PageRequest;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -49,10 +50,15 @@ public class ChatService {
                 .collect(Collectors.toList());
 
         String roomName = (req.name() != null && !req.name().isBlank()) ? req.name() : null;
+
+        // 초대 인원이 2명 이상이면 GROUP, 그 외 DIRECT
+        ChatRoom.RoomType roomType = invitees.size() > 1 ? ChatRoom.RoomType.GROUP : ChatRoom.RoomType.DIRECT;
+
         ChatRoom room = ChatRoom.builder()
                 .uuid(UUID.randomUUID().toString())
                 .createdBy(me)
                 .name(roomName)
+                .type(roomType)
                 .build();
         chatRoomRepository.save(room);
 
@@ -69,9 +75,18 @@ public class ChatService {
     public List<ChatRoomResponse> getRooms(Long userId) {
         User me = getUser(userId);
         List<ChatRoom> rooms = chatRoomRepository.findRoomsForUser(me);
+        if (rooms.isEmpty()) {
+            return List.of();
+        }
+
+        // 모든 채팅방의 멤버를 한 번에 조회 (N+1 방지)
+        List<ChatRoomMember> allMembers = chatRoomMemberRepository.findByRoomInAndLeftAtIsNull(rooms);
+        Map<Long, List<ChatRoomMember>> membersByRoom = allMembers.stream()
+                .collect(Collectors.groupingBy(m -> m.getRoom().getId()));
+
         return rooms.stream()
                 .map(room -> {
-                    List<ChatRoomMember> members = chatRoomMemberRepository.findByRoomAndLeftAtIsNull(room);
+                    List<ChatRoomMember> members = membersByRoom.getOrDefault(room.getId(), List.of());
                     return buildRoomResponse(room, members, userId);
                 })
                 .collect(Collectors.toList());
@@ -263,7 +278,8 @@ public class ChatService {
                     if (m.getLastReadAt() == null) {
                         return chatMessageRepository.countActiveByRoom(room);
                     }
-                    return chatRoomMemberRepository.countMessagesAfter(room, m.getLastReadAt());
+                    // countMessagesAfter 를 ChatMessageRepository 에서 호출
+                    return chatMessageRepository.countMessagesAfter(room, m.getLastReadAt());
                 })
                 .orElse(0L);
 

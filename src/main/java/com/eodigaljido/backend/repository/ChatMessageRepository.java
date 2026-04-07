@@ -23,4 +23,8 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
 
     @Query("SELECT COUNT(m) FROM ChatMessage m WHERE m.room = :room AND m.isDeleted = false")
     long countActiveByRoom(@Param("room") ChatRoom room);
+
+    @Query("SELECT COUNT(m) FROM ChatMessage m WHERE m.room = :room " +
+           "AND m.createdAt > :since AND m.isDeleted = false")
+    long countMessagesAfter(@Param("room") ChatRoom room, @Param("since") java.time.LocalDateTime since);
 }
