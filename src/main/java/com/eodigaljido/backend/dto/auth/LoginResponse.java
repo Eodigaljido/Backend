@@ -25,6 +25,9 @@ public record LoginResponse(
             @Schema(description = "사용자 고유 ID", example = "1")
             Long id,
 
+            @Schema(description = "사용자 UUID", example = "550e8400-e29b-41d4-a716-446655440000")
+            String uuid,
+
             @Schema(description = "이메일 주소 (OAuth 가입자는 null일 수 있음)", example = "user@example.com")
             String email,
 
@@ -39,7 +42,7 @@ public record LoginResponse(
                                    long expiresIn, User user, String nickname) {
         return new LoginResponse(
                 accessToken, refreshToken, "Bearer", expiresIn,
-                new UserInfo(user.getId(), user.getEmail(), nickname, user.getRole().name())
+                new UserInfo(user.getId(), user.getUuid(), user.getEmail(), nickname, user.getRole().name())
         );
     }
 }

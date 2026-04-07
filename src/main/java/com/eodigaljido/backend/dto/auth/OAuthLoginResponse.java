@@ -28,7 +28,7 @@ public record OAuthLoginResponse(
                                         User user, String nickname) {
         return new OAuthLoginResponse(
                 accessToken, refreshToken, "Bearer", expiresIn, isNewUser,
-                new LoginResponse.UserInfo(user.getId(), user.getEmail(), nickname, user.getRole().name())
+                new LoginResponse.UserInfo(user.getId(), user.getUuid(), user.getEmail(), nickname, user.getRole().name())
         );
     }
 }

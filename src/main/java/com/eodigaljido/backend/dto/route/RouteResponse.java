@@ -10,6 +10,9 @@ import java.util.List;
 
 @Schema(description = "루트 상세 응답 (경유지 포함)")
 public record RouteResponse(
+        @Schema(description = "루트 ID (공유 활성화/비활성화 등 ID 기반 API 사용 시 필요)", example = "1")
+        Long id,
+
         @Schema(description = "루트 UUID (외부 식별자)", example = "550e8400-e29b-41d4-a716-446655440000")
         String uuid,
 
@@ -45,6 +48,7 @@ public record RouteResponse(
 ) {
     public static RouteResponse of(Route route, List<WaypointResponse> waypoints) {
         return new RouteResponse(
+                route.getId(),
                 route.getUuid(),
                 route.getTitle(),
                 route.getDescription(),

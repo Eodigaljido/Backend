@@ -55,7 +55,7 @@ public class RouteController {
 
                     **Response:** 생성된 루트 상세 정보 + 경유지 목록 (201 Created)
                     """,
-            security = @SecurityRequirement(name = "bearerAuth")
+            security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "루트 생성 성공"),
@@ -84,7 +84,7 @@ public class RouteController {
                     - `uuid`, `title`, `status`, `isShared`
                     - `totalDistance`, `estimatedTime`, `thumbnailUrl`, `createdAt`
                     """,
-            security = @SecurityRequirement(name = "bearerAuth")
+            security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "내 루트 목록 반환"),
@@ -115,7 +115,7 @@ public class RouteController {
 
                     타인의 루트 조회 시 403을 반환합니다.
                     """,
-            security = @SecurityRequirement(name = "bearerAuth")
+            security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "루트 상세 정보 반환"),
@@ -154,7 +154,7 @@ public class RouteController {
 
                     본인 루트가 아니면 403을 반환합니다.
                     """,
-            security = @SecurityRequirement(name = "bearerAuth")
+            security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "수정된 루트 상세 정보 반환"),
@@ -188,7 +188,7 @@ public class RouteController {
 
                     본인 루트가 아니면 403을 반환합니다.
                     """,
-            security = @SecurityRequirement(name = "bearerAuth")
+            security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "루트 삭제 성공"),
@@ -226,7 +226,7 @@ public class RouteController {
 
                     본인 루트가 아니면 403을 반환합니다.
                     """,
-            security = @SecurityRequirement(name = "bearerAuth")
+            security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "변경된 루트 상세 정보 반환"),
@@ -264,7 +264,7 @@ public class RouteController {
 
                     이미 저장된 루트인 경우 409 Conflict를 반환합니다.
                     """,
-            security = @SecurityRequirement(name = "bearerAuth")
+            security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "즐겨찾기 저장 성공"),
@@ -296,7 +296,7 @@ public class RouteController {
 
                     저장되지 않은 루트인 경우 404를 반환합니다.
                     """,
-            security = @SecurityRequirement(name = "bearerAuth")
+            security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "즐겨찾기 취소 성공"),
@@ -325,7 +325,7 @@ public class RouteController {
                     - `uuid`, `title`, `status`, `isShared`
                     - `totalDistance`, `estimatedTime`, `thumbnailUrl`, `createdAt`
                     """,
-            security = @SecurityRequirement(name = "bearerAuth")
+            security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "저장한 루트 목록 반환"),
@@ -356,7 +356,7 @@ public class RouteController {
 
                     본인 루트가 아니면 403을 반환합니다.
                     """,
-            security = @SecurityRequirement(name = "bearerAuth")
+            security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "공유 활성화 성공"),
@@ -389,7 +389,7 @@ public class RouteController {
 
                     본인 루트가 아니면 403을 반환합니다.
                     """,
-            security = @SecurityRequirement(name = "bearerAuth")
+            security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "공유 비활성화 성공"),
@@ -471,7 +471,7 @@ public class RouteController {
                     - `uuid`, `title`, `status`, `isShared`
                     - `totalDistance`, `estimatedTime`, `thumbnailUrl`, `createdAt`
                     """,
-            security = @SecurityRequirement(name = "bearerAuth")
+            security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "공유 중인 루트 목록 반환"),

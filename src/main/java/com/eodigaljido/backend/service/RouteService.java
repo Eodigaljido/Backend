@@ -17,7 +17,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -56,6 +58,7 @@ public class RouteService {
         return RouteResponse.of(route, waypoints.stream().map(WaypointResponse::from).toList());
     }
 
+    @Transactional(readOnly = true)
     public RouteResponse getRoute(Long userId, Long id) {
         Route route = findActiveRouteById(id);
         if (!route.getUser().getId().equals(userId)) {
@@ -64,6 +67,7 @@ public class RouteService {
         return toRouteResponse(route);
     }
 
+    @Transactional(readOnly = true)
     public List<RouteSummaryResponse> getMyRoutes(Long userId) {
         return routeRepository.findByUserIdAndStatusNot(userId, RouteStatus.DELETED)
                 .stream()
@@ -112,6 +116,12 @@ public class RouteService {
     @Transactional
     public void saveRoute(Long userId, Long id) {
         Route route = findActiveRouteById(id);
+
+        // 본인 루트이거나 공유된 루트만 즐겨찾기 가능
+        if (!route.getUser().getId().equals(userId) && !route.isShared()) {
+            throw new RouteException("공유되지 않은 루트는 저장할 수 없습니다.", HttpStatus.FORBIDDEN);
+        }
+
         if (savedRouteRepository.existsByUserIdAndRouteId(userId, route.getId())) {
             throw new RouteException("이미 저장된 루트입니다.", HttpStatus.CONFLICT);
         }
@@ -130,6 +140,7 @@ public class RouteService {
         savedRouteRepository.delete(saved);
     }
 
+    @Transactional(readOnly = true)
     public List<RouteSummaryResponse> getSavedRoutes(Long userId) {
         return savedRouteRepository.findByUserIdOrderByCreatedAtDesc(userId)
                 .stream()
@@ -157,28 +168,38 @@ public class RouteService {
         route.disableSharing();
     }
 
+    @Transactional(readOnly = true)
     public List<SharedRouteSummaryResponse> getPublicSharedRoutes() {
-        return routeRepository.findByIsSharedTrueAndStatusNot(RouteStatus.DELETED)
+        List<Route> routes = routeRepository.findSharedRoutesWithUser(RouteStatus.DELETED);
+        if (routes.isEmpty()) {
+            return List.of();
+        }
+
+        // 배치로 첫 번째 경유지를 한 번에 조회 (N+1 방지)
+        Map<Long, String> firstWaypointNames = waypointRepository.findFirstWaypointsByRoutes(routes)
                 .stream()
-                .map(route -> {
-                    String firstName = waypointRepository.findTopByRouteOrderBySequenceAsc(route)
-                            .map(RouteWaypoint::getName)
-                            .orElse(null);
-                    return new SharedRouteSummaryResponse(
-                            route.getUuid(),
-                            route.getTitle(),
-                            route.getDescription(),
-                            route.getStatus(),
-                            route.getTotalDistance(),
-                            route.getEstimatedTime(),
-                            route.getThumbnailUrl(),
-                            firstName,
-                            route.getUser().getUuid()
-                    );
-                })
+                .collect(Collectors.toMap(
+                        w -> w.getRoute().getId(),
+                        RouteWaypoint::getName,
+                        (a, b) -> a
+                ));
+
+        return routes.stream()
+                .map(route -> new SharedRouteSummaryResponse(
+                        route.getUuid(),
+                        route.getTitle(),
+                        route.getDescription(),
+                        route.getStatus(),
+                        route.getTotalDistance(),
+                        route.getEstimatedTime(),
+                        route.getThumbnailUrl(),
+                        firstWaypointNames.get(route.getId()),
+                        route.getUser().getUuid()
+                ))
                 .toList();
     }
 
+    @Transactional(readOnly = true)
     public RouteResponse getPublicSharedRoute(String uuid) {
         Route route = routeRepository.findByUuidAndStatusNot(uuid, RouteStatus.DELETED)
                 .filter(Route::isShared)
@@ -186,6 +207,7 @@ public class RouteService {
         return toRouteResponse(route);
     }
 
+    @Transactional(readOnly = true)
     public List<RouteSummaryResponse> getSharingRoutes(Long userId) {
         return routeRepository.findByUserIdAndIsSharedTrueAndStatusNot(userId, RouteStatus.DELETED)
                 .stream()

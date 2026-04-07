@@ -30,7 +30,8 @@ public class SecurityConfig {
             "/auth/token/refresh",
             "/auth/oauth/google", "/auth/oauth/kakao", "/auth/oauth/config",
             "/auth/phone/code", "/auth/phone/verify",
-            "/ws/chat/**"
+            "/ws/chat/**",
+            "/routes/shared", "/routes/shared/**"
     };
 
     @Bean

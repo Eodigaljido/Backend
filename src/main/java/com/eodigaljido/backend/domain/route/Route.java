@@ -89,6 +89,7 @@ public class Route extends BaseTimeEntity {
 
     public void markDeleted() {
         this.status = RouteStatus.DELETED;
+        this.isShared = false;
         this.deletedAt = LocalDateTime.now();
     }
 }
