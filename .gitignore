@@ -40,4 +40,4 @@ out/
 
 ### Environment ###
 .env
-.env.example
+# .env.example은 커밋 대상입니다 (실제 시크릿 없는 템플릿)
