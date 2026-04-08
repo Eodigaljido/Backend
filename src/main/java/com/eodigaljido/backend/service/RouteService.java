@@ -194,7 +194,8 @@ public class RouteService {
                         route.getEstimatedTime(),
                         route.getThumbnailUrl(),
                         firstWaypointNames.get(route.getId()),
-                        route.getUser().getUuid()
+                        route.getUser().getUuid(),
+                        route.getUser().getUserId()
                 ))
                 .toList();
     }

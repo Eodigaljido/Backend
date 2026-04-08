@@ -32,5 +32,8 @@ public record SharedRouteSummaryResponse(
         String name,
 
         @Schema(description = "루트 작성자 UUID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
-        String authorUuid
+        String authorUuid,
+
+        @Schema(description = "루트 작성자 아이디", example = "john123")
+        String authorUserId
 ) {}

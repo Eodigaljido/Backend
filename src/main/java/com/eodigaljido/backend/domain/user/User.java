@@ -28,6 +28,9 @@ public class User extends BaseTimeEntity {
     @Column(length = 36, unique = true, nullable = false)
     private String uuid;
 
+    @Column(name = "user_id", length = 8, unique = true)
+    private String userId;
+
     @Column(length = 255, unique = true)
     private String email;
 
@@ -76,6 +79,10 @@ public class User extends BaseTimeEntity {
 
     public void linkLocalPassword(String passwordHash) {
         this.passwordHash = passwordHash;
+    }
+
+    public void updateUserId(String userId) {
+        this.userId = userId;
     }
 
     public void linkLocalCredentials(String passwordHash, String phone, LocalDateTime verifiedAt) {

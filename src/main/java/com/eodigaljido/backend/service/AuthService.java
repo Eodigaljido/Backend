@@ -35,6 +35,10 @@ public class AuthService {
 
     @Transactional
     public LoginResponse register(RegisterRequest request) {
+        if (userRepository.existsByUserId(request.userId())) {
+            throw new AuthException("이미 사용 중인 아이디입니다.", HttpStatus.CONFLICT);
+        }
+
         Optional<User> existingByEmail = userRepository.findByEmail(request.email());
 
         // 동일 이메일로 OAuth 계정이 이미 있으면 LOCAL 비밀번호를 추가(연동)
@@ -46,6 +50,7 @@ public class AuthService {
             if (profileRepository.existsByNicknameAndUserNot(request.nickname(), existing)) {
                 throw new AuthException("이미 사용 중인 닉네임입니다.", HttpStatus.CONFLICT);
             }
+            existing.updateUserId(request.userId());
             existing.linkLocalPassword(passwordEncoder.encode(request.password()));
             profileRepository.findByUser(existing).ifPresent(p -> p.updateNickname(request.nickname()));
             return issueTokens(existing, null, null);
@@ -57,6 +62,7 @@ public class AuthService {
 
         User user = User.builder()
                 .uuid(UUID.randomUUID().toString())
+                .userId(request.userId())
                 .email(request.email())
                 .passwordHash(passwordEncoder.encode(request.password()))
                 .build();
@@ -88,14 +94,17 @@ public class AuthService {
 
     @Transactional
     public LoginResponse login(LoginRequest request, String deviceInfo, String ipAddress) {
-        User user = userRepository.findByEmail(request.email())
-                .orElseThrow(() -> new AuthException("이메일 또는 비밀번호가 올바르지 않습니다.", HttpStatus.UNAUTHORIZED));
+        String identifier = request.identifier();
+        User user = (identifier.contains("@")
+                ? userRepository.findByEmail(identifier)
+                : userRepository.findByUserId(identifier))
+                .orElseThrow(() -> new AuthException("아이디/이메일 또는 비밀번호가 올바르지 않습니다.", HttpStatus.UNAUTHORIZED));
 
         if (user.getPasswordHash() == null) {
             throw new AuthException("소셜 로그인으로 가입된 계정입니다. 구글 또는 카카오 로그인을 이용해주세요.", HttpStatus.UNAUTHORIZED);
         }
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
-            throw new AuthException("이메일 또는 비밀번호가 올바르지 않습니다.", HttpStatus.UNAUTHORIZED);
+            throw new AuthException("아이디/이메일 또는 비밀번호가 올바르지 않습니다.", HttpStatus.UNAUTHORIZED);
         }
 
         if (user.getStatus() != User.UserStatus.ACTIVE) {

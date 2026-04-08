@@ -31,7 +31,13 @@ public record RouteSummaryResponse(
         String thumbnailUrl,
 
         @Schema(description = "생성일시", example = "2026-03-19T10:00:00")
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+
+        @Schema(description = "루트 작성자 UUID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
+        String authorUuid,
+
+        @Schema(description = "루트 작성자 아이디", example = "john123")
+        String authorUserId
 ) {
     public static RouteSummaryResponse from(Route route) {
         return new RouteSummaryResponse(
@@ -42,7 +48,9 @@ public record RouteSummaryResponse(
                 route.getTotalDistance(),
                 route.getEstimatedTime(),
                 route.getThumbnailUrl(),
-                route.getCreatedAt()
+                route.getCreatedAt(),
+                route.getUser().getUuid(),
+                route.getUser().getUserId()
         );
     }
 }

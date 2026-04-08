@@ -44,7 +44,13 @@ public record RouteResponse(
         LocalDateTime createdAt,
 
         @Schema(description = "최종 수정일시", example = "2026-03-19T12:30:00")
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+
+        @Schema(description = "루트 작성자 UUID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
+        String authorUuid,
+
+        @Schema(description = "루트 작성자 아이디", example = "john123")
+        String authorUserId
 ) {
     public static RouteResponse of(Route route, List<WaypointResponse> waypoints) {
         return new RouteResponse(
@@ -59,7 +65,9 @@ public record RouteResponse(
                 route.getThumbnailUrl(),
                 waypoints,
                 route.getCreatedAt(),
-                route.getUpdatedAt()
+                route.getUpdatedAt(),
+                route.getUser().getUuid(),
+                route.getUser().getUserId()
         );
     }
 }
