@@ -18,8 +18,19 @@ public class JwtTokenProvider {
 
     private final JwtProperties jwtProperties;
 
+    private static final int MIN_SECRET_BYTES = 32; // HS256 최소 256비트(32바이트)
+
     private SecretKey getSigningKey() {
-        return Keys.hmacShaKeyFor(jwtProperties.getSecret().getBytes(StandardCharsets.UTF_8));
+        String secret = jwtProperties.getSecret();
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException("JWT_SECRET 환경변수가 설정되지 않았습니다.");
+        }
+        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+        if (keyBytes.length < MIN_SECRET_BYTES) {
+            throw new IllegalStateException(
+                    "JWT_SECRET은 최소 " + MIN_SECRET_BYTES + "바이트(256비트) 이상이어야 합니다. 현재: " + keyBytes.length + "바이트");
+        }
+        return Keys.hmacShaKeyFor(keyBytes);
     }
 
     public String generateAccessToken(Long userId, String role) {
@@ -27,6 +38,7 @@ public class JwtTokenProvider {
         return Jwts.builder()
                 .subject(String.valueOf(userId))
                 .claim("role", role)
+                .claim("typ", "access")
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + jwtProperties.getAccessTokenExpiry()))
                 .signWith(getSigningKey())
@@ -37,6 +49,7 @@ public class JwtTokenProvider {
         Date now = new Date();
         return Jwts.builder()
                 .subject(String.valueOf(userId))
+                .claim("typ", "refresh")
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + jwtProperties.getRefreshTokenExpiry()))
                 .signWith(getSigningKey())
