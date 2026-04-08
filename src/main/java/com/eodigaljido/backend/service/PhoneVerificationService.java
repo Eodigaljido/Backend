@@ -17,6 +17,7 @@ public class PhoneVerificationService {
     private static final int CODE_EXPIRY_MINUTES = 3;
     private static final int VERIFIED_EXPIRY_MINUTES = 10;
     private static final int MAX_ATTEMPTS = 5;
+    private static final int MAX_DAILY_SMS = 5; // 번호당 하루 최대 SMS 발송 횟수
 
     private final StringRedisTemplate redisTemplate;
     private final SolapiService solapiService;
@@ -24,6 +25,19 @@ public class PhoneVerificationService {
     // ── 코드 발송 ─────────────────────────────────────────────────────────────
 
     public void sendCode(String phone, PhoneVerification.Purpose purpose) {
+        // 일일 SMS 발송 횟수 제한: 같은 번호에 하루 최대 MAX_DAILY_SMS회
+        String dailyKey = dailyLimitKey(phone);
+        Long dailyCount = redisTemplate.opsForValue().increment(dailyKey);
+        if (dailyCount == 1) {
+            // 첫 발송 시 24시간 TTL 설정
+            redisTemplate.expire(dailyKey, 24, TimeUnit.HOURS);
+        }
+        if (dailyCount > MAX_DAILY_SMS) {
+            throw new PhoneVerificationException(
+                    "하루 SMS 발송 한도(" + MAX_DAILY_SMS + "회)를 초과했습니다. 내일 다시 시도해주세요.",
+                    HttpStatus.TOO_MANY_REQUESTS);
+        }
+
         String code = generateCode();
         redisTemplate.opsForValue().set(codeKey(phone, purpose), code, CODE_EXPIRY_MINUTES, TimeUnit.MINUTES);
         redisTemplate.delete(attemptsKey(phone, purpose)); // 이전 시도 횟수 초기화
@@ -84,6 +98,10 @@ public class PhoneVerificationService {
 
     private String verifiedKey(String phone, PhoneVerification.Purpose purpose) {
         return "phone:verified:" + phone + ":" + purpose.name();
+    }
+
+    private String dailyLimitKey(String phone) {
+        return "phone:daily:" + phone;
     }
 
     private String generateCode() {

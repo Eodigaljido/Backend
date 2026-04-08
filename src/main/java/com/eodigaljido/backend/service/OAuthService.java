@@ -222,11 +222,11 @@ public class OAuthService {
         JsonNode json = postForm("https://oauth2.googleapis.com/token", body);
         JsonNode tokenNode = json.get("access_token");
         if (tokenNode == null || tokenNode.isNull()) {
-            String error = json.path("error_description").asText(json.path("error").asText("access_token 없음"));
-            log.error("[구글 토큰 교환 실패] 응답: {}", json);
-            throw new AuthException("구글 토큰 발급 실패: " + error, HttpStatus.BAD_REQUEST);
+            // 내부 에러 서버 로그에만 기록, 클라이언트에는 일반 메시지 반환
+            log.error("[구글 토큰 교환 실패] error={}, description={}", json.path("error").asText(), json.path("error_description").asText());
+            throw new AuthException("Google OAuth 인증에 실패했습니다. 인가 코드를 다시 확인해주세요.", HttpStatus.BAD_REQUEST);
         }
-        log.debug("[구글 토큰 교환 성공] redirect_uri={}", redirectUri);
+        log.debug("[구글 토큰 교환 성공]");
         return tokenNode.asText();
     }
 
@@ -247,11 +247,11 @@ public class OAuthService {
         JsonNode json = postForm("https://kauth.kakao.com/oauth/token", body);
         JsonNode tokenNode = json.get("access_token");
         if (tokenNode == null || tokenNode.isNull()) {
-            String error = json.path("error_description").asText(json.path("error").asText("access_token 없음"));
-            log.error("[카카오 토큰 교환 실패] 응답: {}", json);
-            throw new AuthException("카카오 토큰 발급 실패: " + error, HttpStatus.BAD_REQUEST);
+            // 내부 에러 서버 로그에만 기록, 클라이언트에는 일반 메시지 반환
+            log.error("[카카오 토큰 교환 실패] error={}, description={}", json.path("error").asText(), json.path("error_description").asText());
+            throw new AuthException("Kakao OAuth 인증에 실패했습니다. 인가 코드를 다시 확인해주세요.", HttpStatus.BAD_REQUEST);
         }
-        log.debug("[카카오 토큰 교환 성공] redirect_uri={}", redirectUri);
+        log.debug("[카카오 토큰 교환 성공]");
         return tokenNode.asText();
     }
 
@@ -318,11 +318,9 @@ public class OAuthService {
             JsonNode json = objectMapper.readTree(response.body());
 
             if (response.statusCode() >= 400) {
-                String errMsg = json.path("msg").asText(
-                        json.path("error_description").asText(
-                                json.path("error").asText("사용자 정보 조회 실패")));
-                log.error("[OAuth 사용자 정보 조회 실패] url={}, status={}, body={}", url, response.statusCode(), json);
-                throw new AuthException("OAuth 사용자 정보 조회 실패: " + errMsg, HttpStatus.valueOf(response.statusCode()));
+                // 내부 에러 상세는 서버 로그에만 기록
+                log.error("[OAuth 사용자 정보 조회 실패] url={}, status={}", url, response.statusCode());
+                throw new AuthException("OAuth 사용자 정보를 가져오는 데 실패했습니다. 다시 시도해주세요.", HttpStatus.valueOf(response.statusCode()));
             }
             return json;
         } catch (AuthException e) {

@@ -86,6 +86,12 @@ public class UserService {
     // 유저 검색 (닉네임)
     @Transactional(readOnly = true)
     public List<UserSearchResponse> searchUsers(String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return List.of();
+        }
+        if (keyword.length() > 50) {
+            throw new UserException("검색 키워드는 50자를 초과할 수 없습니다.", HttpStatus.BAD_REQUEST);
+        }
         return profileRepository.findByNicknameContainingIgnoreCase(keyword).stream()
                 .filter(p -> p.getUser().getStatus() == User.UserStatus.ACTIVE)
                 .map(p -> UserSearchResponse.of(p.getUser(), p))

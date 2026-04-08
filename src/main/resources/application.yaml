@@ -38,3 +38,8 @@ oauth:
     redirect-uri: ${KAKAO_REDIRECT_URI:}
     allowed-redirect-uris:
       - ${KAKAO_REDIRECT_URI:}
+
+websocket:
+  # WebSocket CORS 허용 오리진 목록 (쉼표 구분)
+  # 프로덕션: WEBSOCKET_ALLOWED_ORIGINS 환경변수로 반드시 덮어쓰세요 (예: https://eodigaljido.com)
+  allowed-origins: ${WEBSOCKET_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
