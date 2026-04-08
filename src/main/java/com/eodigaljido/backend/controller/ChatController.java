@@ -48,7 +48,7 @@ public class ChatController {
             @ApiResponse(responseCode = "404", description = "초대한 UUID에 해당하는 유저가 존재하지 않음",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    public ResponseEntity<ChatRoomResponse> createRoom(
+    public ResponseEntity<CreateChatRoomResponse> createRoom(
             @AuthenticationPrincipal UserDetails userDetails,
             @Valid @RequestBody CreateChatRoomRequest req) {
         Long userId = Long.valueOf(userDetails.getUsername());
@@ -334,6 +334,42 @@ public class ChatController {
             @Valid @RequestBody UpdateChatRoomNameRequest req) {
         Long userId = Long.valueOf(userDetails.getUsername());
         return ResponseEntity.ok(chatService.updateRoomName(userId, roomUuid, req));
+    }
+
+    @PostMapping("/{roomUuid}/members")
+    @Operation(
+            summary = "채팅방 멤버 초대",
+            description = """
+                    기존 채팅방에 새로운 유저를 초대합니다. 채팅방 멤버라면 누구든 초대할 수 있습니다.
+
+                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
+
+                    **Path Variable:**
+                    - `roomUuid`: 초대할 채팅방의 UUID
+
+                    **Request Body:**
+                    - `userId` (필수): 초대할 유저의 아이디
+                    """
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "멤버 초대 성공"),
+            @ApiResponse(responseCode = "400", description = "요청 값이 올바르지 않음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "해당 채팅방의 멤버가 아님",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "존재하지 않는 채팅방 또는 유저",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "이미 채팅방에 참여 중인 유저",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<ChatRoomResponse> inviteMember(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PathVariable String roomUuid,
+            @Valid @RequestBody InviteMemberRequest req) {
+        Long userId = Long.valueOf(userDetails.getUsername());
+        return ResponseEntity.ok(chatService.inviteMember(userId, roomUuid, req.userId()));
     }
 
     @DeleteMapping("/{roomUuid}/members/{targetUuid}")

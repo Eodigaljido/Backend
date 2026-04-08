@@ -39,7 +39,7 @@ public class ChatService {
     private final SimpMessagingTemplate messagingTemplate;
 
     @Transactional
-    public ChatRoomResponse createRoom(Long userId, CreateChatRoomRequest req) {
+    public CreateChatRoomResponse createRoom(Long userId, CreateChatRoomRequest req) {
         User me = getUser(userId);
 
         List<User> invitees = req.memberUuids().stream()
@@ -69,7 +69,40 @@ public class ChatService {
         }
         chatRoomMemberRepository.saveAll(members);
 
-        return buildRoomResponse(room, members, userId);
+        String name = room.getName() != null ? room.getName() : generateRoomName(room, members, userId);
+
+        List<String> memberUuids = members.stream().map(m -> m.getUser().getUuid()).toList();
+        List<String> memberUserIds = members.stream().map(m -> m.getUser().getUserId()).toList();
+
+        return new CreateChatRoomResponse(
+                room.getUuid(),
+                name,
+                members.size(),
+                me.getUuid(),
+                me.getUserId(),
+                memberUuids,
+                memberUserIds
+        );
+    }
+
+    @Transactional
+    public ChatRoomResponse inviteMember(Long requesterId, String roomUuid, String targetUserId) {
+        ChatRoom room = getActiveRoom(roomUuid);
+        getMembership(room, requesterId);
+
+        User target = userRepository.findByUserId(targetUserId)
+                .orElseThrow(() -> new ChatException("존재하지 않는 유저입니다: " + targetUserId, HttpStatus.NOT_FOUND));
+
+        if (chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(room, target).isPresent()) {
+            throw new ChatException("이미 채팅방에 참여 중인 유저입니다.", HttpStatus.CONFLICT);
+        }
+
+        chatRoomMemberRepository.save(
+                ChatRoomMember.builder().room(room).user(target).role(ChatRoomMember.MemberRole.MEMBER).build()
+        );
+
+        List<ChatRoomMember> members = chatRoomMemberRepository.findByRoomAndLeftAtIsNull(room);
+        return buildRoomResponse(room, members, requesterId);
     }
 
     public List<ChatRoomResponse> getRooms(Long userId) {
@@ -265,7 +298,11 @@ public class ChatService {
     // ── helpers ──────────────────────────────────────────────
 
     private ChatRoomResponse buildRoomResponse(ChatRoom room, List<ChatRoomMember> members, Long currentUserId) {
-        String name = room.getName() != null ? room.getName() : generateRoomName(members, currentUserId);
+        String name = room.getName() != null ? room.getName() : generateRoomName(room, members, currentUserId);
+
+        User owner = room.getCreatedBy();
+        List<String> memberUuids = members.stream().map(m -> m.getUser().getUuid()).toList();
+        List<String> memberUserIds = members.stream().map(m -> m.getUser().getUserId()).toList();
 
         ChatMessage lastMsg = chatMessageRepository.findTopByRoomOrderByCreatedAtDesc(room).orElse(null);
         String lastContent = lastMsg != null && !lastMsg.isDeleted() ? lastMsg.getContent() : null;
@@ -278,17 +315,22 @@ public class ChatService {
                     if (m.getLastReadAt() == null) {
                         return chatMessageRepository.countActiveByRoom(room);
                     }
-                    // countMessagesAfter 를 ChatMessageRepository 에서 호출
                     return chatMessageRepository.countMessagesAfter(room, m.getLastReadAt());
                 })
                 .orElse(0L);
 
-        return new ChatRoomResponse(room.getUuid(), name, members.size(), lastContent, lastMsgAt, unreadCount);
+        return new ChatRoomResponse(
+                room.getUuid(), name, members.size(),
+                owner.getUuid(), owner.getUserId(),
+                memberUuids, memberUserIds,
+                lastContent, lastMsgAt, unreadCount
+        );
     }
 
-    private String generateRoomName(List<ChatRoomMember> members, Long currentUserId) {
+    private String generateRoomName(ChatRoom room, List<ChatRoomMember> members, Long currentUserId) {
+        Long ownerId = room.getCreatedBy().getId();
         String names = members.stream()
-                .filter(m -> !m.getUser().getId().equals(currentUserId))
+                .filter(m -> !m.getUser().getId().equals(ownerId) && !m.getUser().getId().equals(currentUserId))
                 .map(m -> profileRepository.findByUser(m.getUser())
                         .map(Profile::getNickname)
                         .orElse("알 수 없음"))

@@ -11,9 +11,10 @@ import java.util.Optional;
 
 public interface ChatRoomRepository extends JpaRepository<ChatRoom, Long> {
 
-    Optional<ChatRoom> findByUuidAndDeletedAtIsNull(String uuid);
+    @Query("SELECT r FROM ChatRoom r JOIN FETCH r.createdBy WHERE r.uuid = :uuid AND r.deletedAt IS NULL")
+    Optional<ChatRoom> findByUuidAndDeletedAtIsNull(@Param("uuid") String uuid);
 
-    @Query("SELECT r FROM ChatRoom r JOIN ChatRoomMember m ON m.room = r " +
+    @Query("SELECT r FROM ChatRoom r JOIN FETCH r.createdBy JOIN ChatRoomMember m ON m.room = r " +
            "WHERE m.user = :user AND m.leftAt IS NULL AND r.deletedAt IS NULL " +
            "ORDER BY r.createdAt DESC")
     List<ChatRoom> findRoomsForUser(@Param("user") User user);
