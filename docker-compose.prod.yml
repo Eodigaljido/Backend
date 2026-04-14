@@ -1,8 +1,9 @@
 services:
   app:
     build: .
-    ports:
-      - "8080:8080"
+    # host network: 컨테이너가 EC2 호스트 네트워크 직접 사용
+    # DB_HOST=127.0.0.1 → EC2에 설치된 MySQL 직접 접근 가능
+    network_mode: host
     environment:
       SPRING_PROFILES_ACTIVE: prod
     env_file:
