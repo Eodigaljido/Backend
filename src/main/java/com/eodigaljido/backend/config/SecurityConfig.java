@@ -43,6 +43,10 @@ public class SecurityConfig {
             "/swagger", "/swagger-ui/**", "/v3/api-docs/**", "/swagger-resources/**"
     };
 
+    private static final String[] ACTUATOR_ENDPOINTS = {
+            "/actuator/health", "/actuator/info"
+    };
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         boolean isLocalProfile = Arrays.asList(environment.getActiveProfiles()).contains("local");
@@ -66,6 +70,7 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(auth -> {
                     auth.requestMatchers(PUBLIC_ENDPOINTS).permitAll();
+                    auth.requestMatchers(ACTUATOR_ENDPOINTS).permitAll();
                     if (isLocalProfile) {
                         auth.requestMatchers(SWAGGER_ENDPOINTS).permitAll();
                     } else {
