@@ -62,6 +62,15 @@ public class ChatController {
                     로그인한 사용자가 참여 중인 채팅방 목록을 조회합니다.
 
                     **헤더:** `Authorization: Bearer {accessToken}` (필수)
+
+                    **Response:** 참여 중인 채팅방 목록 (생성 최신순)
+                    - `uuid`: 채팅방 UUID
+                    - `name`: 채팅방 이름 (미설정 시 멤버 닉네임 조합으로 자동 생성)
+                    - `memberCount`: 전체 멤버 수
+                    - `ownerUuid` / `ownerUserId`: 방장 UUID / 아이디
+                    - `memberUuids` / `memberUserIds`: 채팅방 입장 순서 기준 **최대 3명**의 멤버 UUID / 아이디 목록. 전체 인원은 `memberCount` 참고
+                    - `lastMessage` / `lastMessageAt`: 마지막 메시지 내용 및 전송 시각 (없으면 null)
+                    - `unreadCount`: 읽지 않은 메시지 수
                     """
     )
     @ApiResponses({

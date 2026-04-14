@@ -262,13 +262,16 @@ public class RouteController {
                     **Path Variable:**
                     - `id`: 저장할 루트의 ID
 
-                    이미 저장된 루트인 경우 409 Conflict를 반환합니다.
+                    **저장 가능 조건:** 본인 루트이거나 공유 활성화된 루트(`isShared = true`)만 저장할 수 있습니다.
+                    공유되지 않은 타인의 루트를 저장하려 하면 403을 반환합니다.
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "즐겨찾기 저장 성공"),
             @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "공유되지 않은 타인의 루트",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "존재하지 않는 루트",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),

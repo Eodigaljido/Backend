@@ -21,6 +21,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.data.domain.PageRequest;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -301,8 +302,16 @@ public class ChatService {
         String name = room.getName() != null ? room.getName() : generateRoomName(room, members, currentUserId);
 
         User owner = room.getCreatedBy();
-        List<String> memberUuids = members.stream().map(m -> m.getUser().getUuid()).toList();
-        List<String> memberUserIds = members.stream().map(m -> m.getUser().getUserId()).toList();
+        List<String> memberUuids = members.stream()
+                .sorted(Comparator.comparingLong(ChatRoomMember::getId))
+                .limit(3)
+                .map(m -> m.getUser().getUuid())
+                .toList();
+        List<String> memberUserIds = members.stream()
+                .sorted(Comparator.comparingLong(ChatRoomMember::getId))
+                .limit(3)
+                .map(m -> m.getUser().getUserId())
+                .toList();
 
         ChatMessage lastMsg = chatMessageRepository.findTopByRoomOrderByCreatedAtDesc(room).orElse(null);
         String lastContent = lastMsg != null && !lastMsg.isDeleted() ? lastMsg.getContent() : null;
