@@ -4,8 +4,8 @@
 
 set -e
 
-REPO_URL="https://github.com/Haryu5412/Eodigaljido"
-APP_DIR="$HOME/Eodigaljido/Backend"
+REPO_URL="https://github.com/Eodigaljido/Backend.git"
+APP_DIR="$HOME/Backend"
 
 echo "=== [1/5] Docker 설치 ==="
 sudo dnf update -y
@@ -17,18 +17,18 @@ echo "Docker 설치 완료: $(docker --version)"
 
 echo "=== [2/5] Docker Compose 설치 ==="
 COMPOSE_VERSION="v2.27.0"
-sudo curl -L "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-linux-x86_64" \
-  -o /usr/local/bin/docker-compose
-sudo chmod +x /usr/local/bin/docker-compose
+sudo mkdir -p /usr/local/lib/docker/cli-plugins
+sudo curl -SL "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-linux-x86_64" \
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 echo "Docker Compose 설치 완료: $(docker-compose --version)"
 
 echo "=== [3/5] 레포지토리 클론 ==="
-mkdir -p "$HOME/Eodigaljido"
 if [ -d "$APP_DIR" ]; then
   echo "이미 클론됨. git pull 실행."
   cd "$APP_DIR" && git pull origin main
 else
-  git clone "$REPO_URL" "$HOME/Eodigaljido"
+  git clone "$REPO_URL" "$APP_DIR"
 fi
 
 echo "=== [4/5] .env.prod 설정 ==="
@@ -51,9 +51,9 @@ echo "=== [5/5] 완료 ==="
 echo ""
 echo ".env.prod 설정 후 아래 명령어로 앱 실행:"
 echo "  cd $APP_DIR"
-echo "  docker compose -f docker-compose.prod.yml up -d --build"
+echo "  docker-compose -f docker-compose.prod.yml up -d --build"
 echo ""
 echo "로그 확인:"
-echo "  docker compose -f docker-compose.prod.yml logs -f app"
+echo "  docker-compose -f docker-compose.prod.yml logs -f app"
 echo ""
 echo "*** 주의: 이 세션을 재접속 후에 docker 명령어가 sudo 없이 동작합니다 ***"
