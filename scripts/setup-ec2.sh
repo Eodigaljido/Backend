@@ -21,7 +21,8 @@ sudo mkdir -p /usr/local/lib/docker/cli-plugins
 sudo curl -SL "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-linux-x86_64" \
   -o /usr/local/lib/docker/cli-plugins/docker-compose
 sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
-echo "Docker Compose 설치 완료: $(docker-compose --version)"
+sudo ln -sf /usr/local/lib/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose
+echo "Docker Compose 설치 완료: $(docker compose version)"
 
 echo "=== [3/5] 레포지토리 클론 ==="
 if [ -d "$APP_DIR" ]; then
@@ -51,9 +52,9 @@ echo "=== [5/5] 완료 ==="
 echo ""
 echo ".env.prod 설정 후 아래 명령어로 앱 실행:"
 echo "  cd $APP_DIR"
-echo "  docker-compose -f docker-compose.prod.yml up -d --build"
+echo "  docker compose -f docker-compose.prod.yml up -d --build"
 echo ""
 echo "로그 확인:"
-echo "  docker-compose -f docker-compose.prod.yml logs -f app"
+echo "  docker compose -f docker-compose.prod.yml logs -f app"
 echo ""
 echo "*** 주의: 이 세션을 재접속 후에 docker 명령어가 sudo 없이 동작합니다 ***"
