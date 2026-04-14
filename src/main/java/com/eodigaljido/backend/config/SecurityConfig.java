@@ -38,7 +38,7 @@ public class SecurityConfig {
             "/routes/shared", "/routes/shared/**"
     };
 
-    // Swagger 엔드포인트는 로컬/개발 환경에서만 공개 접근 허용
+    // Swagger 엔드포인트 (전체 환경 공개 허용)
     private static final String[] SWAGGER_ENDPOINTS = {
             "/swagger", "/swagger-ui/**", "/v3/api-docs/**", "/swagger-resources/**"
     };
@@ -71,11 +71,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> {
                     auth.requestMatchers(PUBLIC_ENDPOINTS).permitAll();
                     auth.requestMatchers(ACTUATOR_ENDPOINTS).permitAll();
-                    if (isLocalProfile) {
-                        auth.requestMatchers(SWAGGER_ENDPOINTS).permitAll();
-                    } else {
-                        auth.requestMatchers(SWAGGER_ENDPOINTS).authenticated();
-                    }
+                    auth.requestMatchers(SWAGGER_ENDPOINTS).permitAll();
                     auth.anyRequest().authenticated();
                 })
                 .exceptionHandling(ex -> ex
