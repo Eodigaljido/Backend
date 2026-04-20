@@ -111,7 +111,7 @@ public class OnboardingController {
         return ResponseEntity.ok(onboardingService.getQuestions());
     }
 
-    @PostMapping("/answers/step")
+    @PostMapping("/answers/{step}")
     @Operation(
             summary = "단계별 임시 저장",
             description = """
@@ -119,8 +119,10 @@ public class OnboardingController {
 
                     **헤더:** `Authorization: Bearer {accessToken}` (필수)
 
-                    **Request Body:**
+                    **Path Variable:**
                     - `step` (필수): 현재 스텝 번호 (1~4)
+
+                    **Request Body:**
                     - `answer` (필수): 선택한 답변
                     """
     )
@@ -135,8 +137,10 @@ public class OnboardingController {
     })
     public ResponseEntity<Void> saveStep(
             @AuthenticationPrincipal UserDetails userDetails,
-            @Valid @RequestBody OnboardingStepAnswerRequest request) {
-        onboardingService.saveStep(Long.valueOf(userDetails.getUsername()), request);
+            @PathVariable int step,
+            @Valid @RequestBody OnboardingStepAnswerBody body) {
+        onboardingService.saveStep(Long.valueOf(userDetails.getUsername()),
+                new OnboardingStepAnswerRequest(step, body.answer()));
         return ResponseEntity.noContent().build();
     }
 
