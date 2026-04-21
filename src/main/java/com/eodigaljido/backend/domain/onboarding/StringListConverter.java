@@ -26,8 +26,13 @@ public class StringListConverter implements AttributeConverter<List<String>, Str
     @SuppressWarnings("unchecked")
     public List<String> convertToEntityAttribute(String dbData) {
         if (dbData == null || dbData.isBlank()) return null;
+        // JSON 배열 형식이 아닌 기존 plain string 값은 단일 원소 리스트로 감쌈
+        String trimmed = dbData.trim();
+        if (!trimmed.startsWith("[")) {
+            return List.of(trimmed);
+        }
         try {
-            return MAPPER.readValue(dbData, List.class);
+            return MAPPER.readValue(trimmed, List.class);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("List<String> 역직렬화 실패", e);
         }
