@@ -35,25 +35,33 @@ public class AuthService {
 
     @Transactional
     public LoginResponse register(RegisterRequest request) {
-        if (userRepository.existsByUserId(request.userId())) {
+        String userId = (request.userId() != null && !request.userId().isBlank()) ? request.userId() : null;
+        String email  = (request.email()  != null && !request.email().isBlank())  ? request.email()  : null;
+
+        if (userId == null && email == null) {
+            throw new AuthException("아이디 또는 이메일 중 하나는 필수입니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        if (userId != null && userRepository.existsByUserId(userId)) {
             throw new AuthException("이미 사용 중인 아이디입니다.", HttpStatus.CONFLICT);
         }
 
-        Optional<User> existingByEmail = userRepository.findByEmail(request.email());
-
         // 동일 이메일로 OAuth 계정이 이미 있으면 LOCAL 비밀번호를 추가(연동)
-        if (existingByEmail.isPresent()) {
-            User existing = existingByEmail.get();
-            if (existing.getPasswordHash() != null) {
-                throw new AuthException("이미 이메일/비밀번호로 가입된 계정입니다.", HttpStatus.CONFLICT);
+        if (email != null) {
+            Optional<User> existingByEmail = userRepository.findByEmail(email);
+            if (existingByEmail.isPresent()) {
+                User existing = existingByEmail.get();
+                if (existing.getPasswordHash() != null) {
+                    throw new AuthException("이미 이메일/비밀번호로 가입된 계정입니다.", HttpStatus.CONFLICT);
+                }
+                if (profileRepository.existsByNicknameAndUserNot(request.nickname(), existing)) {
+                    throw new AuthException("이미 사용 중인 닉네임입니다.", HttpStatus.CONFLICT);
+                }
+                if (userId != null) existing.updateUserId(userId);
+                existing.linkLocalPassword(passwordEncoder.encode(request.password()));
+                profileRepository.findByUser(existing).ifPresent(p -> p.updateNickname(request.nickname()));
+                return issueTokens(existing, null, null);
             }
-            if (profileRepository.existsByNicknameAndUserNot(request.nickname(), existing)) {
-                throw new AuthException("이미 사용 중인 닉네임입니다.", HttpStatus.CONFLICT);
-            }
-            existing.updateUserId(request.userId());
-            existing.linkLocalPassword(passwordEncoder.encode(request.password()));
-            profileRepository.findByUser(existing).ifPresent(p -> p.updateNickname(request.nickname()));
-            return issueTokens(existing, null, null);
         }
 
         if (profileRepository.existsByNickname(request.nickname())) {
@@ -62,8 +70,8 @@ public class AuthService {
 
         User user = User.builder()
                 .uuid(UUID.randomUUID().toString())
-                .userId(request.userId())
-                .email(request.email())
+                .userId(userId)
+                .email(email)
                 .passwordHash(passwordEncoder.encode(request.password()))
                 .build();
 

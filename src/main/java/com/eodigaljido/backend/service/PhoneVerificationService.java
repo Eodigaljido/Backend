@@ -21,7 +21,7 @@ public class PhoneVerificationService {
     private static final int CODE_EXPIRY_MINUTES = 3;
     private static final int VERIFIED_EXPIRY_MINUTES = 10;
     private static final int MAX_ATTEMPTS = 5;
-    private static final int MAX_DAILY_SMS = 5;        // 번호당 하루 최대 SMS 발송 횟수
+    private static final int MAX_DAILY_SMS = 50;       // 번호당 하루 최대 SMS 발송 횟수
     private static final int MAX_GLOBAL_DAILY_SMS = 50; // 솔라피 전체 하루 최대 발송 횟수
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
