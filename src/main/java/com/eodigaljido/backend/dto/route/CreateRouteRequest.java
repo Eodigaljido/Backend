@@ -31,6 +31,15 @@ public record CreateRouteRequest(
         @Schema(description = "대표 이미지 URL (최대 512자)", example = "https://example.com/thumbnail.jpg")
         String thumbnailUrl,
 
+        @Schema(description = "지역 태그 (온보딩 매칭용)", example = "서울")
+        String region,
+
+        @Schema(description = "활동 유형 태그 (온보딩 매칭용)", example = "관광")
+        String activityType,
+
+        @Schema(description = "연결할 채팅방 UUID (선택)", example = "550e8400-e29b-41d4-a716-446655440000")
+        String chatRoomUuid,
+
         @Valid
         @Schema(description = "경유지 목록 (순서대로 전달)")
         List<WaypointRequest> waypoints

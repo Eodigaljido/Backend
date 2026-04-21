@@ -1,17 +1,18 @@
 package com.eodigaljido.backend.service;
 
+import com.eodigaljido.backend.domain.chat.ChatRoom;
+import com.eodigaljido.backend.domain.notification.NotificationType;
 import com.eodigaljido.backend.domain.route.Route;
 import com.eodigaljido.backend.domain.route.Route.RouteStatus;
 import com.eodigaljido.backend.domain.route.RouteWaypoint;
 import com.eodigaljido.backend.domain.route.SavedRoute;
 import com.eodigaljido.backend.domain.user.User;
 import com.eodigaljido.backend.dto.route.*;
+import com.eodigaljido.backend.event.NotificationEvent;
 import com.eodigaljido.backend.exception.RouteException;
-import com.eodigaljido.backend.repository.RouteRepository;
-import com.eodigaljido.backend.repository.RouteWaypointRepository;
-import com.eodigaljido.backend.repository.SavedRouteRepository;
-import com.eodigaljido.backend.repository.UserRepository;
+import com.eodigaljido.backend.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +30,10 @@ public class RouteService {
     private final RouteWaypointRepository waypointRepository;
     private final SavedRouteRepository savedRouteRepository;
     private final UserRepository userRepository;
+    private final ChatRoomRepository chatRoomRepository;
+    private final ChatRoomMemberRepository chatRoomMemberRepository;
+    private final OnboardingAnswerRepository onboardingAnswerRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     // ──────────────────────────────────────────────────────────
     // CRUD
@@ -40,6 +45,12 @@ public class RouteService {
 
         RouteStatus status = req.status() != null ? req.status() : RouteStatus.DRAFT;
 
+        ChatRoom chatRoom = null;
+        if (req.chatRoomUuid() != null) {
+            chatRoom = chatRoomRepository.findByUuidAndDeletedAtIsNull(req.chatRoomUuid())
+                    .orElseThrow(() -> new RouteException("채팅방을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        }
+
         Route route = Route.builder()
                 .uuid(UUID.randomUUID().toString())
                 .user(user)
@@ -49,11 +60,19 @@ public class RouteService {
                 .totalDistance(req.totalDistance())
                 .estimatedTime(req.estimatedTime())
                 .thumbnailUrl(req.thumbnailUrl())
+                .chatRoom(chatRoom)
+                .region(req.region())
+                .activityType(req.activityType())
                 .build();
         routeRepository.save(route);
 
         List<RouteWaypoint> waypoints = buildWaypoints(route, req.waypoints());
         waypointRepository.saveAll(waypoints);
+
+        // 채팅방 연결 코스 생성 시 CHAT_ROUTE_CHANGED 알림
+        if (chatRoom != null) {
+            publishChatRouteChangedEvents(chatRoom, userId, route, "코스가 생성되었습니다: " + route.getTitle());
+        }
 
         return RouteResponse.of(route, waypoints.stream().map(WaypointResponse::from).toList());
     }
@@ -83,10 +102,16 @@ public class RouteService {
         waypointRepository.deleteAllByRoute(route);
 
         route.update(req.title(), req.description(), req.totalDistance(),
-                req.estimatedTime(), req.thumbnailUrl());
+                req.estimatedTime(), req.thumbnailUrl(), req.region(), req.activityType());
 
         List<RouteWaypoint> waypoints = buildWaypoints(route, req.waypoints());
         waypointRepository.saveAll(waypoints);
+
+        // 채팅방 연결 코스 수정 시 CHAT_ROUTE_CHANGED 알림
+        if (route.getChatRoom() != null) {
+            publishChatRouteChangedEvents(route.getChatRoom(), userId, route,
+                    "코스가 수정되었습니다: " + route.getTitle());
+        }
 
         return RouteResponse.of(route, waypoints.stream().map(WaypointResponse::from).toList());
     }
@@ -130,6 +155,18 @@ public class RouteService {
                 .user(user)
                 .route(route)
                 .build());
+
+        // 코스 소유자에게 ROUTE_FAVORITED 알림 (자기 코스 제외)
+        if (!route.getUser().getId().equals(userId)) {
+            String saverNickname = user.getUserId();
+            eventPublisher.publishEvent(NotificationEvent.of(
+                    route.getUser().getId(), userId,
+                    NotificationType.ROUTE_FAVORITED,
+                    "코스 즐겨찾기",
+                    saverNickname + "님이 회원님의 코스를 즐겨찾기했습니다: " + route.getTitle(),
+                    route.getUuid(), "ROUTE"
+            ));
+        }
     }
 
     @Transactional
@@ -159,6 +196,22 @@ public class RouteService {
         Route route = findActiveRouteById(id);
         verifyOwner(route, userId);
         route.enableSharing();
+
+        // 취향 매칭 사용자들에게 ROUTE_RECOMMENDED 알림 (비동기로 처리됨)
+        if (route.getRegion() != null || route.getActivityType() != null) {
+            onboardingAnswerRepository
+                    .findMatchingUsers(route.getRegion(), route.getActivityType())
+                    .stream()
+                    .filter(answer -> !answer.getUser().getId().equals(userId))
+                    .limit(1000)
+                    .forEach(answer -> eventPublisher.publishEvent(NotificationEvent.of(
+                            answer.getUser().getId(), userId,
+                            NotificationType.ROUTE_RECOMMENDED,
+                            "추천 코스",
+                            "취향에 맞는 코스가 공유되었습니다: " + route.getTitle(),
+                            route.getUuid(), "ROUTE"
+                    )));
+        }
     }
 
     @Transactional
@@ -217,6 +270,61 @@ public class RouteService {
     }
 
     // ──────────────────────────────────────────────────────────
+    // 코스 복사
+    // ──────────────────────────────────────────────────────────
+
+    @Transactional
+    public RouteResponse copyRoute(Long userId, Long id) {
+        Route original = findActiveRouteById(id);
+        if (!original.isShared() && !original.getUser().getId().equals(userId)) {
+            throw new RouteException("공유되지 않은 루트는 복사할 수 없습니다.", HttpStatus.FORBIDDEN);
+        }
+
+        User user = findUser(userId);
+
+        Route copied = Route.builder()
+                .uuid(UUID.randomUUID().toString())
+                .user(user)
+                .title(original.getTitle() + " (복사)")
+                .description(original.getDescription())
+                .status(RouteStatus.DRAFT)
+                .totalDistance(original.getTotalDistance())
+                .estimatedTime(original.getEstimatedTime())
+                .thumbnailUrl(original.getThumbnailUrl())
+                .region(original.getRegion())
+                .activityType(original.getActivityType())
+                .build();
+        routeRepository.save(copied);
+
+        List<RouteWaypoint> waypoints = waypointRepository.findByRouteOrderBySequenceAsc(original)
+                .stream()
+                .map(w -> RouteWaypoint.builder()
+                        .route(copied)
+                        .sequence(w.getSequence())
+                        .name(w.getName())
+                        .latitude(w.getLatitude())
+                        .longitude(w.getLongitude())
+                        .address(w.getAddress())
+                        .memo(w.getMemo())
+                        .build())
+                .toList();
+        waypointRepository.saveAll(waypoints);
+
+        // 원본 소유자에게 ROUTE_USED 알림 (자기 코스 제외)
+        if (!original.getUser().getId().equals(userId)) {
+            eventPublisher.publishEvent(NotificationEvent.of(
+                    original.getUser().getId(), userId,
+                    NotificationType.ROUTE_USED,
+                    "코스 사용",
+                    user.getUserId() + "님이 회원님의 코스를 사용했습니다: " + original.getTitle(),
+                    original.getUuid(), "ROUTE"
+            ));
+        }
+
+        return RouteResponse.of(copied, waypoints.stream().map(WaypointResponse::from).toList());
+    }
+
+    // ──────────────────────────────────────────────────────────
     // private helpers
     // ──────────────────────────────────────────────────────────
 
@@ -257,5 +365,19 @@ public class RouteService {
                 .map(WaypointResponse::from)
                 .toList();
         return RouteResponse.of(route, waypoints);
+    }
+
+    private void publishChatRouteChangedEvents(ChatRoom chatRoom, Long actorUserId,
+                                               Route route, String body) {
+        chatRoomMemberRepository.findByRoomAndLeftAtIsNull(chatRoom)
+                .stream()
+                .filter(m -> !m.getUser().getId().equals(actorUserId))
+                .forEach(m -> eventPublisher.publishEvent(NotificationEvent.of(
+                        m.getUser().getId(), actorUserId,
+                        NotificationType.CHAT_ROUTE_CHANGED,
+                        "코스 변경",
+                        body,
+                        route.getUuid(), "ROUTE"
+                )));
     }
 }

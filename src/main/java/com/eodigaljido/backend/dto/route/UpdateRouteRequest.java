@@ -27,6 +27,12 @@ public record UpdateRouteRequest(
         @Schema(description = "대표 이미지 URL (최대 512자)", example = "https://example.com/new-thumbnail.jpg")
         String thumbnailUrl,
 
+        @Schema(description = "지역 태그 (온보딩 매칭용)", example = "서울")
+        String region,
+
+        @Schema(description = "활동 유형 태그 (온보딩 매칭용)", example = "관광")
+        String activityType,
+
         @Valid
         @Schema(description = "경유지 목록 — 기존 경유지를 전체 삭제하고 새 목록으로 교체합니다")
         List<WaypointRequest> waypoints

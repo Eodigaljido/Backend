@@ -486,4 +486,34 @@ public class RouteController {
         Long userId = Long.parseLong(userDetails.getUsername());
         return ResponseEntity.ok(routeService.getSharingRoutes(userId));
     }
+
+    @PostMapping("/{id}/copy")
+    @Operation(
+            summary = "루트 복사",
+            description = """
+                    공유된 루트를 내 루트로 복사합니다. 원본 소유자에게 알림이 전송됩니다.
+
+                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
+
+                    **Path Variable:**
+                    - `id`: 복사할 루트의 ID
+
+                    본인 루트이거나 공유 활성화된 루트만 복사할 수 있습니다.
+                    """,
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "복사된 루트 상세 정보 반환"),
+            @ApiResponse(responseCode = "403", description = "공유되지 않은 타인의 루트",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "존재하지 않는 루트",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<RouteResponse> copyRoute(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PathVariable Long id) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        RouteResponse response = routeService.copyRoute(userId, id);
+        return ResponseEntity.status(201).body(response);
+    }
 }

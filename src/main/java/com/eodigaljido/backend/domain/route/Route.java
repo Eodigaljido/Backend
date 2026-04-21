@@ -1,5 +1,6 @@
 package com.eodigaljido.backend.domain.route;
 
+import com.eodigaljido.backend.domain.chat.ChatRoom;
 import com.eodigaljido.backend.domain.common.BaseTimeEntity;
 import com.eodigaljido.backend.domain.user.User;
 import jakarta.persistence.*;
@@ -59,6 +60,16 @@ public class Route extends BaseTimeEntity {
     @Column(name = "thumbnail_url", length = 512)
     private String thumbnailUrl;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "chat_room_id")
+    private ChatRoom chatRoom;
+
+    @Column(name = "region", length = 50)
+    private String region;
+
+    @Column(name = "activity_type", length = 50)
+    private String activityType;
+
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
@@ -67,12 +78,14 @@ public class Route extends BaseTimeEntity {
     }
 
     public void update(String title, String description, BigDecimal totalDistance,
-                       Integer estimatedTime, String thumbnailUrl) {
+                       Integer estimatedTime, String thumbnailUrl, String region, String activityType) {
         this.title = title;
         this.description = description;
         this.totalDistance = totalDistance;
         this.estimatedTime = estimatedTime;
         this.thumbnailUrl = thumbnailUrl;
+        this.region = region;
+        this.activityType = activityType;
     }
 
     public void updateStatus(RouteStatus status) {
