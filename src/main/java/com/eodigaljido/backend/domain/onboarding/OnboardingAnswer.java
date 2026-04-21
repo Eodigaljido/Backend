@@ -6,6 +6,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Entity
 @Table(name = "onboarding_answers")
@@ -29,8 +30,9 @@ public class OnboardingAnswer extends BaseTimeEntity {
     @Column(name = "age", length = 20)
     private String age;
 
-    @Column(name = "activity", length = 50)
-    private String activity;
+    @Convert(converter = StringListConverter.class)
+    @Column(name = "activity", columnDefinition = "TEXT")
+    private List<String> activity;
 
     @Column(name = "gender", length = 20)
     private String gender;
@@ -60,10 +62,13 @@ public class OnboardingAnswer extends BaseTimeEntity {
         switch (step) {
             case 1 -> this.region = answer;
             case 2 -> this.age = answer;
-            case 3 -> this.activity = answer;
             case 4 -> this.gender = answer;
             default -> throw new IllegalArgumentException("잘못된 스텝 번호입니다: " + step);
         }
+    }
+
+    public void updateActivity(List<String> activities) {
+        this.activity = activities;
     }
 
     public void resetAnswers() {

@@ -170,6 +170,10 @@
 
       <!-- ① 기본 정보 -->
       <div class="form-group">
+        <label>아이디 (8자 이하)</label>
+        <input id="regUserId" type="text" placeholder="john123" maxlength="8">
+      </div>
+      <div class="form-group">
         <label>이메일</label>
         <input id="regEmail" type="email" placeholder="user@example.com">
       </div>
@@ -652,17 +656,18 @@
   }
 
   async function register() {
+    const userId   = document.getElementById('regUserId').value.trim();
     const email    = document.getElementById('regEmail').value.trim();
     const password = document.getElementById('regPassword').value;
     const nickname = document.getElementById('regNickname').value.trim();
     const phone    = document.getElementById('regPhone').value.trim();
-    if (!email || !password || !nickname || !phone) { alert('모든 항목을 입력해주세요.'); return; }
+    if (!userId || !email || !password || !nickname || !phone) { alert('모든 항목을 입력해주세요.'); return; }
 
-    const result = await callApi('POST', '/auth/register', { email, password, nickname, phone });
+    const result = await callApi('POST', '/auth/register', { userId, email, password, nickname, phone });
     if (result && result.status === 200 && result.data.accessToken) {
       saveTokens(result.data.accessToken, result.data.refreshToken);
       // 폼 초기화
-      ['regEmail','regPassword','regNickname','regCode'].forEach(id => document.getElementById(id).value = '');
+      ['regUserId','regEmail','regPassword','regNickname','regCode'].forEach(id => document.getElementById(id).value = '');
       document.getElementById('regPhone').value = '';
       document.getElementById('regPhone').disabled = false;
       hide('regVerifiedBox');

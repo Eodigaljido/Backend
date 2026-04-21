@@ -43,7 +43,7 @@ public record OnboardingQuestionsResponse(
                         4,
                         "gender",
                         "성별이\n무엇인가요?",
-                        "성별에 따라 가장 있기있는 장소를 알려드릴게요!",
+                        "성별에 따라 가장 인기있는 장소를 알려드릴게요!",
                         List.of("남성", "여성", "기타")
                 )
         ));
