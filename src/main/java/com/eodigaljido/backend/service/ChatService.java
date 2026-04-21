@@ -3,13 +3,17 @@ package com.eodigaljido.backend.service;
 import com.eodigaljido.backend.domain.chat.ChatMessage;
 import com.eodigaljido.backend.domain.chat.ChatRoom;
 import com.eodigaljido.backend.domain.chat.ChatRoomMember;
+import com.eodigaljido.backend.domain.notification.NotificationType;
+import com.eodigaljido.backend.domain.route.Route;
 import com.eodigaljido.backend.domain.user.Profile;
 import com.eodigaljido.backend.domain.user.User;
 import com.eodigaljido.backend.dto.chat.*;
 import com.eodigaljido.backend.dto.chat.ChatEventEnvelope.EventType;
+import com.eodigaljido.backend.event.NotificationEvent;
 import com.eodigaljido.backend.exception.ChatException;
 import com.eodigaljido.backend.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -37,7 +41,9 @@ public class ChatService {
     private final ChatRoomMemberRepository chatRoomMemberRepository;
     private final UserRepository userRepository;
     private final ProfileRepository profileRepository;
+    private final RouteRepository routeRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public CreateChatRoomResponse createRoom(Long userId, CreateChatRoomRequest req) {
@@ -102,6 +108,17 @@ public class ChatService {
                 ChatRoomMember.builder().room(room).user(target).role(ChatRoomMember.MemberRole.MEMBER).build()
         );
 
+        User requester = getUser(requesterId);
+        String requesterNickname = profileRepository.findByUser(requester)
+                .map(Profile::getNickname).orElse(requester.getUserId());
+        eventPublisher.publishEvent(NotificationEvent.of(
+                target.getId(), requesterId,
+                NotificationType.CHAT_ROOM_INVITED,
+                "채팅방 초대",
+                requesterNickname + "님이 채팅방에 초대했습니다.",
+                room.getUuid(), "CHAT_ROOM"
+        ));
+
         List<ChatRoomMember> members = chatRoomMemberRepository.findByRoomAndLeftAtIsNull(room);
         return buildRoomResponse(room, members, requesterId);
     }
@@ -163,15 +180,70 @@ public class ChatService {
         ChatRoomMember senderMembership = getMembership(room, userId);
         User me = senderMembership.getUser();
 
+        ChatMessage.MessageType msgType = "ROUTE".equalsIgnoreCase(req.messageType())
+                ? ChatMessage.MessageType.ROUTE : ChatMessage.MessageType.TEXT;
+
+        Route refRoute = null;
+        if (msgType == ChatMessage.MessageType.ROUTE && req.routeUuid() != null) {
+            refRoute = routeRepository.findByUuidAndStatusNot(req.routeUuid(), Route.RouteStatus.DELETED)
+                    .orElse(null);
+        }
+
         ChatMessage message = ChatMessage.builder()
                 .uuid(UUID.randomUUID().toString())
                 .room(room)
                 .sender(me)
-                .type(ChatMessage.MessageType.TEXT)
+                .type(msgType)
                 .content(req.content())
+                .refRoute(refRoute)
                 .build();
         chatMessageRepository.save(message);
         senderMembership.updateLastReadAt();
+
+        String senderNickname = profileRepository.findByUser(me)
+                .map(Profile::getNickname).orElse(me.getUserId());
+        List<ChatRoomMember> otherMembers = chatRoomMemberRepository.findByRoomAndLeftAtIsNull(room)
+                .stream().filter(m -> !m.getUser().getId().equals(userId)).toList();
+
+        final Route finalRefRoute = refRoute;
+        for (ChatRoomMember member : otherMembers) {
+            Long recipientId = member.getUser().getId();
+            // CHAT_MESSAGE 알림
+            eventPublisher.publishEvent(NotificationEvent.of(
+                    recipientId, userId,
+                    NotificationType.CHAT_MESSAGE,
+                    senderNickname,
+                    req.content().length() > 50 ? req.content().substring(0, 50) + "…" : req.content(),
+                    room.getUuid(), "CHAT_ROOM"
+            ));
+            // CHAT_ROUTE_SHARED 알림
+            if (msgType == ChatMessage.MessageType.ROUTE && finalRefRoute != null) {
+                eventPublisher.publishEvent(NotificationEvent.of(
+                        recipientId, userId,
+                        NotificationType.CHAT_ROUTE_SHARED,
+                        "코스 공유",
+                        senderNickname + "님이 코스를 공유했습니다: " + finalRefRoute.getTitle(),
+                        finalRefRoute.getUuid(), "ROUTE"
+                ));
+            }
+        }
+
+        // CHAT_MENTION 알림
+        if (req.mentionedUserUuids() != null) {
+            for (String mentionedUuid : req.mentionedUserUuids()) {
+                userRepository.findByUuid(mentionedUuid).ifPresent(mentionedUser -> {
+                    if (!mentionedUser.getId().equals(userId)) {
+                        eventPublisher.publishEvent(NotificationEvent.of(
+                                mentionedUser.getId(), userId,
+                                NotificationType.CHAT_MENTION,
+                                senderNickname + "님이 멘션했습니다",
+                                req.content().length() > 50 ? req.content().substring(0, 50) + "…" : req.content(),
+                                room.getUuid(), "CHAT_ROOM"
+                        ));
+                    }
+                });
+            }
+        }
 
         ChatMessageResponse response = toMessageResponse(message);
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
