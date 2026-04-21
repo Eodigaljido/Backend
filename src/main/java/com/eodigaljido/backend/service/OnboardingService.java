@@ -90,7 +90,11 @@ public class OnboardingService {
             answer.resetAnswers();
         }
 
-        answer.updateStep(request.step(), request.answer());
+        if (request.step() == 3) {
+            answer.updateActivity(request.answers());
+        } else {
+            answer.updateStep(request.step(), request.answers().get(0));
+        }
     }
 
     // 최종 제출
@@ -108,7 +112,7 @@ public class OnboardingService {
 
         answer.updateStep(1, request.region());
         answer.updateStep(2, request.age());
-        answer.updateStep(3, request.activity());
+        answer.updateActivity(request.activity());
         answer.updateStep(4, request.gender());
         answer.complete();
 
@@ -139,7 +143,7 @@ public class OnboardingService {
 
         if (request.region() != null) answer.updateStep(1, request.region());
         if (request.age() != null) answer.updateStep(2, request.age());
-        if (request.activity() != null) answer.updateStep(3, request.activity());
+        if (request.activity() != null && !request.activity().isEmpty()) answer.updateActivity(request.activity());
         if (request.gender() != null) answer.updateStep(4, request.gender());
     }
 

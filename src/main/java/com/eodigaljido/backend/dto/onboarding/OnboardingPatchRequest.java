@@ -1,8 +1,10 @@
 package com.eodigaljido.backend.dto.onboarding;
 
+import java.util.List;
+
 public record OnboardingPatchRequest(
         String region,
         String age,
-        String activity,
+        List<String> activity,
         String gender
 ) {}

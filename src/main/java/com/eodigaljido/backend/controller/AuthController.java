@@ -37,23 +37,26 @@ public class AuthController {
     @Operation(
             summary = "회원가입",
             description = """
-                    이메일/비밀번호로 신규 회원을 등록합니다.
+                    아이디 또는 이메일/비밀번호로 신규 회원을 등록합니다.
 
                     **Request Body:**
-                    - `email` (필수): 가입할 이메일 주소 (중복 불가)
-                    - `password` (필수): 8~100자 비밀번호
+                    - `userId` (선택): 사용자 아이디 8자 이하 (중복 불가). `email` 없이 이것만으로 가입 가능.
+                    - `email` (선택): 가입할 이메일 주소 (중복 불가). `userId` 없이 이것만으로 가입 가능.
+                    - `password` (필수): 8~100자, 소문자·숫자·특수문자 각 1개 이상 포함
                     - `nickname` (필수): 2~50자 닉네임 (중복 불가)
 
-                    **이후 절차:** 회원가입 후 아래 두 단계를 완료해야 전화번호가 등록됩니다.
+                    > `userId`와 `email` 중 **하나 이상**은 반드시 포함해야 합니다.
+
+                    **이후 절차 (선택):** 전화번호 등록이 필요한 경우
                     1. `POST /auth/phone/code` — phone, purpose=REGISTER 로 인증번호 발송
-                    2. `POST /auth/phone/verify` — 수신한 6자리 코드 검증 (Authorization 헤더 포함 시 자동으로 전화번호 저장)
+                    2. `POST /auth/phone/verify` — Authorization 헤더 포함 시 인증 성공과 동시에 전화번호 저장
                     """
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "회원가입 성공"),
-            @ApiResponse(responseCode = "400", description = "요청 값이 올바르지 않음",
+            @ApiResponse(responseCode = "200", description = "회원가입 성공, accessToken / refreshToken 반환"),
+            @ApiResponse(responseCode = "400", description = "요청 값이 올바르지 않음 (userId·email 모두 누락 포함)",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "409", description = "이미 사용 중인 이메일 또는 닉네임",
+            @ApiResponse(responseCode = "409", description = "이미 사용 중인 아이디·이메일 또는 닉네임",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     ResponseEntity<LoginResponse> register(@Valid @RequestBody RegisterRequest request) {
@@ -64,11 +67,13 @@ public class AuthController {
     @Operation(
             summary = "로그인",
             description = """
-                    이메일/비밀번호로 로그인 후 access token과 refresh token을 발급합니다.
+                    아이디 또는 이메일/비밀번호로 로그인 후 access token과 refresh token을 발급합니다.
 
                     **Request Body:**
-                    - `email` (필수): 가입한 이메일 주소
+                    - `identifier` (필수): 가입 시 등록한 아이디 또는 이메일 주소
                     - `password` (필수): 비밀번호
+
+                    `@`가 포함되면 이메일로, 포함되지 않으면 아이디로 조회합니다.
 
                     **Response:**
                     - `accessToken`: API 인증에 사용하는 JWT (유효기간 1시간), 이후 요청의 `Authorization: Bearer {accessToken}` 헤더에 포함
@@ -79,7 +84,7 @@ public class AuthController {
             @ApiResponse(responseCode = "200", description = "로그인 성공, accessToken / refreshToken 반환"),
             @ApiResponse(responseCode = "400", description = "요청 값이 올바르지 않음",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "401", description = "이메일 또는 비밀번호가 일치하지 않음",
+            @ApiResponse(responseCode = "401", description = "아이디/이메일 또는 비밀번호가 일치하지 않음",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request,
@@ -178,15 +183,20 @@ public class AuthController {
 
                     **Request Body:**
                     - `code` (필수): Google 인가 코드 (redirect URI로 전달된 `code` 쿼리 파라미터 값)
+                    - `redirectUri` (선택): 인가 코드 발급 시 사용한 redirect_uri. 생략 시 서버 기본값 사용.
+                      서버에 등록된 허용 목록(`allowedRedirectUris`) 외의 값은 **400** 반환.
 
                     **Response:**
                     - `accessToken` / `refreshToken` 발급 (신규 유저는 자동 가입 후 발급)
                     - `isNewUser`: true이면 신규 가입, false이면 기존 계정 로그인
+
+                    > 동일 이메일로 이미 가입된 계정이 있으면 자동 연동하지 않고 **409** 반환합니다.
+                    > 기존 계정으로 로그인 후 `/auth/oauth/google/link`로 연동하세요.
                     """
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "로그인/회원가입 성공"),
-            @ApiResponse(responseCode = "400", description = "유효하지 않은 Google 인가 코드",
+            @ApiResponse(responseCode = "400", description = "유효하지 않은 Google 인가 코드 또는 허용되지 않은 redirect_uri",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     ResponseEntity<OAuthLoginResponse> googleOAuth(@Valid @RequestBody OAuthLoginRequest request) {
@@ -206,15 +216,20 @@ public class AuthController {
 
                     **Request Body:**
                     - `code` (필수): Kakao 인가 코드 (redirect URI로 전달된 `code` 쿼리 파라미터 값)
+                    - `redirectUri` (선택): 인가 코드 발급 시 사용한 redirect_uri. 생략 시 서버 기본값 사용.
+                      서버에 등록된 허용 목록(`allowedRedirectUris`) 외의 값은 **400** 반환.
 
                     **Response:**
                     - `accessToken` / `refreshToken` 발급 (신규 유저는 자동 가입 후 발급)
                     - `isNewUser`: true이면 신규 가입, false이면 기존 계정 로그인
+
+                    > 동일 이메일로 이미 가입된 계정이 있으면 자동 연동하지 않고 **409** 반환합니다.
+                    > 기존 계정으로 로그인 후 `/auth/oauth/kakao/link`로 연동하세요.
                     """
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "로그인/회원가입 성공"),
-            @ApiResponse(responseCode = "400", description = "유효하지 않은 Kakao 인가 코드",
+            @ApiResponse(responseCode = "400", description = "유효하지 않은 Kakao 인가 코드 또는 허용되지 않은 redirect_uri",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     ResponseEntity<OAuthLoginResponse> kakaoOAuth(@Valid @RequestBody OAuthLoginRequest request) {
@@ -377,7 +392,8 @@ public class AuthController {
                       - `CHANGE_PHONE` — 전화번호 변경 시 사용
 
                     인증번호는 **3분간** 유효하며, 동일 번호로 재발송 시 이전 코드는 무효가 됩니다.
-                    최대 **5회** 오입력 시 코드가 잠기며 재발송이 필요합니다.
+                    최대 **50회** 오입력 시 코드가 잠기며 재발송이 필요합니다.
+                    동일 번호 하루 최대 **50회**, 전체 서비스 하루 최대 **50회** 발송 제한이 있습니다.
                     """
     )
     @ApiResponses({

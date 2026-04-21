@@ -123,7 +123,9 @@ public class OnboardingController {
                     - `step` (필수): 현재 스텝 번호 (1~4)
 
                     **Request Body:**
-                    - `answer` (필수): 선택한 답변
+                    - `answers` (필수): 선택한 답변 목록 (List)
+                      - step 1·2·4 (단일 선택): 항목 1개만 포함 (`["서울특별시"]`)
+                      - step 3 activity (복수 선택 가능): 1개 이상 포함 (`["운동/건강", "예술/문화"]`)
                     """
     )
     @ApiResponses({
@@ -140,7 +142,7 @@ public class OnboardingController {
             @PathVariable int step,
             @Valid @RequestBody OnboardingStepAnswerBody body) {
         onboardingService.saveStep(Long.valueOf(userDetails.getUsername()),
-                new OnboardingStepAnswerRequest(step, body.answer()));
+                new OnboardingStepAnswerRequest(step, body.answers()));
         return ResponseEntity.noContent().build();
     }
 
@@ -153,10 +155,10 @@ public class OnboardingController {
                     **헤더:** `Authorization: Bearer {accessToken}` (필수)
 
                     **Request Body:**
-                    - `region` (필수): 거주 지역
-                    - `age` (필수): 나이대
-                    - `activity` (필수): 좋아하는 활동
-                    - `gender` (필수): 성별
+                    - `region` (필수): 거주 지역 (문자열)
+                    - `age` (필수): 나이대 (문자열)
+                    - `activity` (필수): 좋아하는 활동 목록 (List, 복수 선택 가능, 예: `["운동/건강", "예술/문화"]`)
+                    - `gender` (필수): 성별 (문자열)
                     """
     )
     @ApiResponses({
@@ -231,10 +233,10 @@ public class OnboardingController {
                     **헤더:** `Authorization: Bearer {accessToken}` (필수)
 
                     **Request Body:** (변경할 항목만 포함)
-                    - `region` (선택): 거주 지역
-                    - `age` (선택): 나이대
-                    - `activity` (선택): 좋아하는 활동
-                    - `gender` (선택): 성별
+                    - `region` (선택): 거주 지역 (문자열)
+                    - `age` (선택): 나이대 (문자열)
+                    - `activity` (선택): 좋아하는 활동 목록 (List, 예: `["운동/건강", "여행/레저"]`)
+                    - `gender` (선택): 성별 (문자열)
                     """
     )
     @ApiResponses({
