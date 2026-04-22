@@ -41,11 +41,18 @@ public class ChatRoom extends BaseTimeEntity {
     @JoinColumn(name = "created_by", nullable = false)
     private User createdBy;
 
+    @Column(name = "profile_image_url", length = 512)
+    private String profileImageUrl;
+
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
     public void updateName(String name) {
         this.name = name;
+    }
+
+    public void updateProfileImage(String profileImageUrl) {
+        this.profileImageUrl = profileImageUrl;
     }
 
     public void delete() {

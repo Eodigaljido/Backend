@@ -35,7 +35,9 @@ public class SecurityConfig {
             "/auth/oauth/google", "/auth/oauth/kakao", "/auth/oauth/config",
             "/auth/phone/code", "/auth/phone/verify",
             "/ws/chat/**",
-            "/routes/shared", "/routes/shared/**"
+            "/routes/shared", "/routes/shared/**",
+            "/uploads/**",
+            "/images/**"
     };
 
     // Swagger 엔드포인트 (전체 환경 공개 허용)

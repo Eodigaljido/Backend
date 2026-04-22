@@ -18,8 +18,20 @@ public record ChatMessageResponse(
         @Schema(description = "발신자 프로필 이미지 URL (없으면 null)", example = "https://example.com/profile.jpg")
         String senderProfileImageUrl,
 
+        @Schema(description = "메시지 타입 (TEXT, ROUTE)", example = "TEXT")
+        String messageType,
+
         @Schema(description = "메시지 내용 (삭제된 경우 null)", example = "안녕하세요!")
         String content,
+
+        @Schema(description = "공유된 루트 UUID (messageType=ROUTE 일 때만, 없으면 null)", example = "550e8400-e29b-41d4-a716-446655440000")
+        String routeUuid,
+
+        @Schema(description = "공유된 루트 제목 (messageType=ROUTE 일 때만, 없으면 null)", example = "북한산 둘레길")
+        String routeTitle,
+
+        @Schema(description = "공유된 루트 썸네일 URL (messageType=ROUTE 일 때만, 없으면 null)", example = "https://example.com/thumbnail.jpg")
+        String routeThumbnailUrl,
 
         @Schema(description = "메시지 전송 시각", example = "2026-04-01T10:00:00")
         LocalDateTime createdAt,

@@ -7,7 +7,15 @@ import com.eodigaljido.backend.domain.notification.NotificationType;
 import com.eodigaljido.backend.domain.route.Route;
 import com.eodigaljido.backend.domain.user.Profile;
 import com.eodigaljido.backend.domain.user.User;
-import com.eodigaljido.backend.dto.chat.*;
+import com.eodigaljido.backend.dto.chat.ChatEventEnvelope;
+import com.eodigaljido.backend.dto.chat.ChatMessageResponse;
+import com.eodigaljido.backend.dto.chat.ChatRoomResponse;
+import com.eodigaljido.backend.dto.chat.CreateChatRoomResponse;
+import com.eodigaljido.backend.dto.chat.EditMessageRequest;
+import com.eodigaljido.backend.dto.chat.InviteMemberRequest;
+import com.eodigaljido.backend.dto.chat.SendMessageRequest;
+import com.eodigaljido.backend.dto.chat.ShareRouteRequest;
+import com.eodigaljido.backend.dto.chat.UpdateChatRoomNameRequest;
 import com.eodigaljido.backend.dto.chat.ChatEventEnvelope.EventType;
 import com.eodigaljido.backend.event.NotificationEvent;
 import com.eodigaljido.backend.exception.ChatException;
@@ -18,16 +26,19 @@ import org.springframework.http.HttpStatus;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import org.springframework.data.domain.PageRequest;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -35,6 +46,15 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ChatService {
+
+    private static final List<String> DEFAULT_GROUP_IMAGES = List.of(
+            "/images/chat/group-default-1.png",
+            "/images/chat/group-default-2.png",
+            "/images/chat/group-default-3.png",
+            "/images/chat/group-default-4.png",
+            "/images/chat/group-default-5.png"
+    );
+    private static final Random RANDOM = new Random();
 
     private final ChatRoomRepository chatRoomRepository;
     private final ChatMessageRepository chatMessageRepository;
@@ -44,28 +64,48 @@ public class ChatService {
     private final RouteRepository routeRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final ApplicationEventPublisher eventPublisher;
+    private final FileStorageService fileStorageService;
 
     @Transactional
-    public CreateChatRoomResponse createRoom(Long userId, CreateChatRoomRequest req) {
+    public CreateChatRoomResponse createRoom(Long userId, List<String> memberUuids, String name, MultipartFile image) {
+        if (memberUuids == null || memberUuids.isEmpty()) {
+            throw new ChatException("초대할 멤버를 1명 이상 입력해야 합니다.", HttpStatus.BAD_REQUEST);
+        }
+
         User me = getUser(userId);
 
-        List<User> invitees = req.memberUuids().stream()
+        List<User> invitees = memberUuids.stream()
                 .distinct()
                 .filter(uuid -> !uuid.equals(me.getUuid()))
                 .map(uuid -> userRepository.findByUuid(uuid)
                         .orElseThrow(() -> new ChatException("존재하지 않는 유저입니다: " + uuid, HttpStatus.NOT_FOUND)))
                 .collect(Collectors.toList());
 
-        String roomName = (req.name() != null && !req.name().isBlank()) ? req.name() : null;
+        String roomName = (name != null && !name.isBlank()) ? name : null;
 
         // 초대 인원이 2명 이상이면 GROUP, 그 외 DIRECT
         ChatRoom.RoomType roomType = invitees.size() > 1 ? ChatRoom.RoomType.GROUP : ChatRoom.RoomType.DIRECT;
 
+        String roomUuid = UUID.randomUUID().toString();
+        String profileImageUrl = null;
+        if (roomType == ChatRoom.RoomType.GROUP) {
+            if (image != null && !image.isEmpty()) {
+                try {
+                    profileImageUrl = fileStorageService.store(image, "chat-rooms", roomUuid);
+                } catch (IOException e) {
+                    throw new ChatException("프로필 이미지 업로드 중 오류가 발생했습니다.", HttpStatus.INTERNAL_SERVER_ERROR);
+                }
+            } else {
+                profileImageUrl = randomDefaultImage();
+            }
+        }
+
         ChatRoom room = ChatRoom.builder()
-                .uuid(UUID.randomUUID().toString())
+                .uuid(roomUuid)
                 .createdBy(me)
                 .name(roomName)
                 .type(roomType)
+                .profileImageUrl(profileImageUrl)
                 .build();
         chatRoomRepository.save(room);
 
@@ -76,18 +116,19 @@ public class ChatService {
         }
         chatRoomMemberRepository.saveAll(members);
 
-        String name = room.getName() != null ? room.getName() : generateRoomName(room, members, userId);
+        String resolvedName = room.getName() != null ? room.getName() : generateRoomName(room, members, userId);
 
-        List<String> memberUuids = members.stream().map(m -> m.getUser().getUuid()).toList();
+        List<String> resolvedMemberUuids = members.stream().map(m -> m.getUser().getUuid()).toList();
         List<String> memberUserIds = members.stream().map(m -> m.getUser().getUserId()).toList();
 
         return new CreateChatRoomResponse(
                 room.getUuid(),
-                name,
+                resolvedName,
+                room.getProfileImageUrl(),
                 members.size(),
                 me.getUuid(),
                 me.getUserId(),
-                memberUuids,
+                resolvedMemberUuids,
                 memberUserIds
         );
     }
@@ -180,22 +221,12 @@ public class ChatService {
         ChatRoomMember senderMembership = getMembership(room, userId);
         User me = senderMembership.getUser();
 
-        ChatMessage.MessageType msgType = "ROUTE".equalsIgnoreCase(req.messageType())
-                ? ChatMessage.MessageType.ROUTE : ChatMessage.MessageType.TEXT;
-
-        Route refRoute = null;
-        if (msgType == ChatMessage.MessageType.ROUTE && req.routeUuid() != null) {
-            refRoute = routeRepository.findByUuidAndStatusNot(req.routeUuid(), Route.RouteStatus.DELETED)
-                    .orElse(null);
-        }
-
         ChatMessage message = ChatMessage.builder()
                 .uuid(UUID.randomUUID().toString())
                 .room(room)
                 .sender(me)
-                .type(msgType)
+                .type(ChatMessage.MessageType.TEXT)
                 .content(req.content())
-                .refRoute(refRoute)
                 .build();
         chatMessageRepository.save(message);
         senderMembership.updateLastReadAt();
@@ -205,10 +236,8 @@ public class ChatService {
         List<ChatRoomMember> otherMembers = chatRoomMemberRepository.findByRoomAndLeftAtIsNull(room)
                 .stream().filter(m -> !m.getUser().getId().equals(userId)).toList();
 
-        final Route finalRefRoute = refRoute;
         for (ChatRoomMember member : otherMembers) {
             Long recipientId = member.getUser().getId();
-            // CHAT_MESSAGE 알림
             eventPublisher.publishEvent(NotificationEvent.of(
                     recipientId, userId,
                     NotificationType.CHAT_MESSAGE,
@@ -216,19 +245,8 @@ public class ChatService {
                     req.content().length() > 50 ? req.content().substring(0, 50) + "…" : req.content(),
                     room.getUuid(), "CHAT_ROOM"
             ));
-            // CHAT_ROUTE_SHARED 알림
-            if (msgType == ChatMessage.MessageType.ROUTE && finalRefRoute != null) {
-                eventPublisher.publishEvent(NotificationEvent.of(
-                        recipientId, userId,
-                        NotificationType.CHAT_ROUTE_SHARED,
-                        "코스 공유",
-                        senderNickname + "님이 코스를 공유했습니다: " + finalRefRoute.getTitle(),
-                        finalRefRoute.getUuid(), "ROUTE"
-                ));
-            }
         }
 
-        // CHAT_MENTION 알림
         if (req.mentionedUserUuids() != null) {
             for (String mentionedUuid : req.mentionedUserUuids()) {
                 userRepository.findByUuid(mentionedUuid).ifPresent(mentionedUser -> {
@@ -244,6 +262,49 @@ public class ChatService {
                 });
             }
         }
+
+        ChatMessageResponse response = toMessageResponse(message);
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                messagingTemplate.convertAndSend("/topic/chat/" + roomUuid,
+                        new ChatEventEnvelope(EventType.MESSAGE_CREATED, response));
+            }
+        });
+        return response;
+    }
+
+    @Transactional
+    public ChatMessageResponse shareRoute(Long userId, String roomUuid, ShareRouteRequest req) {
+        ChatRoom room = getActiveRoom(roomUuid);
+        ChatRoomMember senderMembership = getMembership(room, userId);
+        User me = senderMembership.getUser();
+
+        Route route = routeRepository.findByUuidAndStatusNot(req.routeUuid(), Route.RouteStatus.DELETED)
+                .orElseThrow(() -> new ChatException("존재하지 않는 루트입니다.", HttpStatus.NOT_FOUND));
+
+        ChatMessage message = ChatMessage.builder()
+                .uuid(UUID.randomUUID().toString())
+                .room(room)
+                .sender(me)
+                .type(ChatMessage.MessageType.ROUTE)
+                .content(route.getTitle())
+                .refRoute(route)
+                .build();
+        chatMessageRepository.save(message);
+        senderMembership.updateLastReadAt();
+
+        String senderNickname = profileRepository.findByUser(me)
+                .map(Profile::getNickname).orElse(me.getUserId());
+        chatRoomMemberRepository.findByRoomAndLeftAtIsNull(room).stream()
+                .filter(m -> !m.getUser().getId().equals(userId))
+                .forEach(member -> eventPublisher.publishEvent(NotificationEvent.of(
+                        member.getUser().getId(), userId,
+                        NotificationType.CHAT_ROUTE_SHARED,
+                        "루트 공유",
+                        senderNickname + "님이 루트를 공유했습니다: " + route.getTitle(),
+                        route.getUuid(), "ROUTE"
+                )));
 
         ChatMessageResponse response = toMessageResponse(message);
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
@@ -368,6 +429,55 @@ public class ChatService {
         membership.updateLastReadAt();
     }
 
+    @Transactional
+    public ChatRoomResponse updateRoomProfileImage(Long userId, String roomUuid, MultipartFile image) {
+        ChatRoom room = getActiveRoom(roomUuid);
+        ChatRoomMember membership = getMembership(room, userId);
+        if (membership.getRole() != ChatRoomMember.MemberRole.ADMIN) {
+            throw new ChatException("프로필 이미지 변경 권한이 없습니다.", HttpStatus.FORBIDDEN);
+        }
+        if (room.getType() != ChatRoom.RoomType.GROUP) {
+            throw new ChatException("그룹 채팅방에서만 프로필 이미지를 설정할 수 있습니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        String oldUrl = room.getProfileImageUrl();
+        String newUrl;
+        try {
+            newUrl = fileStorageService.store(image, "chat-rooms", room.getUuid());
+        } catch (IOException e) {
+            throw new ChatException("파일 업로드 중 오류가 발생했습니다.", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+
+        if (oldUrl != null && oldUrl.startsWith("/uploads/")) {
+            fileStorageService.delete(oldUrl);
+        }
+        room.updateProfileImage(newUrl);
+
+        List<ChatRoomMember> members = chatRoomMemberRepository.findByRoomAndLeftAtIsNull(room);
+        return buildRoomResponse(room, members, userId);
+    }
+
+    @Transactional
+    public ChatRoomResponse resetRoomProfileImage(Long userId, String roomUuid) {
+        ChatRoom room = getActiveRoom(roomUuid);
+        ChatRoomMember membership = getMembership(room, userId);
+        if (membership.getRole() != ChatRoomMember.MemberRole.ADMIN) {
+            throw new ChatException("프로필 이미지 변경 권한이 없습니다.", HttpStatus.FORBIDDEN);
+        }
+        if (room.getType() != ChatRoom.RoomType.GROUP) {
+            throw new ChatException("그룹 채팅방에서만 프로필 이미지를 설정할 수 있습니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        String oldUrl = room.getProfileImageUrl();
+        if (oldUrl != null && oldUrl.startsWith("/uploads/")) {
+            fileStorageService.delete(oldUrl);
+        }
+        room.updateProfileImage(randomDefaultImage());
+
+        List<ChatRoomMember> members = chatRoomMemberRepository.findByRoomAndLeftAtIsNull(room);
+        return buildRoomResponse(room, members, userId);
+    }
+
     // ── helpers ──────────────────────────────────────────────
 
     private ChatRoomResponse buildRoomResponse(ChatRoom room, List<ChatRoomMember> members, Long currentUserId) {
@@ -401,7 +511,7 @@ public class ChatService {
                 .orElse(0L);
 
         return new ChatRoomResponse(
-                room.getUuid(), name, members.size(),
+                room.getUuid(), name, room.getProfileImageUrl(), members.size(),
                 owner.getUuid(), owner.getUserId(),
                 memberUuids, memberUserIds,
                 lastContent, lastMsgAt, unreadCount
@@ -425,12 +535,21 @@ public class ChatService {
         String imageUrl = senderProfile != null ? senderProfile.getProfileImageUrl() : null;
         String content = message.isDeleted() ? null : message.getContent();
 
+        Route route = message.isDeleted() ? null : message.getRefRoute();
+        String routeUuid = route != null ? route.getUuid() : null;
+        String routeTitle = route != null ? route.getTitle() : null;
+        String routeThumbnailUrl = route != null ? route.getThumbnailUrl() : null;
+
         return new ChatMessageResponse(
                 message.getUuid(),
                 message.getSender().getUuid(),
                 nickname,
                 imageUrl,
+                message.getType().name(),
                 content,
+                routeUuid,
+                routeTitle,
+                routeThumbnailUrl,
                 message.getCreatedAt(),
                 message.getEditedAt(),
                 message.isDeleted()
@@ -456,5 +575,9 @@ public class ChatService {
     private ChatMessage getMessage(String messageUuid) {
         return chatMessageRepository.findByUuid(messageUuid)
                 .orElseThrow(() -> new ChatException("메시지를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+    }
+
+    private String randomDefaultImage() {
+        return DEFAULT_GROUP_IMAGES.get(RANDOM.nextInt(DEFAULT_GROUP_IMAGES.size()));
     }
 }

@@ -1,6 +1,13 @@
 package com.eodigaljido.backend.controller;
 
-import com.eodigaljido.backend.dto.chat.*;
+import com.eodigaljido.backend.dto.chat.ChatMessageResponse;
+import com.eodigaljido.backend.dto.chat.ChatRoomResponse;
+import com.eodigaljido.backend.dto.chat.CreateChatRoomResponse;
+import com.eodigaljido.backend.dto.chat.EditMessageRequest;
+import com.eodigaljido.backend.dto.chat.InviteMemberRequest;
+import com.eodigaljido.backend.dto.chat.SendMessageRequest;
+import com.eodigaljido.backend.dto.chat.ShareRouteRequest;
+import com.eodigaljido.backend.dto.chat.UpdateChatRoomNameRequest;
 import com.eodigaljido.backend.dto.common.ErrorResponse;
 import com.eodigaljido.backend.service.ChatService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -11,10 +18,12 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -26,22 +35,29 @@ public class ChatController {
 
     private final ChatService chatService;
 
-    @PostMapping
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(
             summary = "채팅방 생성",
             description = """
-                    새 채팅방을 생성하고 멤버를 초대합니다.
+                    새 채팅방을 생성하고 멤버를 초대합니다. `multipart/form-data`로 요청합니다.
 
                     **헤더:** `Authorization: Bearer {accessToken}` (필수)
 
-                    **Request Body:**
-                    - `memberUuids` (필수): 초대할 멤버의 UUID 목록 (본인 UUID 포함 시 자동 제외)
+                    **Request (multipart/form-data):**
+                    - `memberUuids` (필수): 초대할 멤버의 UUID 목록. 여러 값을 같은 키로 반복 전송 (본인 UUID 포함 시 자동 제외)
                     - `name` (선택): 채팅방 이름 (최대 100자, 미입력 시 멤버 닉네임 조합으로 자동 생성)
+                    - `image` (선택): 그룹 채팅방 프로필 이미지 (JPEG, PNG, GIF, WebP, 최대 10MB). 미입력 시 5개 기본 이미지 중 랜덤 할당. 1:1 채팅방은 무시됨
+
+                    **Response:**
+                    - `uuid`: 채팅방 UUID
+                    - `name`: 채팅방 이름
+                    - `profileImageUrl`: 프로필 이미지 URL (그룹 채팅방만. 직접 업로드하거나 미입력 시 랜덤 기본 이미지. 1:1은 null)
+                    - `memberCount` / `ownerUuid` / `ownerUserId` / `memberUuids` / `memberUserIds`: 멤버 정보
                     """
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "채팅방 생성 성공"),
-            @ApiResponse(responseCode = "400", description = "요청 값이 올바르지 않음",
+            @ApiResponse(responseCode = "400", description = "멤버 UUID 누락 / 이미지 형식 오류",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
@@ -50,9 +66,11 @@ public class ChatController {
     })
     public ResponseEntity<CreateChatRoomResponse> createRoom(
             @AuthenticationPrincipal UserDetails userDetails,
-            @Valid @RequestBody CreateChatRoomRequest req) {
+            @RequestParam List<String> memberUuids,
+            @RequestParam(required = false) String name,
+            @RequestPart(value = "image", required = false) MultipartFile image) {
         Long userId = Long.valueOf(userDetails.getUsername());
-        return ResponseEntity.status(201).body(chatService.createRoom(userId, req));
+        return ResponseEntity.status(201).body(chatService.createRoom(userId, memberUuids, name, image));
     }
 
     @GetMapping
@@ -66,9 +84,10 @@ public class ChatController {
                     **Response:** 참여 중인 채팅방 목록 (생성 최신순)
                     - `uuid`: 채팅방 UUID
                     - `name`: 채팅방 이름 (미설정 시 멤버 닉네임 조합으로 자동 생성)
+                    - `profileImageUrl`: 프로필 이미지 URL (그룹 채팅방만, 1:1은 null)
                     - `memberCount`: 전체 멤버 수
                     - `ownerUuid` / `ownerUserId`: 방장 UUID / 아이디
-                    - `memberUuids` / `memberUserIds`: 채팅방 입장 순서 기준 **최대 3명**의 멤버 UUID / 아이디 목록. 전체 인원은 `memberCount` 참고
+                    - `memberUuids` / `memberUserIds`: 입장 순서 기준 **최대 3명**의 멤버 UUID / 아이디 목록. 전체 인원은 `memberCount` 참고
                     - `lastMessage` / `lastMessageAt`: 마지막 메시지 내용 및 전송 시각 (없으면 null)
                     - `unreadCount`: 읽지 않은 메시지 수
                     """
@@ -172,21 +191,26 @@ public class ChatController {
 
     @PostMapping("/{roomUuid}/messages")
     @Operation(
-            summary = "메시지 전송",
+            summary = "텍스트 메시지 전송",
             description = """
-                    채팅방에 메시지를 전송합니다. 전송 시 WebSocket 구독자(`/topic/chat/{roomUuid}`)에게도 실시간 브로드캐스트됩니다.
+                    채팅방에 텍스트 메시지를 전송합니다. 전송 시 WebSocket 구독자(`/topic/chat/{roomUuid}`)에게도 실시간 브로드캐스트됩니다.
+                    루트 공유는 `POST /chats/{roomUuid}/route` 를 사용하세요.
 
                     **헤더:** `Authorization: Bearer {accessToken}` (필수)
 
-                    **Path Variable:**
-                    - `roomUuid`: 메시지를 전송할 채팅방의 UUID
-
                     **Request Body:**
                     - `content` (필수): 메시지 내용 (최대 2000자)
+                    - `mentionedUserUuids` (선택): @멘션할 유저 UUID 목록
 
-                    **WebSocket 연결 인증:**
-                    STOMP CONNECT 프레임의 `Authorization` 헤더에 `Bearer {accessToken}`을 포함해야 합니다.
-                    토큰이 없거나 유효하지 않으면 연결이 즉시 거부됩니다 (401).
+                    **Response:**
+                    - `uuid`: 메시지 UUID
+                    - `senderUuid` / `senderNickname` / `senderProfileImageUrl`: 발신자 정보
+                    - `messageType`: 메시지 타입 (`TEXT`)
+                    - `content`: 메시지 내용
+                    - `createdAt` / `editedAt`: 전송·수정 시각
+                    - `isDeleted`: 삭제 여부
+
+                    **WebSocket:** STOMP CONNECT 프레임의 `Authorization` 헤더에 `Bearer {accessToken}` 포함 필요
                     """
     )
     @ApiResponses({
@@ -216,12 +240,15 @@ public class ChatController {
 
                     **헤더:** `Authorization: Bearer {accessToken}` (필수)
 
-                    **Path Variable:**
-                    - `roomUuid`: 조회할 채팅방의 UUID
-
                     **Query Parameters:**
                     - `beforeMessageUuid` (선택): 이 UUID 메시지보다 이전 메시지를 조회합니다. 무한 스크롤 시 마지막으로 받은 메시지의 UUID를 전달하세요. 미입력 시 최신 메시지부터 반환합니다.
                     - `limit` (선택): 조회할 메시지 수 (기본값 50, 최대 100)
+
+                    **Response (각 메시지):**
+                    - `messageType`: 메시지 타입 (`TEXT` | `ROUTE`)
+                    - `content`: 메시지 내용 (삭제된 경우 null, ROUTE의 경우 루트 제목)
+                    - `routeUuid` / `routeTitle` / `routeThumbnailUrl`: 루트 공유 메시지일 때만 값, 그 외 null
+                    - `isDeleted`: 삭제 여부
                     """
     )
     @ApiResponses({
@@ -412,6 +439,106 @@ public class ChatController {
         Long userId = Long.valueOf(userDetails.getUsername());
         chatService.kickMember(userId, roomUuid, targetUuid);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{roomUuid}/route")
+    @Operation(
+            summary = "루트 공유",
+            description = """
+                    채팅방에 루트를 공유합니다. 공유 시 WebSocket 구독자(`/topic/chat/{roomUuid}`)에게도 실시간 브로드캐스트되며, 채팅방 멤버들에게 `CHAT_ROUTE_SHARED` 알림이 발송됩니다.
+
+                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
+
+                    **Request Body:**
+                    - `routeUuid` (필수): 공유할 루트의 UUID
+
+                    **Response:**
+                    - `messageType`: `ROUTE`
+                    - `content`: 루트 제목
+                    - `routeUuid` / `routeTitle` / `routeThumbnailUrl`: 공유된 루트 정보
+                    """
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "루트 공유 성공"),
+            @ApiResponse(responseCode = "400", description = "요청 값이 올바르지 않음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "해당 채팅방의 멤버가 아님",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "존재하지 않는 채팅방 또는 루트",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<ChatMessageResponse> shareRoute(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PathVariable String roomUuid,
+            @Valid @RequestBody ShareRouteRequest req) {
+        Long userId = Long.valueOf(userDetails.getUsername());
+        return ResponseEntity.status(201).body(chatService.shareRoute(userId, roomUuid, req));
+    }
+
+    @PatchMapping(value = "/{roomUuid}/profile-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(
+            summary = "채팅방 프로필 이미지 변경",
+            description = """
+                    그룹 채팅방의 프로필 이미지를 변경합니다. ADMIN 권한(방장)만 가능합니다.
+                    1:1 채팅방에는 사용할 수 없습니다.
+
+                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
+
+                    **Request (multipart/form-data):**
+                    - `image` (필수): 업로드할 이미지 파일 (JPEG, PNG, GIF, WebP, 최대 10MB)
+
+                    **Response:** 변경된 채팅방 정보 (`profileImageUrl` 업데이트됨)
+                    """
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "프로필 이미지 변경 성공"),
+            @ApiResponse(responseCode = "400", description = "파일이 없거나 이미지 형식이 아님 / 1:1 채팅방",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "ADMIN 권한 없음 또는 채팅방 멤버가 아님",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "존재하지 않는 채팅방",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<ChatRoomResponse> updateRoomProfileImage(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PathVariable String roomUuid,
+            @RequestPart("image") MultipartFile image) {
+        Long userId = Long.valueOf(userDetails.getUsername());
+        return ResponseEntity.ok(chatService.updateRoomProfileImage(userId, roomUuid, image));
+    }
+
+    @DeleteMapping("/{roomUuid}/profile-image")
+    @Operation(
+            summary = "채팅방 프로필 이미지 초기화",
+            description = """
+                    그룹 채팅방의 프로필 이미지를 5개 기본 이미지 중 하나로 랜덤 초기화합니다. ADMIN 권한(방장)만 가능합니다.
+                    직접 업로드한 이미지가 있으면 삭제됩니다.
+
+                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
+
+                    **Response:** 변경된 채팅방 정보 (`profileImageUrl`이 기본 이미지 경로로 변경됨)
+                    """
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "프로필 이미지 초기화 성공"),
+            @ApiResponse(responseCode = "400", description = "1:1 채팅방은 프로필 이미지 설정 불가",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "ADMIN 권한 없음 또는 채팅방 멤버가 아님",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "존재하지 않는 채팅방",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<ChatRoomResponse> resetRoomProfileImage(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PathVariable String roomUuid) {
+        Long userId = Long.valueOf(userDetails.getUsername());
+        return ResponseEntity.ok(chatService.resetRoomProfileImage(userId, roomUuid));
     }
 
     @PostMapping("/{roomUuid}/read")
