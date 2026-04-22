@@ -21,8 +21,5 @@ public record RegisterRequest(
                 regexp = "^(?=.*[a-z])(?=.*\\d)(?=.*[@$!%*?&#^()\\-_=+\\[\\]{}|;:,.<>?/~`]).{8,}$",
                 message = "비밀번호는 소문자, 숫자, 특수문자를 각각 최소 1개 이상 포함해야 합니다."
         )
-        String password,
-
-        @Schema(description = "닉네임 (2~50자, 중복 불가)", example = "어디갈지몰라", requiredMode = Schema.RequiredMode.REQUIRED)
-        @NotBlank @Size(min = 2, max = 50) String nickname
+        String password
 ) {}

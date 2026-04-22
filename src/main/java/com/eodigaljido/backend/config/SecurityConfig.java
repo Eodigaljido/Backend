@@ -34,6 +34,8 @@ public class SecurityConfig {
             "/auth/token/refresh",
             "/auth/oauth/google", "/auth/oauth/kakao", "/auth/oauth/config",
             "/auth/phone/code", "/auth/phone/verify",
+            "/auth/find-account/send", "/auth/find-account/verify",
+            "/auth/reset-password/send", "/auth/reset-password/verify",
             "/ws/chat/**",
             "/routes/shared", "/routes/shared/**",
             "/uploads/**",
