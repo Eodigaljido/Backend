@@ -54,18 +54,10 @@ public class AuthService {
                 if (existing.getPasswordHash() != null) {
                     throw new AuthException("이미 이메일/비밀번호로 가입된 계정입니다.", HttpStatus.CONFLICT);
                 }
-                if (profileRepository.existsByNicknameAndUserNot(request.nickname(), existing)) {
-                    throw new AuthException("이미 사용 중인 닉네임입니다.", HttpStatus.CONFLICT);
-                }
                 if (userId != null) existing.updateUserId(userId);
                 existing.linkLocalPassword(passwordEncoder.encode(request.password()));
-                profileRepository.findByUser(existing).ifPresent(p -> p.updateNickname(request.nickname()));
                 return issueTokens(existing, null, null);
             }
-        }
-
-        if (profileRepository.existsByNickname(request.nickname())) {
-            throw new AuthException("이미 사용 중인 닉네임입니다.", HttpStatus.CONFLICT);
         }
 
         User user = User.builder()
@@ -76,7 +68,7 @@ public class AuthService {
                 .build();
 
         userRepository.save(user);
-        profileRepository.save(Profile.builder().user(user).nickname(request.nickname()).build());
+        profileRepository.save(Profile.builder().user(user).nickname(generateDefaultNickname(userId, email)).build());
 
         return issueTokens(user, null, null);
     }
@@ -183,6 +175,44 @@ public class AuthService {
         phoneVerificationService.clearVerified(newPhone, PhoneVerification.Purpose.CHANGE_PHONE);
     }
 
+    // ── 아이디/이메일 찾기 ────────────────────────────────────────────────────
+
+    public void sendFindAccountCode(String phone) {
+        if (!userRepository.existsByPhone(phone)) {
+            throw new AuthException("해당 전화번호로 가입된 계정이 없습니다.", HttpStatus.NOT_FOUND);
+        }
+        phoneVerificationService.sendCode(phone, PhoneVerification.Purpose.FIND_ACCOUNT);
+    }
+
+    public FindAccountResponse verifyFindAccountCode(String phone, String code) {
+        phoneVerificationService.verifyCode(phone, code, PhoneVerification.Purpose.FIND_ACCOUNT);
+        phoneVerificationService.clearVerified(phone, PhoneVerification.Purpose.FIND_ACCOUNT);
+        User user = userRepository.findByPhone(phone)
+                .orElseThrow(() -> new AuthException("계정을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        return FindAccountResponse.of(user.getUserId(), user.getEmail());
+    }
+
+    // ── 비밀번호 재설정 ───────────────────────────────────────────────────────
+
+    public void sendResetPasswordCode(String identifier, String phone) {
+        User user = userRepository.findByUserId(identifier)
+                .or(() -> userRepository.findByEmail(identifier))
+                .orElseThrow(() -> new AuthException("아이디 또는 이메일에 해당하는 계정이 없습니다.", HttpStatus.NOT_FOUND));
+        if (!phone.equals(user.getPhone())) {
+            throw new AuthException("입력한 전화번호가 해당 계정에 등록된 전화번호와 일치하지 않습니다.", HttpStatus.BAD_REQUEST);
+        }
+        phoneVerificationService.sendCode(phone, PhoneVerification.Purpose.RESET_PASSWORD);
+    }
+
+    @Transactional
+    public void verifyResetPasswordCode(String phone, String code, String newPassword) {
+        phoneVerificationService.verifyCode(phone, code, PhoneVerification.Purpose.RESET_PASSWORD);
+        phoneVerificationService.clearVerified(phone, PhoneVerification.Purpose.RESET_PASSWORD);
+        User user = userRepository.findByPhone(phone)
+                .orElseThrow(() -> new AuthException("계정을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        user.linkLocalPassword(passwordEncoder.encode(newPassword));
+    }
+
     private LoginResponse issueTokens(User user, String deviceInfo, String ipAddress) {
         String accessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getRole().name());
         String refreshTokenStr = jwtTokenProvider.generateRefreshToken(user.getId());
@@ -202,5 +232,16 @@ public class AuthService {
                 .map(Profile::getNickname)
                 .orElse(null);
         return LoginResponse.of(accessToken, refreshTokenStr, expiresIn, user, nickname);
+    }
+
+    private String generateDefaultNickname(String userId, String email) {
+        String base = (userId != null) ? userId
+                : email.substring(0, email.indexOf('@'));
+        String candidate = base;
+        int suffix = 1;
+        while (profileRepository.existsByNickname(candidate)) {
+            candidate = base + suffix++;
+        }
+        return candidate;
     }
 }

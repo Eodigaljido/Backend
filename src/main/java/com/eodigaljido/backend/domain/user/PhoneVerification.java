@@ -60,6 +60,6 @@ public class PhoneVerification {
     }
 
     public enum Purpose {
-        REGISTER, CHANGE_PHONE
+        REGISTER, CHANGE_PHONE, FIND_ACCOUNT, RESET_PASSWORD
     }
 }

@@ -151,6 +151,8 @@
   <button class="tab-btn" onclick="switchTab('login', this)">🔑 로그인</button>
   <button class="tab-btn" onclick="switchTab('kakao', this)">🟡 카카오</button>
   <button class="tab-btn" onclick="switchTab('google', this)">🔵 구글</button>
+  <button class="tab-btn" onclick="switchTab('find-account', this)">🔍 아이디/이메일 찾기</button>
+  <button class="tab-btn" onclick="switchTab('reset-password', this)">🔒 비밀번호 재설정</button>
   <button class="tab-btn" onclick="switchTab('manage', this)">⚙️ 인증 관리</button>
   <button class="tab-btn" onclick="switchTab('sms', this)">🔧 SMS API</button>
 </div>
@@ -179,11 +181,12 @@
       </div>
       <div class="form-group">
         <label>비밀번호 (8자 이상, 소문자·숫자·특수문자 포함)</label>
-        <input id="regPassword" type="password" placeholder="password1!">
+        <input id="regPassword" type="password" placeholder="password1!" oninput="checkPasswordMatch()">
       </div>
       <div class="form-group">
-        <label>닉네임 (2~50자)</label>
-        <input id="regNickname" type="text" placeholder="어디갈지몰라">
+        <label>비밀번호 재입력</label>
+        <input id="regPasswordConfirm" type="password" placeholder="password1!" oninput="checkPasswordMatch()">
+        <div id="regPasswordMatchMsg" style="font-size:0.85em;margin-top:4px;"></div>
       </div>
 
       <hr class="step-divider">
@@ -426,6 +429,106 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
+     아이디/이메일 찾기 탭
+     ══════════════════════════════════════════════════════════ -->
+<div id="tab-find-account" class="tab-content">
+  <div class="grid">
+    <div class="card">
+      <h3>아이디 / 이메일 찾기</h3>
+      <div class="endpoint">
+        <span class="badge badge-post">POST</span>/auth/find-account/send &nbsp;
+        <span class="badge badge-post">POST</span>/auth/find-account/verify
+      </div>
+
+      <!-- ① 전화번호 입력 -->
+      <div class="form-group">
+        <label>휴대폰 번호</label>
+        <div class="inline-row">
+          <input id="faPhone" type="text" placeholder="01012345678">
+          <button class="btn btn-secondary" onclick="faSendCode()">인증번호 받기</button>
+        </div>
+      </div>
+
+      <!-- ② 인증번호 입력 -->
+      <div id="faCodeSection" class="hidden">
+        <div class="form-group">
+          <label>인증번호 (6자리)</label>
+          <div class="inline-row">
+            <input id="faCode" type="text" placeholder="123456" maxlength="6">
+            <button class="btn btn-success" onclick="faVerifyCode()">확인</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ③ 결과 -->
+      <div id="faResult" class="hidden">
+        <div class="info-box success">
+          <div><strong>아이디:</strong> <span id="faResultUserId">—</span></div>
+          <div><strong>이메일:</strong> <span id="faResultEmail">—</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     비밀번호 재설정 탭
+     ══════════════════════════════════════════════════════════ -->
+<div id="tab-reset-password" class="tab-content">
+  <div class="grid">
+    <div class="card">
+      <h3>비밀번호 재설정</h3>
+      <div class="endpoint">
+        <span class="badge badge-post">POST</span>/auth/reset-password/send &nbsp;
+        <span class="badge badge-post">POST</span>/auth/reset-password/verify
+      </div>
+
+      <!-- ① 계정 정보 입력 -->
+      <div class="form-group">
+        <label>아이디 또는 이메일</label>
+        <input id="rpIdentifier" type="text" placeholder="john123 또는 user@example.com">
+      </div>
+      <div class="form-group">
+        <label>가입 시 등록한 휴대폰 번호</label>
+        <div class="inline-row">
+          <input id="rpPhone" type="text" placeholder="01012345678">
+          <button class="btn btn-secondary" onclick="rpSendCode()">인증번호 받기</button>
+        </div>
+      </div>
+
+      <!-- ② 인증번호 입력 -->
+      <div id="rpCodeSection" class="hidden">
+        <div class="form-group">
+          <label>인증번호 (6자리)</label>
+          <div class="inline-row">
+            <input id="rpCode" type="text" placeholder="123456" maxlength="6">
+            <button class="btn btn-success" onclick="rpVerifyCode()">확인</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ③ 새 비밀번호 입력 -->
+      <div id="rpNewPwSection" class="hidden">
+        <div class="form-group">
+          <label>새 비밀번호 (8자 이상, 소문자·숫자·특수문자 포함)</label>
+          <input id="rpNewPw" type="password" placeholder="newPass1!" oninput="checkRpPasswordMatch()">
+        </div>
+        <div class="form-group">
+          <label>새 비밀번호 재입력</label>
+          <input id="rpNewPwConfirm" type="password" placeholder="newPass1!" oninput="checkRpPasswordMatch()">
+          <div id="rpPwMatchMsg" style="font-size:0.85em;margin-top:4px;"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="rpResetPassword()">비밀번호 변경</button>
+        </div>
+      </div>
+
+      <div id="rpSuccess" class="info-box success hidden">✓ 비밀번호가 성공적으로 변경되었습니다.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
      인증 관리 탭
      ══════════════════════════════════════════════════════════ -->
 <div id="tab-manage" class="tab-content">
@@ -655,23 +758,34 @@
     }
   }
 
+  function checkPasswordMatch() {
+    const pw  = document.getElementById('regPassword').value;
+    const pw2 = document.getElementById('regPasswordConfirm').value;
+    const msg = document.getElementById('regPasswordMatchMsg');
+    if (!pw2) { msg.textContent = ''; return; }
+    if (pw === pw2) { msg.style.color = 'green'; msg.textContent = '✓ 비밀번호가 일치합니다.'; }
+    else            { msg.style.color = 'red';   msg.textContent = '✗ 비밀번호가 일치하지 않습니다.'; }
+  }
+
   async function register() {
     const userId   = document.getElementById('regUserId').value.trim();
     const email    = document.getElementById('regEmail').value.trim();
     const password = document.getElementById('regPassword').value;
-    const nickname = document.getElementById('regNickname').value.trim();
-    if (!password || !nickname) { alert('비밀번호와 닉네임을 입력해주세요.'); return; }
+    const passwordConfirm = document.getElementById('regPasswordConfirm').value;
+    if (!password) { alert('비밀번호를 입력해주세요.'); return; }
+    if (password !== passwordConfirm) { alert('비밀번호가 일치하지 않습니다.'); return; }
     if (!userId && !email) { alert('아이디 또는 이메일 중 하나는 입력해주세요.'); return; }
 
-    const body = { password, nickname };
+    const body = { password };
     if (userId) body.userId = userId;
     if (email)  body.email  = email;
 
     const result = await callApi('POST', '/auth/register', body);
     if (result && result.status === 200 && result.data.accessToken) {
       saveTokens(result.data.accessToken, result.data.refreshToken);
-      ['regUserId', 'regEmail', 'regPassword', 'regNickname', 'regPhone', 'regCode']
+      ['regUserId', 'regEmail', 'regPassword', 'regPasswordConfirm', 'regPhone', 'regCode']
         .forEach(id => { document.getElementById(id).value = ''; });
+      document.getElementById('regPasswordMatchMsg').textContent = '';
       document.getElementById('regPhone').disabled = false;
       hide('regVerifiedBox');
       hide('regCodeSection');
@@ -690,6 +804,78 @@
     const result = await callApi('POST', '/auth/login', { identifier, password });
     if (result && result.status === 200 && result.data.accessToken) {
       saveTokens(result.data.accessToken, result.data.refreshToken);
+    }
+  }
+
+  // ── 아이디/이메일 찾기 ────────────────────────────────────────────────────
+
+  async function faSendCode() {
+    const phone = document.getElementById('faPhone').value.trim();
+    if (!phone) { alert('휴대폰 번호를 입력해주세요.'); return; }
+    const result = await callApi('POST', '/auth/find-account/send', { phone });
+    if (result && result.status === 204) {
+      show('faCodeSection');
+      hide('faResult');
+    }
+  }
+
+  async function faVerifyCode() {
+    const phone = document.getElementById('faPhone').value.trim();
+    const code  = document.getElementById('faCode').value.trim();
+    if (!code) { alert('인증번호를 입력해주세요.'); return; }
+    const result = await callApi('POST', '/auth/find-account/verify', { phone, code });
+    if (result && result.status === 200) {
+      const { userId, email, emailLinked } = result.data;
+      document.getElementById('faResultUserId').textContent = userId || '(설정 안 됨)';
+      document.getElementById('faResultEmail').textContent  = emailLinked ? email : '연동되어 있지 않습니다';
+      show('faResult');
+      hide('faCodeSection');
+    }
+  }
+
+  // ── 비밀번호 재설정 ───────────────────────────────────────────────────────
+
+  async function rpSendCode() {
+    const identifier = document.getElementById('rpIdentifier').value.trim();
+    const phone      = document.getElementById('rpPhone').value.trim();
+    if (!identifier || !phone) { alert('아이디/이메일과 휴대폰 번호를 입력해주세요.'); return; }
+    const result = await callApi('POST', '/auth/reset-password/send', { identifier, phone });
+    if (result && result.status === 204) {
+      show('rpCodeSection');
+      hide('rpNewPwSection');
+      hide('rpSuccess');
+    }
+  }
+
+  function rpVerifyCode() {
+    const code = document.getElementById('rpCode').value.trim();
+    if (!code) { alert('인증번호를 입력해주세요.'); return; }
+    hide('rpCodeSection');
+    show('rpNewPwSection');
+  }
+
+  function checkRpPasswordMatch() {
+    const pw  = document.getElementById('rpNewPw').value;
+    const pw2 = document.getElementById('rpNewPwConfirm').value;
+    const msg = document.getElementById('rpPwMatchMsg');
+    if (!pw2) { msg.textContent = ''; return; }
+    if (pw === pw2) { msg.style.color = 'green'; msg.textContent = '✓ 비밀번호가 일치합니다.'; }
+    else            { msg.style.color = 'red';   msg.textContent = '✗ 비밀번호가 일치하지 않습니다.'; }
+  }
+
+  async function rpResetPassword() {
+    const phone       = document.getElementById('rpPhone').value.trim();
+    const code        = document.getElementById('rpCode').value.trim();
+    const newPassword = document.getElementById('rpNewPw').value;
+    const newPasswordConfirm = document.getElementById('rpNewPwConfirm').value;
+    if (newPassword !== newPasswordConfirm) { alert('비밀번호가 일치하지 않습니다.'); return; }
+    if (!newPassword) { alert('새 비밀번호를 입력해주세요.'); return; }
+    const result = await callApi('POST', '/auth/reset-password/verify', { phone, code, newPassword });
+    if (result && result.status === 204) {
+      hide('rpNewPwSection');
+      show('rpSuccess');
+      ['rpIdentifier','rpPhone','rpCode','rpNewPw','rpNewPwConfirm'].forEach(id => { document.getElementById(id).value = ''; });
+      document.getElementById('rpPwMatchMsg').textContent = '';
     }
   }
 

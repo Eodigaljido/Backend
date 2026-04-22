@@ -441,4 +441,56 @@ public class AuthController {
         }
         return ResponseEntity.noContent().build();
     }
+
+    // ── 아이디/이메일 찾기 ────────────────────────────────────────────────────
+
+    @PostMapping("/find-account/send")
+    @Operation(summary = "아이디/이메일 찾기 — 인증번호 발송",
+            description = "전화번호로 가입된 계정이 있으면 6자리 인증번호를 SMS로 발송합니다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "발송 성공"),
+            @ApiResponse(responseCode = "404", description = "해당 전화번호로 가입된 계정 없음")
+    })
+    ResponseEntity<Void> sendFindAccountCode(@Valid @RequestBody FindAccountRequest request) {
+        authService.sendFindAccountCode(request.phone());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/find-account/verify")
+    @Operation(summary = "아이디/이메일 찾기 — 인증번호 확인",
+            description = "인증번호 확인 후 해당 계정의 아이디와 이메일을 반환합니다. 이메일 미연동 시 emailLinked=false.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "인증 성공"),
+            @ApiResponse(responseCode = "400", description = "인증번호 불일치 또는 만료")
+    })
+    ResponseEntity<FindAccountResponse> verifyFindAccountCode(@Valid @RequestBody FindAccountVerifyRequest request) {
+        return ResponseEntity.ok(authService.verifyFindAccountCode(request.phone(), request.code()));
+    }
+
+    // ── 비밀번호 재설정 ───────────────────────────────────────────────────────
+
+    @PostMapping("/reset-password/send")
+    @Operation(summary = "비밀번호 재설정 — 인증번호 발송",
+            description = "아이디/이메일과 전화번호가 동일 계정에 등록되어 있으면 6자리 인증번호를 SMS로 발송합니다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "발송 성공"),
+            @ApiResponse(responseCode = "400", description = "전화번호가 해당 계정과 일치하지 않음"),
+            @ApiResponse(responseCode = "404", description = "아이디/이메일에 해당하는 계정 없음")
+    })
+    ResponseEntity<Void> sendResetPasswordCode(@Valid @RequestBody ResetPasswordSendRequest request) {
+        authService.sendResetPasswordCode(request.identifier(), request.phone());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/reset-password/verify")
+    @Operation(summary = "비밀번호 재설정 — 인증 확인 및 새 비밀번호 설정",
+            description = "인증번호 확인 후 새 비밀번호로 변경합니다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "비밀번호 재설정 완료"),
+            @ApiResponse(responseCode = "400", description = "인증번호 불일치, 만료, 또는 비밀번호 형식 오류")
+    })
+    ResponseEntity<Void> verifyResetPasswordCode(@Valid @RequestBody ResetPasswordVerifyRequest request) {
+        authService.verifyResetPasswordCode(request.phone(), request.code(), request.newPassword());
+        return ResponseEntity.noContent().build();
+    }
 }
