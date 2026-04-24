@@ -39,7 +39,8 @@ public class SecurityConfig {
             "/ws/chat/**",
             "/routes/shared", "/routes/shared/**",
             "/uploads/**",
-            "/images/**"
+            "/images/**",
+            "/api/weather"
     };
 
     // Swagger 엔드포인트 (전체 환경 공개 허용)

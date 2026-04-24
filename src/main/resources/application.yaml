@@ -51,3 +51,8 @@ websocket:
 upload:
   # 업로드 파일 저장 경로 (프로덕션: UPLOAD_DIR 환경변수로 절대 경로 설정)
   dir: ${UPLOAD_DIR:uploads}
+
+weather:
+  kma-api-key: ${KMA_API_KEY:}
+  air-korea-api-key: ${AIR_KOREA_API_KEY:}
+  kakao-api-key: ${KAKAO_API_KEY:}
