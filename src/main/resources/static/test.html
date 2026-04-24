@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>어디갈지도 API 테스트</title>
+  <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7/bundles/stomp.umd.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -155,6 +157,7 @@
   <button class="tab-btn" onclick="switchTab('reset-password', this)">🔒 비밀번호 재설정</button>
   <button class="tab-btn" onclick="switchTab('manage', this)">⚙️ 인증 관리</button>
   <button class="tab-btn" onclick="switchTab('sms', this)">🔧 SMS API</button>
+  <button class="tab-btn" onclick="switchTab('chat', this)">💬 WebSocket 채팅</button>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
@@ -643,6 +646,118 @@
     </div>
 
   </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     WebSocket 채팅 탭
+     ══════════════════════════════════════════════════════════ -->
+<div id="tab-chat" class="tab-content">
+
+  <!-- 안내 박스 -->
+  <div class="info-box" style="margin-bottom:20px">
+    <strong>STOMP over SockJS</strong> &nbsp;|&nbsp;
+    엔드포인트: <code style="background:#1e2535;padding:1px 6px;border-radius:3px">/ws/chat</code> &nbsp;|&nbsp;
+    인증: CONNECT 프레임 헤더 <code style="background:#1e2535;padding:1px 6px;border-radius:3px">Authorization: Bearer {accessToken}</code><br>
+    로그인 탭에서 먼저 로그인하면 토큰이 자동으로 적용됩니다.
+  </div>
+
+  <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr))">
+
+    <!-- 연결 카드 -->
+    <div class="card">
+      <h3>1. WebSocket 연결</h3>
+      <div class="form-group">
+        <label>상태</label>
+        <div style="display:flex;align-items:center;gap:10px;padding:6px 0">
+          <span id="wsStatus" style="color:#f87171;font-weight:600;font-size:0.9rem">● 연결 안 됨</span>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Access Token (자동 적용)</label>
+        <input id="wsToken" type="text" placeholder="로그인하면 자동 입력됩니다">
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-success"  id="wsConnectBtn"    onclick="wsConnect()">연결</button>
+        <button class="btn btn-danger"   id="wsDisconnectBtn" onclick="wsDisconnect()" disabled>연결 해제</button>
+      </div>
+    </div>
+
+    <!-- 채팅방 구독 카드 -->
+    <div class="card">
+      <h3>2. 채팅방 구독</h3>
+      <div class="info-box" style="margin-bottom:12px">
+        구독 경로: <code style="background:#1e2535;padding:1px 4px;border-radius:3px">/topic/chat/{roomUuid}</code><br>
+        수신 형식: <code style="background:#1e2535;padding:1px 4px;border-radius:3px">{ eventType, payload }</code>
+      </div>
+      <div class="form-group">
+        <label>채팅방 UUID</label>
+        <input id="wsRoomUuid" type="text" placeholder="550e8400-e29b-41d4-a716-446655440000">
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary"   onclick="wsSubscribeChat()">구독</button>
+        <button class="btn btn-secondary" onclick="wsUnsubscribeChat()">구독 해제</button>
+      </div>
+      <div style="margin-top:12px">
+        <div style="font-size:0.78rem;color:#475569;margin-bottom:4px">구독 중인 채팅방</div>
+        <div id="wsChatSubStatus" style="font-size:0.82rem;color:#64748b;font-style:italic">없음</div>
+      </div>
+    </div>
+
+    <!-- 알림 구독 카드 -->
+    <div class="card">
+      <h3>3. 개인 알림 구독</h3>
+      <div class="info-box" style="margin-bottom:12px">
+        구독 경로: <code style="background:#1e2535;padding:1px 4px;border-radius:3px">/user/queue/notifications</code><br>
+        에러 수신: <code style="background:#1e2535;padding:1px 4px;border-radius:3px">/user/queue/errors</code>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary"   onclick="wsSubscribeNotif()">알림 구독</button>
+        <button class="btn btn-secondary" onclick="wsUnsubscribeNotif()">구독 해제</button>
+      </div>
+      <div style="margin-top:12px">
+        <div style="font-size:0.78rem;color:#475569;margin-bottom:4px">알림 구독 상태</div>
+        <div id="wsNotifSubStatus" style="font-size:0.82rem;color:#64748b;font-style:italic">구독 안 됨</div>
+      </div>
+    </div>
+
+    <!-- 메시지 전송 카드 (WebSocket) -->
+    <div class="card">
+      <h3>4. 메시지 전송 (STOMP)</h3>
+      <div class="info-box" style="margin-bottom:12px">
+        발행 경로: <code style="background:#1e2535;padding:1px 4px;border-radius:3px">/app/chat/{roomUuid}</code>
+      </div>
+      <div class="form-group">
+        <label>채팅방 UUID</label>
+        <input id="wsSendRoomUuid" type="text" placeholder="구독과 동일한 UUID">
+      </div>
+      <div class="form-group">
+        <label>메시지 내용</label>
+        <input id="wsMsgContent" type="text" placeholder="안녕하세요!" maxlength="2000"
+               onkeydown="if(event.key==='Enter')wsSendMessage()">
+      </div>
+      <div class="form-group">
+        <label>@멘션 UUID (선택, 쉼표로 구분)</label>
+        <input id="wsMentionUuids" type="text" placeholder="uuid1, uuid2">
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="wsSendMessage()">전송 (STOMP)</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 메시지 로그 -->
+  <div class="card" style="margin-top:20px">
+    <h3 style="display:flex;align-items:center;justify-content:space-between">
+      수신 로그
+      <button class="btn btn-secondary" style="font-size:0.7rem;padding:2px 10px" onclick="clearWsLog()">지우기</button>
+    </h3>
+    <div id="wsLog"
+         style="height:260px;overflow-y:auto;background:#0f1117;border:1px solid #2d3748;border-radius:6px;padding:12px;margin-top:12px">
+      <div style="color:#334155;font-size:0.8rem;font-style:italic">연결 후 수신 메시지가 여기에 표시됩니다.</div>
+    </div>
+  </div>
+
 </div>
 
 <div class="spacer"></div>
@@ -1168,7 +1283,158 @@
     document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
     document.getElementById('tab-' + name).classList.add('active');
     btn.classList.add('active');
+    if (name === 'chat') {
+      const t = getAccess();
+      document.getElementById('wsToken').value = t ? t.substring(0, 40) + '…' : '없음 — 먼저 로그인하세요';
+    }
   }
+
+  // ── WebSocket / STOMP ─────────────────────────────────────────────
+
+  let stompClient     = null;
+  let chatSub         = null;
+  let notifSub        = null;
+
+  function wsConnect() {
+    const token = getAccess();
+    if (!token) { showWsLog('error', '❌ 먼저 로그인하세요. Access Token이 필요합니다.'); return; }
+
+    document.getElementById('wsToken').value = token.substring(0, 40) + '…';
+
+    stompClient = new StompJs.Client({
+      webSocketFactory: () => new SockJS('/ws/chat'),
+      connectHeaders: { Authorization: 'Bearer ' + token },
+      reconnectDelay: 0,
+      onConnect: () => {
+        setWsStatus('connected');
+        showWsLog('system', '✓ WebSocket 연결됨');
+        stompClient.subscribe('/user/queue/errors', msg => {
+          showWsLog('error', '⚠️ [서버 오류] ' + msg.body);
+        });
+      },
+      onDisconnect: () => {
+        setWsStatus('disconnected');
+        chatSub = null; notifSub = null;
+        document.getElementById('wsChatSubStatus').textContent  = '없음';
+        document.getElementById('wsNotifSubStatus').textContent = '구독 안 됨';
+        showWsLog('system', '— WebSocket 연결 해제됨');
+      },
+      onStompError: frame => {
+        showWsLog('error', '❌ STOMP 오류: ' + (frame.headers?.message || JSON.stringify(frame.headers)));
+      }
+    });
+
+    showWsLog('system', '⏳ 연결 중...');
+    stompClient.activate();
+  }
+
+  function wsDisconnect() {
+    if (stompClient) { stompClient.deactivate(); stompClient = null; }
+  }
+
+  function wsSubscribeChat() {
+    const roomUuid = document.getElementById('wsRoomUuid').value.trim();
+    if (!roomUuid) { alert('채팅방 UUID를 입력하세요.'); return; }
+    if (!stompClient?.connected) { alert('먼저 WebSocket에 연결하세요.'); return; }
+    if (chatSub) { chatSub.unsubscribe(); chatSub = null; }
+
+    chatSub = stompClient.subscribe('/topic/chat/' + roomUuid, msg => {
+      try {
+        const env = JSON.parse(msg.body);
+        const label = env.eventType || 'EVENT';
+        const pretty = JSON.stringify(env.payload ?? env, null, 2);
+        showWsLog('receive', '[' + label + ']\n' + pretty);
+      } catch { showWsLog('receive', msg.body); }
+    });
+
+    document.getElementById('wsChatSubStatus').textContent = '/topic/chat/' + roomUuid;
+    document.getElementById('wsChatSubStatus').style.color = '#34d399';
+    document.getElementById('wsSendRoomUuid').value = roomUuid;
+    showWsLog('system', '✓ 구독 시작: /topic/chat/' + roomUuid);
+  }
+
+  function wsUnsubscribeChat() {
+    if (chatSub) {
+      const prev = document.getElementById('wsRoomUuid').value.trim();
+      chatSub.unsubscribe(); chatSub = null;
+      document.getElementById('wsChatSubStatus').textContent = '없음';
+      document.getElementById('wsChatSubStatus').style.color = '#64748b';
+      showWsLog('system', '— 구독 해제: /topic/chat/' + prev);
+    }
+  }
+
+  function wsSubscribeNotif() {
+    if (!stompClient?.connected) { alert('먼저 WebSocket에 연결하세요.'); return; }
+    if (notifSub) return;
+
+    notifSub = stompClient.subscribe('/user/queue/notifications', msg => {
+      try {
+        const n = JSON.parse(msg.body);
+        showWsLog('notif', '[알림] ' + n.title + ' — ' + n.body);
+      } catch { showWsLog('notif', '[알림] ' + msg.body); }
+    });
+
+    document.getElementById('wsNotifSubStatus').textContent = '구독 중';
+    document.getElementById('wsNotifSubStatus').style.color = '#a78bfa';
+    showWsLog('system', '✓ 구독 시작: /user/queue/notifications');
+  }
+
+  function wsUnsubscribeNotif() {
+    if (notifSub) {
+      notifSub.unsubscribe(); notifSub = null;
+      document.getElementById('wsNotifSubStatus').textContent = '구독 안 됨';
+      document.getElementById('wsNotifSubStatus').style.color = '#64748b';
+      showWsLog('system', '— 구독 해제: /user/queue/notifications');
+    }
+  }
+
+  function wsSendMessage() {
+    const roomUuid = document.getElementById('wsSendRoomUuid').value.trim();
+    const content  = document.getElementById('wsMsgContent').value.trim();
+    const raw      = document.getElementById('wsMentionUuids').value.trim();
+
+    if (!roomUuid || !content) { alert('채팅방 UUID와 메시지를 입력하세요.'); return; }
+    if (!stompClient?.connected) { alert('먼저 WebSocket에 연결하세요.'); return; }
+
+    const mentionedUserUuids = raw ? raw.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+    stompClient.publish({
+      destination: '/app/chat/' + roomUuid,
+      body: JSON.stringify({ content, mentionedUserUuids })
+    });
+
+    showWsLog('send', '[전송 → ' + roomUuid + '] ' + content);
+    document.getElementById('wsMsgContent').value = '';
+  }
+
+  function setWsStatus(status) {
+    const el  = document.getElementById('wsStatus');
+    const btn = document.getElementById('wsConnectBtn');
+    const off = document.getElementById('wsDisconnectBtn');
+    if (status === 'connected') {
+      el.textContent = '● 연결됨'; el.style.color = '#34d399';
+      btn.disabled = true; off.disabled = false;
+    } else {
+      el.textContent = '● 연결 안 됨'; el.style.color = '#f87171';
+      btn.disabled = false; off.disabled = true;
+    }
+  }
+
+  function showWsLog(type, msg) {
+    const log  = document.getElementById('wsLog');
+    const line = document.createElement('div');
+    const time = new Date().toLocaleTimeString('ko-KR');
+    const colors = { system: '#475569', receive: '#60a5fa', send: '#34d399', notif: '#a78bfa', error: '#f87171' };
+    line.style.cssText = 'color:' + (colors[type] || '#94a3b8') + ';margin-bottom:6px;font-family:Consolas,monospace;font-size:0.78rem;white-space:pre-wrap;word-break:break-all';
+    line.textContent = '[' + time + '] ' + msg;
+    log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function clearWsLog() { document.getElementById('wsLog').innerHTML = ''; }
+
+  // 채팅 탭 열 때 저장된 토큰 자동 반영
+  const _origSwitchTab = window.switchTab;
 
   // 초기화
   updateTokenBar();

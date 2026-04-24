@@ -510,8 +510,20 @@ public class ChatService {
                 })
                 .orElse(0L);
 
+        String profileImageUrl;
+        if (room.getType() == ChatRoom.RoomType.DIRECT) {
+            profileImageUrl = members.stream()
+                    .filter(m -> !m.getUser().getId().equals(currentUserId))
+                    .findFirst()
+                    .flatMap(m -> profileRepository.findByUser(m.getUser()))
+                    .map(Profile::getProfileImageUrl)
+                    .orElse(null);
+        } else {
+            profileImageUrl = room.getProfileImageUrl();
+        }
+
         return new ChatRoomResponse(
-                room.getUuid(), name, room.getProfileImageUrl(), members.size(),
+                room.getUuid(), name, profileImageUrl, members.size(),
                 owner.getUuid(), owner.getUserId(),
                 memberUuids, memberUserIds,
                 lastContent, lastMsgAt, unreadCount

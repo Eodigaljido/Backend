@@ -51,7 +51,7 @@ public class ChatController {
                     **Response:**
                     - `uuid`: 채팅방 UUID
                     - `name`: 채팅방 이름
-                    - `profileImageUrl`: 프로필 이미지 URL (그룹 채팅방만. 직접 업로드하거나 미입력 시 랜덤 기본 이미지. 1:1은 null)
+                    - `profileImageUrl`: 프로필 이미지 URL (그룹 채팅방은 채팅방 이미지, 1:1 채팅방은 null)
                     - `memberCount` / `ownerUuid` / `ownerUserId` / `memberUuids` / `memberUserIds`: 멤버 정보
                     """
     )
@@ -84,7 +84,7 @@ public class ChatController {
                     **Response:** 참여 중인 채팅방 목록 (생성 최신순)
                     - `uuid`: 채팅방 UUID
                     - `name`: 채팅방 이름 (미설정 시 멤버 닉네임 조합으로 자동 생성)
-                    - `profileImageUrl`: 프로필 이미지 URL (그룹 채팅방만, 1:1은 null)
+                    - `profileImageUrl`: 프로필 이미지 URL (그룹 채팅방은 채팅방 이미지, 1:1 채팅방은 상대방 프로필 이미지, 없으면 null)
                     - `memberCount`: 전체 멤버 수
                     - `ownerUuid` / `ownerUserId`: 방장 UUID / 아이디
                     - `memberUuids` / `memberUserIds`: 입장 순서 기준 **최대 3명**의 멤버 UUID / 아이디 목록. 전체 인원은 `memberCount` 참고
@@ -113,6 +113,16 @@ public class ChatController {
 
                     **Path Variable:**
                     - `roomUuid`: 조회할 채팅방의 UUID
+
+                    **Response:**
+                    - `uuid`: 채팅방 UUID
+                    - `name`: 채팅방 이름 (미설정 시 멤버 닉네임 조합으로 자동 생성)
+                    - `profileImageUrl`: 프로필 이미지 URL (그룹 채팅방은 채팅방 이미지, 1:1 채팅방은 상대방 프로필 이미지, 없으면 null)
+                    - `memberCount`: 전체 멤버 수
+                    - `ownerUuid` / `ownerUserId`: 방장 UUID / 아이디
+                    - `memberUuids` / `memberUserIds`: 입장 순서 기준 **최대 3명**의 멤버 UUID / 아이디 목록
+                    - `lastMessage` / `lastMessageAt`: 마지막 메시지 내용 및 전송 시각 (없으면 null)
+                    - `unreadCount`: 읽지 않은 메시지 수
                     """
     )
     @ApiResponses({
@@ -210,7 +220,13 @@ public class ChatController {
                     - `createdAt` / `editedAt`: 전송·수정 시각
                     - `isDeleted`: 삭제 여부
 
-                    **WebSocket:** STOMP CONNECT 프레임의 `Authorization` 헤더에 `Bearer {accessToken}` 포함 필요
+                    **WebSocket 실시간 수신:**
+                    STOMP를 통해 전송된 메시지를 실시간으로 받을 수 있습니다.
+                    - 연결 엔드포인트: `ws://{host}/ws/chat` (SockJS 지원)
+                    - CONNECT 프레임 헤더: `Authorization: Bearer {accessToken}`
+                    - 구독 경로: `/topic/chat/{roomUuid}`
+                    - 수신 형식: `{ "eventType": "MESSAGE_CREATED", "payload": { ChatMessageResponse } }`
+                    - WebSocket으로 직접 메시지 전송: `/app/chat/{roomUuid}` (destination)
                     """
     )
     @ApiResponses({
@@ -445,7 +461,7 @@ public class ChatController {
     @Operation(
             summary = "루트 공유",
             description = """
-                    채팅방에 루트를 공유합니다. 공유 시 WebSocket 구독자(`/topic/chat/{roomUuid}`)에게도 실시간 브로드캐스트되며, 채팅방 멤버들에게 `CHAT_ROUTE_SHARED` 알림이 발송됩니다.
+                    채팅방에 루트를 공유합니다. 공유 시 WebSocket 구독자(`/topic/chat/{roomUuid}`)에게 실시간 브로드캐스트되며, 채팅방 멤버들에게 `CHAT_ROUTE_SHARED` 알림이 발송됩니다.
 
                     **헤더:** `Authorization: Bearer {accessToken}` (필수)
 
@@ -456,6 +472,7 @@ public class ChatController {
                     - `messageType`: `ROUTE`
                     - `content`: 루트 제목
                     - `routeUuid` / `routeTitle` / `routeThumbnailUrl`: 공유된 루트 정보
+                    - `senderUuid` / `senderNickname` / `senderProfileImageUrl`: 발신자 정보
                     """
     )
     @ApiResponses({

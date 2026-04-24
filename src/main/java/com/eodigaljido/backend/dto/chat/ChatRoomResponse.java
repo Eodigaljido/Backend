@@ -13,7 +13,7 @@ public record ChatRoomResponse(
         @Schema(description = "채팅방 이름", example = "김철수의 채팅방")
         String name,
 
-        @Schema(description = "채팅방 프로필 이미지 URL (그룹 채팅방만, 없으면 null)", example = "/images/chat/group-default-1.png")
+        @Schema(description = "프로필 이미지 URL (그룹 채팅방은 채팅방 이미지, 1:1 채팅방은 상대방 프로필 이미지, 없으면 null)", example = "/images/chat/group-default-1.png")
         String profileImageUrl,
 
         @Schema(description = "현재 채팅방 멤버 수", example = "2")
