@@ -23,6 +23,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -44,6 +46,8 @@ public class WeatherService {
             .connectTimeout(Duration.ofSeconds(5))
             .build();
 
+    private static final ExecutorService EXECUTOR = Executors.newFixedThreadPool(10);
+
     private final Map<String, CachedWeather> cache = new ConcurrentHashMap<>();
 
     private record CachedWeather(WeatherResponse data, long timestamp) {}
@@ -53,17 +57,21 @@ public class WeatherService {
         long now = System.currentTimeMillis();
 
         if (cached != null && now - cached.timestamp() < CACHE_TTL_MS) {
+            log.info("[날씨] location={} 캐시히트 소요={}ms", location, System.currentTimeMillis() - now);
             return cached.data();
         }
 
         LocationInfo info = resolveLocation(location);
 
+        long fetchStart = System.currentTimeMillis();
         try {
             WeatherResponse response = fetchAndBuild(location, info);
+            log.info("[날씨] location={} 신규조회 소요={}ms", location, System.currentTimeMillis() - fetchStart);
             cache.put(location, new CachedWeather(response, now));
             return response;
         } catch (Exception e) {
             if (cached != null && now - cached.timestamp() < STALE_MAX_MS) {
+                log.warn("[날씨] location={} stale 반환 소요={}ms", location, System.currentTimeMillis() - fetchStart);
                 return withStaleFlag(cached.data());
             }
             throw new RuntimeException("KMA_API_ERROR: " + e.getMessage(), e);
@@ -86,21 +94,36 @@ public class WeatherService {
     private WeatherResponse fetchAndBuild(String location, LocationInfo info) throws Exception {
         ZonedDateTime now = ZonedDateTime.now(ZoneId.of("Asia/Seoul"));
 
-        CompletableFuture<JsonNode> ncstFuture = CompletableFuture.supplyAsync(
-                () -> callNcst(HTTP_CLIENT, info, now));
-        CompletableFuture<JsonNode> fcstFuture = CompletableFuture.supplyAsync(
-                () -> callFcst(HTTP_CLIENT, info, now));
-        CompletableFuture<JsonNode> airFuture = CompletableFuture.supplyAsync(
-                () -> callAir(HTTP_CLIENT, info.sido(), info.sigungu()))
-                .exceptionally(ex -> {
-                    log.warn("에어코리아 조회 최종 실패 (sido={} sigungu={}): {}",
-                            info.sido(), info.sigungu(), ex.getMessage());
-                    return null;
-                });
+        CompletableFuture<JsonNode> ncstFuture = CompletableFuture.supplyAsync(() -> {
+            long t = System.currentTimeMillis();
+            JsonNode r = callNcst(HTTP_CLIENT, info, now);
+            log.debug("[날씨] ncst={}ms", System.currentTimeMillis() - t);
+            return r;
+        }, EXECUTOR);
 
-        JsonNode ncstData = ncstFuture.get(8, TimeUnit.SECONDS);
-        JsonNode fcstData = fcstFuture.get(10, TimeUnit.SECONDS);
-        JsonNode airData  = airFuture.get(5, TimeUnit.SECONDS);
+        CompletableFuture<JsonNode> fcstFuture = CompletableFuture.supplyAsync(() -> {
+            long t = System.currentTimeMillis();
+            JsonNode r = callFcst(HTTP_CLIENT, info, now);
+            log.debug("[날씨] fcst={}ms", System.currentTimeMillis() - t);
+            return r;
+        }, EXECUTOR);
+
+        CompletableFuture<JsonNode> airSafe = CompletableFuture.supplyAsync(() -> {
+            long t = System.currentTimeMillis();
+            JsonNode r = callAir(HTTP_CLIENT, info.sido(), info.sigungu());
+            log.debug("[날씨] air={}ms", System.currentTimeMillis() - t);
+            return r;
+        }, EXECUTOR).exceptionally(ex -> {
+            log.warn("에어코리아 조회 최종 실패 (sido={} sigungu={}): {}",
+                    info.sido(), info.sigungu(), ex.getMessage());
+            return null;
+        });
+
+        CompletableFuture.allOf(ncstFuture, fcstFuture, airSafe).get(12, TimeUnit.SECONDS);
+
+        JsonNode ncstData = ncstFuture.join();
+        JsonNode fcstData = fcstFuture.join();
+        JsonNode airData  = airSafe.join();
 
         List<DailyForecastDto> weekly = parseFcst(fcstData);
         int todayPop = weekly.isEmpty() ? 0 : weekly.get(0).pop();
@@ -131,7 +154,7 @@ public class WeatherService {
         String[] baseDt = fcstBaseDateTime(now);
         String url = KMA_BASE + "/getVilageFcst"
                 + "?serviceKey=" + encode(weatherProperties.getKmaApiKey())
-                + "&numOfRows=1000&pageNo=1&dataType=JSON"
+                + "&numOfRows=300&pageNo=1&dataType=JSON"
                 + "&base_date=" + baseDt[0]
                 + "&base_time=" + baseDt[1]
                 + "&nx=" + info.nx()
