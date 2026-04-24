@@ -15,6 +15,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -36,8 +37,12 @@ public class WeatherService {
     private static final String KMA_BASE = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0";
     private static final String AIR_BASE = "https://apis.data.go.kr/B552584/ArpltnInforInqireSvc";
 
-    private static final long CACHE_TTL_MS = 10 * 60 * 1000L;
-    private static final long STALE_MAX_MS = 60 * 60 * 1000L;
+    private static final long CACHE_TTL_MS   = 30 * 60 * 1000L;       // 30분
+    private static final long STALE_MAX_MS   = 3 * 60 * 60 * 1000L;   // 3시간
+
+    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .build();
 
     private final Map<String, CachedWeather> cache = new ConcurrentHashMap<>();
 
@@ -79,24 +84,23 @@ public class WeatherService {
     // ── API 호출 ──────────────────────────────────────────────────────────────
 
     private WeatherResponse fetchAndBuild(String location, LocationInfo info) throws Exception {
-        HttpClient client = HttpClient.newHttpClient();
         ZonedDateTime now = ZonedDateTime.now(ZoneId.of("Asia/Seoul"));
 
         CompletableFuture<JsonNode> ncstFuture = CompletableFuture.supplyAsync(
-                () -> callNcst(client, info, now));
+                () -> callNcst(HTTP_CLIENT, info, now));
         CompletableFuture<JsonNode> fcstFuture = CompletableFuture.supplyAsync(
-                () -> callFcst(client, info, now));
+                () -> callFcst(HTTP_CLIENT, info, now));
         CompletableFuture<JsonNode> airFuture = CompletableFuture.supplyAsync(
-                () -> callAir(client, info.sido(), info.sigungu()))
+                () -> callAir(HTTP_CLIENT, info.sido(), info.sigungu()))
                 .exceptionally(ex -> {
                     log.warn("에어코리아 조회 최종 실패 (sido={} sigungu={}): {}",
                             info.sido(), info.sigungu(), ex.getMessage());
                     return null;
                 });
 
-        JsonNode ncstData = ncstFuture.get(15, TimeUnit.SECONDS);
-        JsonNode fcstData = fcstFuture.get(15, TimeUnit.SECONDS);
-        JsonNode airData  = airFuture.get(10, TimeUnit.SECONDS);
+        JsonNode ncstData = ncstFuture.get(8, TimeUnit.SECONDS);
+        JsonNode fcstData = fcstFuture.get(10, TimeUnit.SECONDS);
+        JsonNode airData  = airFuture.get(5, TimeUnit.SECONDS);
 
         List<DailyForecastDto> weekly = parseFcst(fcstData);
         int todayPop = weekly.isEmpty() ? 0 : weekly.get(0).pop();
