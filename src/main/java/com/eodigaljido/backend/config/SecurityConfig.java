@@ -52,6 +52,10 @@ public class SecurityConfig {
             "/actuator/health", "/actuator/info"
     };
 
+    private static final String[] WEBSOCKET_ALLOWED_ORIGINS= {
+            "http://localhost:3000", "http://localhost:5173", "exp://172.28.22.99:8081", "http://localhost:8081", "*"
+    };
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         boolean isLocalProfile = Arrays.asList(environment.getActiveProfiles()).contains("local");
