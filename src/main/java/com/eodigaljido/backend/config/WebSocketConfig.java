@@ -19,7 +19,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     // WEBSOCKET_ALLOWED_ORIGINS 환경변수로 허용 오리진을 명시적으로 설정하세요.
     // 예: http://localhost:3000,https://eodigaljido.com
-    @Value("${websocket.allowed-origins:http://localhost:3000,http://localhost:5173}")
+    @Value("${websocket.allowed-origins:http://localhost:3000,http://localhost:5173,exp://172.28.22.99:8081,http://localhost:8081}")
     private String[] allowedOrigins;
 
     @Override
