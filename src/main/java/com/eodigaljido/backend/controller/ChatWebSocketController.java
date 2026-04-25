@@ -1,6 +1,7 @@
 package com.eodigaljido.backend.controller;
 
 import com.eodigaljido.backend.dto.chat.SendMessageRequest;
+import com.eodigaljido.backend.dto.chat.TypingRequest;
 import com.eodigaljido.backend.dto.common.ErrorResponse;
 import com.eodigaljido.backend.exception.ChatException;
 import com.eodigaljido.backend.service.ChatService;
@@ -41,6 +42,23 @@ public class ChatWebSocketController {
             throw new ChatException("유효하지 않은 사용자 인증 정보입니다.", HttpStatus.UNAUTHORIZED);
         }
         chatService.sendMessage(userId, roomUuid, req);
+    }
+
+    @MessageMapping("/chat/{roomUuid}/typing")
+    public void handleTyping(
+            @DestinationVariable String roomUuid,
+            TypingRequest req,
+            Principal principal) {
+        if (principal == null) {
+            throw new ChatException("인증이 필요합니다.", HttpStatus.UNAUTHORIZED);
+        }
+        Long userId;
+        try {
+            userId = Long.valueOf(principal.getName());
+        } catch (NumberFormatException e) {
+            throw new ChatException("유효하지 않은 사용자 인증 정보입니다.", HttpStatus.UNAUTHORIZED);
+        }
+        chatService.broadcastTyping(userId, roomUuid, req);
     }
 
     @MessageExceptionHandler(ChatException.class)
