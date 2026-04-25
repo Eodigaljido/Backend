@@ -30,14 +30,14 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     }
 
     @Override
-    public void registerStompEndpoints(StompEndpointRegistry registry) {
-        registry.addEndpoint("/ws/chat")
-                .setAllowedOrigins(allowedOrigins)
-                .withSockJS();
+    public void configureClientInboundChannel(ChannelRegistration registration) {
+        registration.interceptors(stompJwtChannelInterceptor);
     }
 
     @Override
-    public void configureClientInboundChannel(ChannelRegistration registration) {
-        registration.interceptors(stompJwtChannelInterceptor);
+        public void registerStompEndpoints(StompEndpointRegistry registry) {
+            registry.addEndpoint("/ws/chat")
+                .setAllowedOrigins("*")
+                .withSockJS();
     }
 }
