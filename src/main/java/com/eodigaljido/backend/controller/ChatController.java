@@ -220,13 +220,24 @@ public class ChatController {
                     - `createdAt` / `editedAt`: 전송·수정 시각
                     - `isDeleted`: 삭제 여부
 
-                    **WebSocket 실시간 수신:**
-                    STOMP를 통해 전송된 메시지를 실시간으로 받을 수 있습니다.
+                    **WebSocket 실시간 수신 (STOMP):**
                     - 연결 엔드포인트: `ws://{host}/ws/chat` (SockJS 지원)
                     - CONNECT 프레임 헤더: `Authorization: Bearer {accessToken}`
-                    - 구독 경로: `/topic/chat/{roomUuid}`
-                    - 수신 형식: `{ "eventType": "MESSAGE_CREATED", "payload": { ChatMessageResponse } }`
-                    - WebSocket으로 직접 메시지 전송: `/app/chat/{roomUuid}` (destination)
+
+                    **메시지 이벤트** (구독: `/topic/chat/{roomUuid}`)
+                    ```json
+                    { "eventType": "MESSAGE_CREATED" | "MESSAGE_EDITED" | "MESSAGE_DELETED",
+                      "payload": { ChatMessageResponse } }
+                    ```
+                    - WebSocket으로 직접 텍스트 전송: destination `/app/chat/{roomUuid}`
+                    - 이미지 전송은 `POST /chats/{roomUuid}/images` REST API 사용
+
+                    **타이핑 인디케이터** (구독: `/topic/chat/{roomUuid}/typing`)
+                    ```json
+                    { "senderUuid": "...", "senderNickname": "홍길동", "isTyping": true }
+                    ```
+                    - 타이핑 상태 전송: destination `/app/chat/{roomUuid}/typing`
+                    - body: `{ "isTyping": true }` (시작) / `{ "isTyping": false }` (중지)
                     """
     )
     @ApiResponses({
@@ -261,8 +272,9 @@ public class ChatController {
                     - `limit` (선택): 조회할 메시지 수 (기본값 50, 최대 100)
 
                     **Response (각 메시지):**
-                    - `messageType`: 메시지 타입 (`TEXT` | `ROUTE`)
-                    - `content`: 메시지 내용 (삭제된 경우 null, ROUTE의 경우 루트 제목)
+                    - `messageType`: 메시지 타입 (`TEXT` | `IMAGE` | `ROUTE`)
+                    - `content`: 메시지 내용 (삭제된 경우 null, IMAGE는 null, ROUTE는 루트 제목)
+                    - `attachmentUrl`: 이미지 URL (messageType=IMAGE 일 때만, 그 외 null)
                     - `routeUuid` / `routeTitle` / `routeThumbnailUrl`: 루트 공유 메시지일 때만 값, 그 외 null
                     - `isDeleted`: 삭제 여부
                     """
@@ -455,6 +467,46 @@ public class ChatController {
         Long userId = Long.valueOf(userDetails.getUsername());
         chatService.kickMember(userId, roomUuid, targetUuid);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping(value = "/{roomUuid}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(
+            summary = "이미지 메시지 전송",
+            description = """
+                    채팅방에 이미지를 전송합니다. 전송 시 WebSocket 구독자(`/topic/chat/{roomUuid}`)에게도 실시간 브로드캐스트됩니다.
+
+                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
+
+                    **Request (multipart/form-data):**
+                    - `image` (필수): 이미지 파일 (JPEG, PNG, GIF, WebP, 최대 10MB)
+
+                    **Response:**
+                    - `messageType`: `IMAGE`
+                    - `content`: null
+                    - `attachmentUrl`: 업로드된 이미지 경로
+
+                    **WebSocket 실시간 수신:**
+                    - 구독 경로: `/topic/chat/{roomUuid}`
+                    - 수신 형식: `{ "eventType": "MESSAGE_CREATED", "payload": { ChatMessageResponse } }`
+                    """
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "이미지 전송 성공"),
+            @ApiResponse(responseCode = "400", description = "이미지 파일 없음 또는 지원하지 않는 형식",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "해당 채팅방의 멤버가 아님",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "존재하지 않는 채팅방",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<ChatMessageResponse> sendImage(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PathVariable String roomUuid,
+            @RequestPart("image") MultipartFile image) {
+        Long userId = Long.valueOf(userDetails.getUsername());
+        return ResponseEntity.status(201).body(chatService.sendImageMessage(userId, roomUuid, image));
     }
 
     @PostMapping("/{roomUuid}/route")

@@ -15,6 +15,8 @@ import com.eodigaljido.backend.dto.chat.EditMessageRequest;
 import com.eodigaljido.backend.dto.chat.InviteMemberRequest;
 import com.eodigaljido.backend.dto.chat.SendMessageRequest;
 import com.eodigaljido.backend.dto.chat.ShareRouteRequest;
+import com.eodigaljido.backend.dto.chat.TypingEvent;
+import com.eodigaljido.backend.dto.chat.TypingRequest;
 import com.eodigaljido.backend.dto.chat.UpdateChatRoomNameRequest;
 import com.eodigaljido.backend.dto.chat.ChatEventEnvelope.EventType;
 import com.eodigaljido.backend.event.NotificationEvent;
@@ -423,6 +425,67 @@ public class ChatService {
     }
 
     @Transactional
+    public ChatMessageResponse sendImageMessage(Long userId, String roomUuid, MultipartFile image) {
+        ChatRoom room = getActiveRoom(roomUuid);
+        ChatRoomMember senderMembership = getMembership(room, userId);
+        User me = senderMembership.getUser();
+
+        String messageUuid = UUID.randomUUID().toString();
+        String attachmentUrl;
+        try {
+            attachmentUrl = fileStorageService.store(image, "chat-messages/" + roomUuid, messageUuid);
+        } catch (IllegalArgumentException e) {
+            throw new ChatException(e.getMessage(), HttpStatus.BAD_REQUEST);
+        } catch (IOException e) {
+            throw new ChatException("이미지 업로드 중 오류가 발생했습니다.", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+
+        ChatMessage message = ChatMessage.builder()
+                .uuid(messageUuid)
+                .room(room)
+                .sender(me)
+                .type(ChatMessage.MessageType.IMAGE)
+                .attachmentUrl(attachmentUrl)
+                .build();
+        chatMessageRepository.save(message);
+        senderMembership.updateLastReadAt();
+
+        String senderNickname = profileRepository.findByUser(me)
+                .map(Profile::getNickname).orElse(me.getUserId());
+        chatRoomMemberRepository.findByRoomAndLeftAtIsNull(room).stream()
+                .filter(m -> !m.getUser().getId().equals(userId))
+                .forEach(member -> eventPublisher.publishEvent(NotificationEvent.of(
+                        member.getUser().getId(), userId,
+                        NotificationType.CHAT_MESSAGE,
+                        senderNickname,
+                        "[이미지]",
+                        room.getUuid(), "CHAT_ROOM"
+                )));
+
+        ChatMessageResponse response = toMessageResponse(message);
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                messagingTemplate.convertAndSend("/topic/chat/" + roomUuid,
+                        new ChatEventEnvelope(EventType.MESSAGE_CREATED, response));
+            }
+        });
+        return response;
+    }
+
+    public void broadcastTyping(Long userId, String roomUuid, TypingRequest req) {
+        ChatRoom room = getActiveRoom(roomUuid);
+        getMembership(room, userId);
+        User me = getUser(userId);
+        String nickname = profileRepository.findByUser(me)
+                .map(Profile::getNickname).orElse(me.getUserId());
+        messagingTemplate.convertAndSend(
+                "/topic/chat/" + roomUuid + "/typing",
+                new TypingEvent(me.getUuid(), nickname, req.isTyping())
+        );
+    }
+
+    @Transactional
     public void markAsRead(Long userId, String roomUuid) {
         ChatRoom room = getActiveRoom(roomUuid);
         ChatRoomMember membership = getMembership(room, userId);
@@ -559,6 +622,7 @@ public class ChatService {
                 imageUrl,
                 message.getType().name(),
                 content,
+                message.isDeleted() ? null : message.getAttachmentUrl(),
                 routeUuid,
                 routeTitle,
                 routeThumbnailUrl,
