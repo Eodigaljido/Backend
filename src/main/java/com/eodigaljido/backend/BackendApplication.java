@@ -8,12 +8,14 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.TimeZone;
 
 @EnableAsync
 @SpringBootApplication
 public class BackendApplication {
 
 	public static void main(String[] args) {
+		TimeZone.setDefault(TimeZone.getTimeZone("Asia/Seoul"));
 		loadDotEnv();
 		SpringApplication.run(BackendApplication.class, args);
 	}
