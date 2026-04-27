@@ -348,10 +348,6 @@ public class ChatService {
         if (!message.getSender().getId().equals(userId)) {
             throw new ChatException("메시지 수정 권한이 없습니다.", HttpStatus.FORBIDDEN);
         }
-        if (message.isDeleted()) {
-            throw new ChatException("삭제된 메시지는 수정할 수 없습니다.", HttpStatus.BAD_REQUEST);
-        }
-
         message.edit(req.content());
         ChatMessageResponse response = toMessageResponse(message);
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
@@ -379,8 +375,8 @@ public class ChatService {
             throw new ChatException("메시지 삭제 권한이 없습니다.", HttpStatus.FORBIDDEN);
         }
 
-        message.delete();
         ChatMessageResponse deleteResponse = toMessageResponse(message);
+        chatMessageRepository.delete(message);
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
@@ -559,7 +555,7 @@ public class ChatService {
                 .toList();
 
         ChatMessage lastMsg = chatMessageRepository.findTopByRoomOrderByCreatedAtDesc(room).orElse(null);
-        String lastContent = lastMsg != null && !lastMsg.isDeleted() ? lastMsg.getContent() : null;
+        String lastContent = lastMsg != null ? lastMsg.getContent() : null;
         java.time.LocalDateTime lastMsgAt = lastMsg != null ? lastMsg.getCreatedAt() : null;
 
         long unreadCount = members.stream()
@@ -608,9 +604,8 @@ public class ChatService {
         Profile senderProfile = profileRepository.findByUser(message.getSender()).orElse(null);
         String nickname = senderProfile != null ? senderProfile.getNickname() : "알 수 없음";
         String imageUrl = senderProfile != null ? senderProfile.getProfileImageUrl() : null;
-        String content = message.isDeleted() ? null : message.getContent();
 
-        Route route = message.isDeleted() ? null : message.getRefRoute();
+        Route route = message.getRefRoute();
         String routeUuid = route != null ? route.getUuid() : null;
         String routeTitle = route != null ? route.getTitle() : null;
         String routeThumbnailUrl = route != null ? route.getThumbnailUrl() : null;
@@ -621,14 +616,13 @@ public class ChatService {
                 nickname,
                 imageUrl,
                 message.getType().name(),
-                content,
-                message.isDeleted() ? null : message.getAttachmentUrl(),
+                message.getContent(),
+                message.getAttachmentUrl(),
                 routeUuid,
                 routeTitle,
                 routeThumbnailUrl,
                 message.getCreatedAt(),
-                message.getEditedAt(),
-                message.isDeleted()
+                message.getEditedAt()
         );
     }
 

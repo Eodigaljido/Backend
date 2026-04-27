@@ -54,10 +54,6 @@ public class ChatMessage {
     @JoinColumn(name = "ref_route_id")
     private Route refRoute;
 
-    @Column(name = "is_deleted", nullable = false)
-    @Builder.Default
-    private boolean isDeleted = false;
-
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -68,10 +64,6 @@ public class ChatMessage {
     public void edit(String newContent) {
         this.content = newContent;
         this.editedAt = LocalDateTime.now();
-    }
-
-    public void delete() {
-        this.isDeleted = true;
     }
 
     public enum MessageType {

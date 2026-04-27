@@ -40,8 +40,5 @@ public record ChatMessageResponse(
         LocalDateTime createdAt,
 
         @Schema(description = "메시지 수정 시각 (수정된 적 없으면 null)", example = "2026-04-01T10:05:00")
-        LocalDateTime editedAt,
-
-        @Schema(description = "메시지 삭제 여부", example = "false")
-        boolean isDeleted
+        LocalDateTime editedAt
 ) {}
