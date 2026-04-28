@@ -1335,7 +1335,7 @@
   let myTypingTimer     = null;
   let isCurrentlyTyping = false;
   let lastTypingSentAt  = 0;          // 마지막으로 isTyping:true 전송한 시각
-  const TYPING_THROTTLE = 3000;       // 재전송 최소 간격 (ms)
+  const TYPING_THROTTLE = 2000;       // 재전송 최소 간격 (ms)
   const TYPING_AUTO_REMOVE = 6000;    // 수신측 자동 제거 타임아웃 (ms)
 
   function wsConnect() {
@@ -1497,7 +1497,7 @@
     }
 
     clearTimeout(myTypingTimer);
-    myTypingTimer = setTimeout(() => stopMyTyping(), 2000);
+    myTypingTimer = setTimeout(() => stopMyTyping(), 5000);
   }
 
   function stopMyTyping() {
