@@ -131,6 +131,15 @@
       font-size: 0.78rem; color: #94a3b8; white-space: pre-wrap; word-break: break-all;
     }
     .spacer { height: 240px; }
+
+    /* 타이핑 애니메이션 */
+    @keyframes blink {
+      0%, 80%, 100% { opacity: 0.2; transform: translateY(0); }
+      40%            { opacity: 1;   transform: translateY(-3px); }
+    }
+    .dot { display: inline-block; color: #a78bfa; font-size: 0.6rem; margin: 0 1px; animation: blink 1.2s infinite; }
+    .dot:nth-child(2) { animation-delay: 0.2s; }
+    .dot:nth-child(3) { animation-delay: 0.4s; }
   </style>
 </head>
 <body>
@@ -733,6 +742,7 @@
       <div class="form-group">
         <label>메시지 내용</label>
         <input id="wsMsgContent" type="text" placeholder="안녕하세요!" maxlength="2000"
+               oninput="onMsgInput()"
                onkeydown="if(event.key==='Enter')wsSendMessage()">
       </div>
       <div class="form-group">
@@ -741,6 +751,30 @@
       </div>
       <div class="btn-row">
         <button class="btn btn-primary" onclick="wsSendMessage()">전송 (STOMP)</button>
+      </div>
+    </div>
+
+    <!-- 타이핑 인디케이터 카드 -->
+    <div class="card">
+      <h3>5. 타이핑 인디케이터</h3>
+      <div class="info-box" style="margin-bottom:12px">
+        채팅방 구독 시 타이핑 토픽도 자동 구독됩니다.<br>
+        수신: <code style="background:#1e2535;padding:1px 4px;border-radius:3px">/topic/chat/{roomUuid}/typing</code><br>
+        발행: <code style="background:#1e2535;padding:1px 4px;border-radius:3px">/app/chat/{roomUuid}/typing</code><br>
+        메시지 입력창에 타이핑하면 자동으로 전송됩니다.
+      </div>
+      <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;padding:14px;margin-bottom:14px;min-height:54px;display:flex;align-items:center;gap:10px">
+        <span id="typingDots" style="display:none;font-size:1.1rem">
+          <span class="dot">●</span><span class="dot">●</span><span class="dot">●</span>
+        </span>
+        <span id="typingIndicator" style="font-size:0.85rem;color:#94a3b8;font-style:italic">타이핑 중인 사용자 없음</span>
+      </div>
+      <div class="form-group">
+        <label style="color:#475569">수동 테스트 (버튼으로 직접 전송)</label>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-success" onclick="wsSendTyping(true)">타이핑 시작 전송</button>
+        <button class="btn btn-secondary" onclick="wsSendTyping(false)">타이핑 중지 전송</button>
       </div>
     </div>
 
@@ -1294,6 +1328,12 @@
   let stompClient     = null;
   let chatSub         = null;
   let notifSub        = null;
+  let typingSub       = null;
+
+  // 타이핑 상태 관리
+  const typingUsers   = new Map(); // senderUuid → { nickname, timerId }
+  let myTypingTimer   = null;
+  let isCurrentlyTyping = false;
 
   function wsConnect() {
     const token = getAccess();
@@ -1314,7 +1354,9 @@
       },
       onDisconnect: () => {
         setWsStatus('disconnected');
-        chatSub = null; notifSub = null;
+        chatSub = null; notifSub = null; typingSub = null;
+        isCurrentlyTyping = false;
+        clearTypingUsers();
         document.getElementById('wsChatSubStatus').textContent  = '없음';
         document.getElementById('wsNotifSubStatus').textContent = '구독 안 됨';
         showWsLog('system', '— WebSocket 연결 해제됨');
@@ -1337,6 +1379,7 @@
     if (!roomUuid) { alert('채팅방 UUID를 입력하세요.'); return; }
     if (!stompClient?.connected) { alert('먼저 WebSocket에 연결하세요.'); return; }
     if (chatSub) { chatSub.unsubscribe(); chatSub = null; }
+    if (typingSub) { typingSub.unsubscribe(); typingSub = null; }
 
     chatSub = stompClient.subscribe('/topic/chat/' + roomUuid, msg => {
       try {
@@ -1347,16 +1390,26 @@
       } catch { showWsLog('receive', msg.body); }
     });
 
+    typingSub = stompClient.subscribe('/topic/chat/' + roomUuid + '/typing', msg => {
+      try {
+        const ev = JSON.parse(msg.body);
+        handleTypingEvent(ev);
+      } catch { /* ignore malformed */ }
+    });
+
     document.getElementById('wsChatSubStatus').textContent = '/topic/chat/' + roomUuid;
     document.getElementById('wsChatSubStatus').style.color = '#34d399';
     document.getElementById('wsSendRoomUuid').value = roomUuid;
-    showWsLog('system', '✓ 구독 시작: /topic/chat/' + roomUuid);
+    clearTypingUsers();
+    showWsLog('system', '✓ 구독 시작: /topic/chat/' + roomUuid + ' (타이핑 토픽 포함)');
   }
 
   function wsUnsubscribeChat() {
     if (chatSub) {
       const prev = document.getElementById('wsRoomUuid').value.trim();
       chatSub.unsubscribe(); chatSub = null;
+      if (typingSub) { typingSub.unsubscribe(); typingSub = null; }
+      clearTypingUsers();
       document.getElementById('wsChatSubStatus').textContent = '없음';
       document.getElementById('wsChatSubStatus').style.color = '#64748b';
       showWsLog('system', '— 구독 해제: /topic/chat/' + prev);
@@ -1398,6 +1451,9 @@
 
     const mentionedUserUuids = raw ? raw.split(',').map(s => s.trim()).filter(Boolean) : [];
 
+    // 전송 시 타이핑 중지
+    stopMyTyping();
+
     stompClient.publish({
       destination: '/app/chat/' + roomUuid,
       body: JSON.stringify({ content, mentionedUserUuids })
@@ -1405,6 +1461,90 @@
 
     showWsLog('send', '[전송 → ' + roomUuid + '] ' + content);
     document.getElementById('wsMsgContent').value = '';
+  }
+
+  // ── 타이핑 인디케이터 ──────────────────────────────────────────────
+
+  function wsSendTyping(isTyping) {
+    const roomUuid = document.getElementById('wsSendRoomUuid').value.trim();
+    if (!roomUuid) { alert('먼저 채팅방 UUID를 입력하고 구독하세요.'); return; }
+    if (!stompClient?.connected) { alert('먼저 WebSocket에 연결하세요.'); return; }
+    stompClient.publish({
+      destination: '/app/chat/' + roomUuid + '/typing',
+      body: JSON.stringify({ isTyping })
+    });
+    showWsLog('send', '[타이핑 ' + (isTyping ? '시작' : '중지') + ' → ' + roomUuid + ']');
+  }
+
+  function onMsgInput() {
+    if (!stompClient?.connected) return;
+    const roomUuid = document.getElementById('wsSendRoomUuid').value.trim();
+    if (!roomUuid) return;
+
+    if (!isCurrentlyTyping) {
+      isCurrentlyTyping = true;
+      stompClient.publish({
+        destination: '/app/chat/' + roomUuid + '/typing',
+        body: JSON.stringify({ isTyping: true })
+      });
+    }
+
+    clearTimeout(myTypingTimer);
+    myTypingTimer = setTimeout(() => stopMyTyping(), 2000);
+  }
+
+  function stopMyTyping() {
+    clearTimeout(myTypingTimer);
+    if (!isCurrentlyTyping) return;
+    isCurrentlyTyping = false;
+    const roomUuid = document.getElementById('wsSendRoomUuid').value.trim();
+    if (roomUuid && stompClient?.connected) {
+      stompClient.publish({
+        destination: '/app/chat/' + roomUuid + '/typing',
+        body: JSON.stringify({ isTyping: false })
+      });
+    }
+  }
+
+  function handleTypingEvent(ev) {
+    const { senderUuid, senderNickname, isTyping } = ev;
+    if (!senderUuid) return;
+
+    if (typingUsers.has(senderUuid)) {
+      clearTimeout(typingUsers.get(senderUuid).timerId);
+    }
+
+    if (isTyping) {
+      const timerId = setTimeout(() => {
+        typingUsers.delete(senderUuid);
+        renderTypingIndicator();
+      }, 5000);
+      typingUsers.set(senderUuid, { nickname: senderNickname, timerId });
+    } else {
+      typingUsers.delete(senderUuid);
+    }
+    renderTypingIndicator();
+  }
+
+  function renderTypingIndicator() {
+    const el   = document.getElementById('typingIndicator');
+    const dots = document.getElementById('typingDots');
+    if (typingUsers.size === 0) {
+      el.textContent = '타이핑 중인 사용자 없음';
+      el.style.color = '#94a3b8';
+      dots.style.display = 'none';
+    } else {
+      const names = [...typingUsers.values()].map(u => u.nickname).join(', ');
+      el.textContent = names + '님이 타이핑 중...';
+      el.style.color = '#a78bfa';
+      dots.style.display = 'inline';
+    }
+  }
+
+  function clearTypingUsers() {
+    typingUsers.forEach(u => clearTimeout(u.timerId));
+    typingUsers.clear();
+    renderTypingIndicator();
   }
 
   function setWsStatus(status) {
