@@ -218,7 +218,6 @@ public class ChatController {
                     - `messageType`: 메시지 타입 (`TEXT`)
                     - `content`: 메시지 내용
                     - `createdAt` / `editedAt`: 전송·수정 시각
-                    - `isDeleted`: 삭제 여부
 
                     **WebSocket 실시간 수신 (STOMP):**
                     - 연결 엔드포인트: `ws://{host}/ws/chat` (SockJS 지원)
@@ -276,7 +275,6 @@ public class ChatController {
                     - `content`: 메시지 내용 (삭제된 경우 null, IMAGE는 null, ROUTE는 루트 제목)
                     - `attachmentUrl`: 이미지 URL (messageType=IMAGE 일 때만, 그 외 null)
                     - `routeUuid` / `routeTitle` / `routeThumbnailUrl`: 루트 공유 메시지일 때만 값, 그 외 null
-                    - `isDeleted`: 삭제 여부
                     """
     )
     @ApiResponses({
