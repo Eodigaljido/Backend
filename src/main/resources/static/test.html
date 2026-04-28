@@ -1331,9 +1331,12 @@
   let typingSub       = null;
 
   // 타이핑 상태 관리
-  const typingUsers   = new Map(); // senderUuid → { nickname, timerId }
-  let myTypingTimer   = null;
+  const typingUsers     = new Map(); // senderUuid → { nickname, timerId }
+  let myTypingTimer     = null;
   let isCurrentlyTyping = false;
+  let lastTypingSentAt  = 0;          // 마지막으로 isTyping:true 전송한 시각
+  const TYPING_THROTTLE = 3000;       // 재전송 최소 간격 (ms)
+  const TYPING_AUTO_REMOVE = 6000;    // 수신측 자동 제거 타임아웃 (ms)
 
   function wsConnect() {
     const token = getAccess();
@@ -1356,6 +1359,7 @@
         setWsStatus('disconnected');
         chatSub = null; notifSub = null; typingSub = null;
         isCurrentlyTyping = false;
+        lastTypingSentAt  = 0;
         clearTypingUsers();
         document.getElementById('wsChatSubStatus').textContent  = '없음';
         document.getElementById('wsNotifSubStatus').textContent = '구독 안 됨';
@@ -1481,8 +1485,11 @@
     const roomUuid = document.getElementById('wsSendRoomUuid').value.trim();
     if (!roomUuid) return;
 
-    if (!isCurrentlyTyping) {
+    const now = Date.now();
+    // 처음 타이핑 시작이거나, 3초마다 isTyping:true 재전송 (수신 측 자동 제거 타이머 리셋)
+    if (!isCurrentlyTyping || now - lastTypingSentAt >= TYPING_THROTTLE) {
       isCurrentlyTyping = true;
+      lastTypingSentAt  = now;
       stompClient.publish({
         destination: '/app/chat/' + roomUuid + '/typing',
         body: JSON.stringify({ isTyping: true })
@@ -1497,6 +1504,7 @@
     clearTimeout(myTypingTimer);
     if (!isCurrentlyTyping) return;
     isCurrentlyTyping = false;
+    lastTypingSentAt  = 0;
     const roomUuid = document.getElementById('wsSendRoomUuid').value.trim();
     if (roomUuid && stompClient?.connected) {
       stompClient.publish({
@@ -1518,7 +1526,7 @@
       const timerId = setTimeout(() => {
         typingUsers.delete(senderUuid);
         renderTypingIndicator();
-      }, 5000);
+      }, TYPING_AUTO_REMOVE);
       typingUsers.set(senderUuid, { nickname: senderNickname, timerId });
     } else {
       typingUsers.delete(senderUuid);
