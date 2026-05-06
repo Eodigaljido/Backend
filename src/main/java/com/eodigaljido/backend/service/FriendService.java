@@ -5,8 +5,10 @@ import com.eodigaljido.backend.domain.user.Profile;
 import com.eodigaljido.backend.domain.user.User;
 import com.eodigaljido.backend.dto.friend.FriendRequestResponse;
 import com.eodigaljido.backend.dto.friend.FriendResponse;
+import com.eodigaljido.backend.dto.friend.RecentFriendResponse;
 import com.eodigaljido.backend.exception.FriendException;
 import com.eodigaljido.backend.exception.UserException;
+import com.eodigaljido.backend.repository.ChatMessageRepository;
 import com.eodigaljido.backend.repository.FriendRepository;
 import com.eodigaljido.backend.repository.ProfileRepository;
 import com.eodigaljido.backend.repository.UserRepository;
@@ -15,7 +17,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.text.Collator;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -26,8 +31,9 @@ public class FriendService {
     private final FriendRepository friendRepository;
     private final UserRepository userRepository;
     private final ProfileRepository profileRepository;
+    private final ChatMessageRepository chatMessageRepository;
 
-    // 친구 목록 조회
+    // 친구 목록 조회 (한글 → 영어 → 숫자 → 특수기호 순, 각 그룹 내 가나다/abc/123 정렬)
     @Transactional(readOnly = true)
     public List<FriendResponse> getFriends(Long userId) {
         User me = findUser(userId);
@@ -38,11 +44,67 @@ public class FriendService {
                 .toList();
 
         Map<Long, Profile> profileMap = buildProfileMap(others);
+        Collator koreanCollator = Collator.getInstance(Locale.KOREAN);
 
         return friends.stream()
                 .map(f -> {
                     User other = f.getRequester().getId().equals(me.getId()) ? f.getReceiver() : f.getRequester();
                     return FriendResponse.of(f, me, profileMap.get(other.getId()));
+                })
+                .sorted((a, b) -> {
+                    String na = a.nickname() != null ? a.nickname() : "";
+                    String nb = b.nickname() != null ? b.nickname() : "";
+                    if (na.isEmpty() && nb.isEmpty()) return 0;
+                    if (na.isEmpty()) return 1;
+                    if (nb.isEmpty()) return -1;
+                    int ga = charGroup(na.charAt(0));
+                    int gb = charGroup(nb.charAt(0));
+                    if (ga != gb) return Integer.compare(ga, gb);
+                    if (ga == 0) return koreanCollator.compare(na, nb);
+                    return na.compareToIgnoreCase(nb);
+                })
+                .toList();
+    }
+
+    // 최근 연락한 친구 5명 조회 (마지막 메시지 시각 기준 내림차순)
+    @Transactional(readOnly = true)
+    public List<RecentFriendResponse> getRecentFriends(Long userId) {
+        User me = findUser(userId);
+        List<Friend> friends = friendRepository.findAcceptedFriends(me);
+        if (friends.isEmpty()) return List.of();
+
+        List<Long> friendIds = friends.stream()
+                .map(f -> f.getRequester().getId().equals(me.getId()) ? f.getReceiver().getId() : f.getRequester().getId())
+                .toList();
+
+        List<Object[]> rows = chatMessageRepository.findRecentContactedFriends(userId, friendIds);
+        if (rows.isEmpty()) return List.of();
+
+        Map<Long, Friend> friendByUserId = friends.stream()
+                .collect(Collectors.toMap(
+                        f -> f.getRequester().getId().equals(me.getId()) ? f.getReceiver().getId() : f.getRequester().getId(),
+                        f -> f
+                ));
+
+        List<User> recentUsers = rows.stream()
+                .limit(5)
+                .map(row -> {
+                    Long fUserId = (Long) row[0];
+                    Friend f = friendByUserId.get(fUserId);
+                    return f.getRequester().getId().equals(me.getId()) ? f.getReceiver() : f.getRequester();
+                })
+                .toList();
+
+        Map<Long, Profile> profileMap = buildProfileMap(recentUsers);
+
+        return rows.stream()
+                .limit(5)
+                .map(row -> {
+                    Long fUserId = (Long) row[0];
+                    LocalDateTime lastContactedAt = (LocalDateTime) row[1];
+                    Friend f = friendByUserId.get(fUserId);
+                    User other = f.getRequester().getId().equals(me.getId()) ? f.getReceiver() : f.getRequester();
+                    return RecentFriendResponse.of(f, me, profileMap.get(other.getId()), lastContactedAt);
                 })
                 .toList();
     }
@@ -135,5 +197,18 @@ public class FriendService {
                 .filter(java.util.Optional::isPresent)
                 .map(java.util.Optional::get)
                 .collect(Collectors.toMap(p -> p.getUser().getId(), p -> p));
+    }
+
+    // 닉네임 첫 글자의 그룹: 0=한글, 1=영어, 2=숫자, 3=특수기호
+    private static int charGroup(char c) {
+        Character.UnicodeBlock block = Character.UnicodeBlock.of(c);
+        if (block == Character.UnicodeBlock.HANGUL_SYLLABLES
+                || block == Character.UnicodeBlock.HANGUL_JAMO
+                || block == Character.UnicodeBlock.HANGUL_COMPATIBILITY_JAMO) {
+            return 0;
+        }
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) return 1;
+        if (c >= '0' && c <= '9') return 2;
+        return 3;
     }
 }

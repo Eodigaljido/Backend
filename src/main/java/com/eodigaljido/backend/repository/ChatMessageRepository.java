@@ -26,4 +26,25 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
 
     @Query("SELECT COUNT(m) FROM ChatMessage m WHERE m.room = :room AND m.createdAt > :since")
     long countMessagesAfter(@Param("room") ChatRoom room, @Param("since") java.time.LocalDateTime since);
+
+    // 나와 친구가 함께 속한 채팅방의 가장 최근 메시지 시각을 친구별로 집계
+    @Query("""
+        SELECT crm.user.id, MAX(m.createdAt)
+        FROM ChatRoomMember crm
+        JOIN ChatMessage m ON m.room = crm.room
+        WHERE crm.room IN (
+            SELECT crm2.room FROM ChatRoomMember crm2
+            WHERE crm2.user.id = :userId
+            AND crm2.leftAt IS NULL
+            AND crm2.room.deletedAt IS NULL
+        )
+        AND crm.leftAt IS NULL
+        AND crm.user.id IN :friendIds
+        GROUP BY crm.user.id
+        ORDER BY MAX(m.createdAt) DESC
+    """)
+    List<Object[]> findRecentContactedFriends(
+            @Param("userId") Long userId,
+            @Param("friendIds") List<Long> friendIds
+    );
 }

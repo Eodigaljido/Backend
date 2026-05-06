@@ -3,6 +3,7 @@ package com.eodigaljido.backend.service;
 import com.eodigaljido.backend.domain.chat.ChatMessage;
 import com.eodigaljido.backend.domain.chat.ChatRoom;
 import com.eodigaljido.backend.domain.chat.ChatRoomMember;
+import com.eodigaljido.backend.domain.friend.Friend;
 import com.eodigaljido.backend.domain.notification.NotificationType;
 import com.eodigaljido.backend.domain.route.Route;
 import com.eodigaljido.backend.domain.user.Profile;
@@ -64,6 +65,7 @@ public class ChatService {
     private final UserRepository userRepository;
     private final ProfileRepository profileRepository;
     private final RouteRepository routeRepository;
+    private final FriendRepository friendRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final ApplicationEventPublisher eventPublisher;
     private final FileStorageService fileStorageService;
@@ -138,10 +140,15 @@ public class ChatService {
     @Transactional
     public ChatRoomResponse inviteMember(Long requesterId, String roomUuid, String targetUserId) {
         ChatRoom room = getActiveRoom(roomUuid);
+        User requester = getUser(requesterId);
         getMembership(room, requesterId);
 
         User target = userRepository.findByUserId(targetUserId)
                 .orElseThrow(() -> new ChatException("존재하지 않는 유저입니다: " + targetUserId, HttpStatus.NOT_FOUND));
+
+        friendRepository.findBetween(requester, target)
+                .filter(f -> f.getStatus() == Friend.FriendStatus.ACCEPTED)
+                .orElseThrow(() -> new ChatException("친구 관계인 유저만 초대할 수 있습니다.", HttpStatus.FORBIDDEN));
 
         if (chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(room, target).isPresent()) {
             throw new ChatException("이미 채팅방에 참여 중인 유저입니다.", HttpStatus.CONFLICT);
@@ -151,7 +158,6 @@ public class ChatService {
                 ChatRoomMember.builder().room(room).user(target).role(ChatRoomMember.MemberRole.MEMBER).build()
         );
 
-        User requester = getUser(requesterId);
         String requesterNickname = profileRepository.findByUser(requester)
                 .map(Profile::getNickname).orElse(requester.getUserId());
         eventPublisher.publishEvent(NotificationEvent.of(

@@ -5,6 +5,7 @@ import com.eodigaljido.backend.dto.friend.FriendRequestDto;
 import com.eodigaljido.backend.dto.friend.FriendRequestResponse;
 import com.eodigaljido.backend.dto.friend.FriendRespondDto;
 import com.eodigaljido.backend.dto.friend.FriendResponse;
+import com.eodigaljido.backend.dto.friend.RecentFriendResponse;
 import com.eodigaljido.backend.service.FriendService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -30,11 +31,33 @@ public class FriendController {
 
     private final FriendService friendService;
 
+    @GetMapping("/recent")
+    @Operation(
+            summary = "최근 연락한 친구 5명 조회",
+            description = """
+                    가장 최근에 채팅을 나눈 친구를 최대 5명 반환합니다.
+                    채팅 이력이 없는 친구는 포함되지 않습니다.
+
+                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
+                    """
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "최근 연락한 친구 목록 반환 (최대 5명, 빈 배열이면 없음)"),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<List<RecentFriendResponse>> getRecentFriends(
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(friendService.getRecentFriends(Long.parseLong(userDetails.getUsername())));
+    }
+
     @GetMapping
     @Operation(
-            summary = "친구 목록 조회",
+            summary = "전체 친구 목록 조회",
             description = """
                     로그인한 사용자의 수락된 친구 목록을 조회합니다.
+                    닉네임 기준으로 한글 → 영어 → 숫자 → 특수기호 순으로 정렬되며,
+                    각 그룹 내에서는 가나다/abc/123 순으로 정렬됩니다.
 
                     **헤더:** `Authorization: Bearer {accessToken}` (필수)
                     """
