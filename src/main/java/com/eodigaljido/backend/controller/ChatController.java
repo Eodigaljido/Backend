@@ -37,11 +37,48 @@ public class ChatController {
 
     private final ChatService chatService;
 
+    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(
+            summary = "채팅방 생성 (JSON)",
+            description = """
+                    새 채팅방을 생성하고 멤버를 초대합니다. `application/json`으로 요청합니다. (이미지 없이 생성)
+
+                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
+
+                    **Request (application/json):**
+                    - `memberUuids` (필수): 초대할 멤버의 UUID 목록 (본인 UUID 포함 시 자동 제외)
+                    - `name` (선택): 채팅방 이름 (최대 100자, 미입력 시 멤버 닉네임 조합으로 자동 생성)
+
+                    **Response:**
+                    - `uuid`: 채팅방 UUID
+                    - `name`: 채팅방 이름
+                    - `profileImageUrl`: 프로필 이미지 URL (그룹 채팅방은 채팅방 이미지, 1:1 채팅방은 null)
+                    - `memberCount` / `ownerUuid` / `ownerUserId` / `memberUuids` / `memberUserIds`: 멤버 정보
+                    """
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "채팅방 생성 성공"),
+            @ApiResponse(responseCode = "400", description = "멤버 UUID 누락",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "초대 대상 중 친구가 아닌 유저가 포함됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "초대한 UUID에 해당하는 유저가 존재하지 않음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<CreateChatRoomResponse> createRoomJson(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestBody @Valid CreateChatRoomRequest req) {
+        Long userId = Long.valueOf(userDetails.getUsername());
+        return ResponseEntity.status(201).body(chatService.createRoom(userId, req.memberUuids(), req.name(), null));
+    }
+
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(
-            summary = "채팅방 생성",
+            summary = "채팅방 생성 (multipart)",
             description = """
-                    새 채팅방을 생성하고 멤버를 초대합니다. `multipart/form-data`로 요청합니다.
+                    새 채팅방을 생성하고 멤버를 초대합니다. `multipart/form-data`로 요청합니다. (이미지 포함 가능)
 
                     **헤더:** `Authorization: Bearer {accessToken}` (필수)
 
