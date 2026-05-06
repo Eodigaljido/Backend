@@ -2,6 +2,7 @@ package com.eodigaljido.backend.controller;
 
 import com.eodigaljido.backend.dto.chat.ChatMessageResponse;
 import com.eodigaljido.backend.dto.chat.ChatRoomResponse;
+import com.eodigaljido.backend.dto.chat.CreateChatRoomRequest;
 import com.eodigaljido.backend.dto.chat.CreateChatRoomResponse;
 import com.eodigaljido.backend.dto.chat.EditMessageRequest;
 import com.eodigaljido.backend.dto.chat.InviteMemberRequest;
@@ -27,6 +28,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
+
 @RestController
 @RequestMapping("/chats")
 @RequiredArgsConstructor
@@ -44,9 +46,10 @@ public class ChatController {
                     **헤더:** `Authorization: Bearer {accessToken}` (필수)
 
                     **Request (multipart/form-data):**
-                    - `memberUuids` (필수): 초대할 멤버의 UUID 목록. 여러 값을 같은 키로 반복 전송 (본인 UUID 포함 시 자동 제외)
-                    - `name` (선택): 채팅방 이름 (최대 100자, 미입력 시 멤버 닉네임 조합으로 자동 생성)
-                    - `image` (선택): 그룹 채팅방 프로필 이미지 (JPEG, PNG, GIF, WebP, 최대 10MB). 미입력 시 5개 기본 이미지 중 랜덤 할당. 1:1 채팅방은 무시됨
+                    - `request` (필수, `application/json`): `{ "memberUuids": [...], "name": "..." }`
+                      - `memberUuids` (필수): 초대할 멤버의 UUID 목록 (본인 UUID 포함 시 자동 제외)
+                      - `name` (선택): 채팅방 이름 (최대 100자, 미입력 시 멤버 닉네임 조합으로 자동 생성)
+                    - `image` (선택): 그룹 채팅방 프로필 이미지 (JPEG, PNG, GIF, WebP, 최대 10MB). 미입력 시 기본 이미지 랜덤 할당. 1:1 채팅방은 무시됨
 
                     **Response:**
                     - `uuid`: 채팅방 UUID
@@ -68,11 +71,10 @@ public class ChatController {
     })
     public ResponseEntity<CreateChatRoomResponse> createRoom(
             @AuthenticationPrincipal UserDetails userDetails,
-            @RequestParam List<String> memberUuids,
-            @RequestParam(required = false) String name,
+            @RequestPart("request") @Valid CreateChatRoomRequest req,
             @RequestPart(value = "image", required = false) MultipartFile image) {
         Long userId = Long.valueOf(userDetails.getUsername());
-        return ResponseEntity.status(201).body(chatService.createRoom(userId, memberUuids, name, image));
+        return ResponseEntity.status(201).body(chatService.createRoom(userId, req.memberUuids(), req.name(), image));
     }
 
     @GetMapping

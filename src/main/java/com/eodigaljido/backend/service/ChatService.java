@@ -94,7 +94,6 @@ public class ChatService {
 
         String roomName = (name != null && !name.isBlank()) ? name : null;
 
-        // 초대 인원이 2명 이상이면 GROUP, 그 외 DIRECT
         ChatRoom.RoomType roomType = invitees.size() > 1 ? ChatRoom.RoomType.GROUP : ChatRoom.RoomType.DIRECT;
 
         String roomUuid = UUID.randomUUID().toString();
