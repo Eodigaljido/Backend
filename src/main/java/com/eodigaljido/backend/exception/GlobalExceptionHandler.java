@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -117,6 +118,13 @@ public class GlobalExceptionHandler {
         log.warn("[파일 크기 초과] {}", e.getMessage());
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
                 .body(new ErrorResponse(413, "파일 크기가 너무 큽니다. 최대 10MB까지 업로드할 수 있습니다.", LocalDateTime.now()));
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    ResponseEntity<ErrorResponse> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException e) {
+        log.warn("[지원하지 않는 Content-Type] {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+                .body(new ErrorResponse(415, "지원하지 않는 Content-Type입니다: " + e.getContentType(), LocalDateTime.now()));
     }
 
     @ExceptionHandler(AsyncRequestNotUsableException.class)
