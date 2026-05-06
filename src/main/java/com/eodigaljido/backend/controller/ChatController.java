@@ -61,6 +61,8 @@ public class ChatController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "초대 대상 중 친구가 아닌 유저가 포함됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "초대한 UUID에 해당하는 유저가 존재하지 않음",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
@@ -402,7 +404,7 @@ public class ChatController {
     @Operation(
             summary = "채팅방 멤버 초대",
             description = """
-                    기존 채팅방에 새로운 유저를 초대합니다. 채팅방 멤버라면 누구든 초대할 수 있습니다.
+                    기존 채팅방에 새로운 유저를 초대합니다. **친구 관계(ACCEPTED)인 유저만 초대할 수 있습니다.**
 
                     **헤더:** `Authorization: Bearer {accessToken}` (필수)
 
@@ -419,7 +421,7 @@ public class ChatController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "403", description = "해당 채팅방의 멤버가 아님",
+            @ApiResponse(responseCode = "403", description = "해당 채팅방의 멤버가 아니거나 초대 대상이 친구가 아님",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "존재하지 않는 채팅방 또는 유저",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),

@@ -85,6 +85,13 @@ public class ChatService {
                         .orElseThrow(() -> new ChatException("존재하지 않는 유저입니다: " + uuid, HttpStatus.NOT_FOUND)))
                 .collect(Collectors.toList());
 
+        for (User invitee : invitees) {
+            friendRepository.findBetween(me, invitee)
+                    .filter(f -> f.getStatus() == Friend.FriendStatus.ACCEPTED)
+                    .orElseThrow(() -> new ChatException(
+                            "친구 관계인 유저만 초대할 수 있습니다: " + invitee.getUserId(), HttpStatus.FORBIDDEN));
+        }
+
         String roomName = (name != null && !name.isBlank()) ? name : null;
 
         // 초대 인원이 2명 이상이면 GROUP, 그 외 DIRECT
