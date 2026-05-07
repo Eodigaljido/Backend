@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.time.LocalDateTime;
@@ -75,6 +76,13 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(e.getStatus().value(), e.getMessage(), LocalDateTime.now()));
     }
 
+    @ExceptionHandler(FollowingNewsException.class)
+    ResponseEntity<ErrorResponse> handleFollowingNews(FollowingNewsException e) {
+        log.warn("[팔로잉 소식 오류] {} (status={})", e.getMessage(), e.getStatus().value());
+        return ResponseEntity.status(e.getStatus())
+                .body(new ErrorResponse(e.getStatus().value(), e.getMessage(), LocalDateTime.now()));
+    }
+
     @ExceptionHandler(NumberFormatException.class)
     ResponseEntity<ErrorResponse> handleNumberFormat(NumberFormatException e) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
@@ -90,6 +98,13 @@ public class GlobalExceptionHandler {
         log.warn("[유효성 검사 실패] {}", message);
         return ResponseEntity.badRequest()
                 .body(new ErrorResponse(400, message, LocalDateTime.now()));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        String name = e.getName() != null ? e.getName() : "요청 값";
+        return ResponseEntity.badRequest()
+                .body(new ErrorResponse(400, name + " 값이 올바르지 않습니다.", LocalDateTime.now()));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)

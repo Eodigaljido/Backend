@@ -1,6 +1,7 @@
 package com.eodigaljido.backend.service;
 
 import com.eodigaljido.backend.domain.chat.ChatRoom;
+import com.eodigaljido.backend.domain.following.FollowingNewsActionType;
 import com.eodigaljido.backend.domain.notification.NotificationType;
 import com.eodigaljido.backend.domain.route.Route;
 import com.eodigaljido.backend.domain.route.Route.RouteStatus;
@@ -33,6 +34,7 @@ public class RouteService {
     private final ChatRoomRepository chatRoomRepository;
     private final ChatRoomMemberRepository chatRoomMemberRepository;
     private final OnboardingAnswerRepository onboardingAnswerRepository;
+    private final FollowingNewsService followingNewsService;
     private final ApplicationEventPublisher eventPublisher;
 
     // ──────────────────────────────────────────────────────────
@@ -155,6 +157,12 @@ public class RouteService {
                 .user(user)
                 .route(route)
                 .build());
+        followingNewsService.createNews(
+                userId,
+                FollowingNewsActionType.COURSE_SAVED,
+                route.getUuid(),
+                route.getTitle()
+        );
 
         // 코스 소유자에게 ROUTE_FAVORITED 알림 (자기 코스 제외)
         if (!route.getUser().getId().equals(userId)) {
@@ -195,7 +203,17 @@ public class RouteService {
     public void enableSharing(Long userId, Long id) {
         Route route = findActiveRouteById(id);
         verifyOwner(route, userId);
+        boolean wasShared = route.isShared();
         route.enableSharing();
+
+        if (!wasShared) {
+            followingNewsService.createNews(
+                    userId,
+                    FollowingNewsActionType.COURSE_PUBLISHED,
+                    route.getUuid(),
+                    route.getTitle()
+            );
+        }
 
         // 취향 매칭 사용자들에게 ROUTE_RECOMMENDED 알림 (비동기로 처리됨)
         if (route.getRegion() != null || route.getActivityType() != null) {

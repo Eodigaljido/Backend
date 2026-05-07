@@ -5,6 +5,7 @@ import com.eodigaljido.backend.domain.route.Route.RouteStatus;
 import com.eodigaljido.backend.domain.route.RouteReview;
 import com.eodigaljido.backend.domain.route.RouteWaypoint;
 import com.eodigaljido.backend.domain.route.SavedRoute;
+import com.eodigaljido.backend.domain.following.FollowingNewsActionType;
 import com.eodigaljido.backend.domain.user.User;
 import com.eodigaljido.backend.dto.course.*;
 import com.eodigaljido.backend.exception.RouteException;
@@ -32,6 +33,7 @@ public class CourseService {
     private final RouteReviewRepository reviewRepository;
     private final SavedRouteRepository savedRouteRepository;
     private final UserRepository userRepository;
+    private final FollowingNewsService followingNewsService;
 
     // ──────────────────────────────────────────────────────────
     // 홈 코스 목록 (인기/최근 공유 코스)
@@ -119,6 +121,15 @@ public class CourseService {
 
         recalcRating(route);
 
+        if (user != null) {
+            followingNewsService.createNews(
+                    userId,
+                    FollowingNewsActionType.COURSE_COMPLETED,
+                    route.getUuid(),
+                    route.getTitle()
+            );
+        }
+
         return ReviewResponse.from(review);
     }
 
@@ -135,6 +146,12 @@ public class CourseService {
             throw new RouteException("이미 저장된 코스입니다.", HttpStatus.CONFLICT);
         }
         savedRouteRepository.save(SavedRoute.builder().user(user).route(route).build());
+        followingNewsService.createNews(
+                userId,
+                FollowingNewsActionType.COURSE_SAVED,
+                route.getUuid(),
+                route.getTitle()
+        );
     }
 
     // ──────────────────────────────────────────────────────────

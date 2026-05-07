@@ -12,4 +12,5 @@ public interface ProfileRepository extends JpaRepository<Profile, Long> {
     boolean existsByNickname(String nickname);
     boolean existsByNicknameAndUserNot(String nickname, User user);
     List<Profile> findByNicknameContainingIgnoreCase(String keyword);
+    List<Profile> findByUserIn(List<User> users);
 }
