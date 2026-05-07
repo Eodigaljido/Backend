@@ -48,6 +48,9 @@ public class RouteWaypoint {
     @Column(length = 255)
     private String memo;
 
+    @Column(name = "stay_minutes")
+    private Integer stayMinutes;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

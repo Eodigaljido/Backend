@@ -26,5 +26,8 @@ public record WaypointRequest(
         String address,
 
         @Schema(description = "메모", example = "정문 쪽에서 진입")
-        String memo
+        String memo,
+
+        @Schema(description = "체류 시간(분)", example = "60")
+        Integer stayMinutes
 ) {}

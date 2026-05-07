@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -40,7 +41,9 @@ public class SecurityConfig {
             "/routes/shared", "/routes/shared/**",
             "/uploads/**",
             "/images/**",
-            "/api/weather"
+            "/api/weather",
+            "/api/home/**",
+            "/api/courses/public"
     };
 
     // Swagger 엔드포인트 (전체 환경 공개 허용)
@@ -81,6 +84,9 @@ public class SecurityConfig {
                     auth.requestMatchers(PUBLIC_ENDPOINTS).permitAll();
                     auth.requestMatchers(ACTUATOR_ENDPOINTS).permitAll();
                     auth.requestMatchers(SWAGGER_ENDPOINTS).permitAll();
+                    // 코스 상세 조회 및 리뷰 작성은 GET/POST 모두 공개 (인증 선택)
+                    auth.requestMatchers(HttpMethod.GET, "/api/courses/*").permitAll();
+                    auth.requestMatchers(HttpMethod.POST, "/api/courses/*/reviews").permitAll();
                     auth.anyRequest().authenticated();
                 })
                 .exceptionHandling(ex -> ex

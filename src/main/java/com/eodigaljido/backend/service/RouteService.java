@@ -306,6 +306,7 @@ public class RouteService {
                         .longitude(w.getLongitude())
                         .address(w.getAddress())
                         .memo(w.getMemo())
+                        .stayMinutes(w.getStayMinutes())
                         .build())
                 .toList();
         waypointRepository.saveAll(waypoints);
@@ -355,6 +356,7 @@ public class RouteService {
                         .longitude(w.longitude())
                         .address(w.address())
                         .memo(w.memo())
+                        .stayMinutes(w.stayMinutes())
                         .build())
                 .toList();
     }

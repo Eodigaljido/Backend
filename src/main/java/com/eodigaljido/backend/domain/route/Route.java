@@ -70,11 +70,31 @@ public class Route extends BaseTimeEntity {
     @Column(name = "activity_type", length = 50)
     private String activityType;
 
+    @Column(name = "views", nullable = false)
+    @Builder.Default
+    private int views = 0;
+
+    @Column(name = "review_count", nullable = false)
+    @Builder.Default
+    private int reviewCount = 0;
+
+    @Column(name = "average_rating", precision = 3, scale = 2)
+    private java.math.BigDecimal averageRating;
+
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
     public enum RouteStatus {
         DRAFT, PUBLISHED, DELETED
+    }
+
+    public void incrementViews() {
+        this.views++;
+    }
+
+    public void updateRatingStats(java.math.BigDecimal averageRating, int reviewCount) {
+        this.averageRating = averageRating;
+        this.reviewCount = reviewCount;
     }
 
     public void update(String title, String description, BigDecimal totalDistance,
