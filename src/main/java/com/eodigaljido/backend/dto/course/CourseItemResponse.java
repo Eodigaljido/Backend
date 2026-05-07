@@ -1,6 +1,7 @@
 package com.eodigaljido.backend.dto.course;
 
 import com.eodigaljido.backend.domain.route.Route;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.math.BigDecimal;
@@ -44,7 +45,7 @@ public record CourseItemResponse(
         @Schema(description = "리뷰 수", example = "12")
         int reviewCount,
 
-        @Schema(description = "경유지(스텝) 목록")
+        @ArraySchema(schema = @Schema(implementation = CourseStepResponse.class, description = "경유지(스텝) 목록"))
         List<CourseStepResponse> routeSteps,
 
         @Schema(description = "작성자 UUID")
