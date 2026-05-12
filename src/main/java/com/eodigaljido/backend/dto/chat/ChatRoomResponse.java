@@ -25,13 +25,8 @@ public record ChatRoomResponse(
         @Schema(description = "방장 아이디", example = "john123")
         String ownerUserId,
 
-        @Schema(description = "입장 순서 기준 최대 3명의 멤버 UUID 목록 (전체 인원은 memberCount 참고)",
-                example = "[\"a1b2c3d4-e5f6-7890-abcd-ef1234567890\", \"550e8400-e29b-41d4-a716-446655440001\", \"550e8400-e29b-41d4-a716-446655440002\"]")
-        List<String> memberUuids,
-
-        @Schema(description = "입장 순서 기준 최대 3명의 멤버 아이디 목록 (전체 인원은 memberCount 참고)",
-                example = "[\"john123\", \"jane456\", \"kim789\"]")
-        List<String> memberUserIds,
+        @Schema(description = "멤버 정보 목록 (단건 조회: 전체 멤버, 목록 조회: 입장 순서 기준 최대 3명)")
+        List<MemberSummary> members,
 
         @Schema(description = "마지막 메시지 내용 (없으면 null)", example = "안녕하세요!")
         String lastMessage,

@@ -11,6 +11,7 @@ import com.eodigaljido.backend.domain.user.User;
 import com.eodigaljido.backend.dto.chat.ChatEventEnvelope;
 import com.eodigaljido.backend.dto.chat.ChatMessageResponse;
 import com.eodigaljido.backend.dto.chat.ChatRoomResponse;
+import com.eodigaljido.backend.dto.chat.MemberSummary;
 import com.eodigaljido.backend.dto.chat.CreateChatRoomResponse;
 import com.eodigaljido.backend.dto.chat.EditMessageRequest;
 import com.eodigaljido.backend.dto.chat.InviteMemberRequest;
@@ -193,7 +194,7 @@ public class ChatService {
         return rooms.stream()
                 .map(room -> {
                     List<ChatRoomMember> members = membersByRoom.getOrDefault(room.getId(), List.of());
-                    return buildRoomResponse(room, members, userId);
+                    return buildRoomResponse(room, members, userId, 3);
                 })
                 .collect(Collectors.toList());
     }
@@ -552,18 +553,22 @@ public class ChatService {
     // ── helpers ──────────────────────────────────────────────
 
     private ChatRoomResponse buildRoomResponse(ChatRoom room, List<ChatRoomMember> members, Long currentUserId) {
+        return buildRoomResponse(room, members, currentUserId, Integer.MAX_VALUE);
+    }
+
+    private ChatRoomResponse buildRoomResponse(ChatRoom room, List<ChatRoomMember> members, Long currentUserId, int memberLimit) {
         String name = room.getName() != null ? room.getName() : generateRoomName(room, members, currentUserId);
 
         User owner = room.getCreatedBy();
-        List<String> memberUuids = members.stream()
+        List<MemberSummary> memberSummaries = members.stream()
                 .sorted(Comparator.comparingLong(ChatRoomMember::getId))
-                .limit(3)
-                .map(m -> m.getUser().getUuid())
-                .toList();
-        List<String> memberUserIds = members.stream()
-                .sorted(Comparator.comparingLong(ChatRoomMember::getId))
-                .limit(3)
-                .map(m -> m.getUser().getUserId())
+                .limit(memberLimit)
+                .map(m -> {
+                    String imgUrl = profileRepository.findByUser(m.getUser())
+                            .map(Profile::getProfileImageUrl)
+                            .orElse(null);
+                    return new MemberSummary(m.getUser().getUuid(), m.getUser().getUserId(), imgUrl);
+                })
                 .toList();
 
         ChatMessage lastMsg = chatMessageRepository.findTopByRoomOrderByCreatedAtDesc(room).orElse(null);
@@ -596,7 +601,7 @@ public class ChatService {
         return new ChatRoomResponse(
                 room.getUuid(), name, profileImageUrl, members.size(),
                 owner.getUuid(), owner.getUserId(),
-                memberUuids, memberUserIds,
+                memberSummaries,
                 lastContent, lastMsgAt, unreadCount
         );
     }

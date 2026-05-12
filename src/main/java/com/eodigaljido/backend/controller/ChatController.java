@@ -53,7 +53,8 @@ public class ChatController {
                     - `uuid`: 채팅방 UUID
                     - `name`: 채팅방 이름
                     - `profileImageUrl`: 프로필 이미지 URL (그룹 채팅방은 채팅방 이미지, 1:1 채팅방은 null)
-                    - `memberCount` / `ownerUuid` / `ownerUserId` / `memberUuids` / `memberUserIds`: 멤버 정보
+                    - `memberCount` / `ownerUuid` / `ownerUserId`: 방장 및 멤버 수 정보
+                    - `members`: 입장 순서 기준 최대 3명의 멤버 목록 (`uuid` / `userId` / `profileImageUrl`)
                     """
     )
     @ApiResponses({
@@ -92,7 +93,8 @@ public class ChatController {
                     - `uuid`: 채팅방 UUID
                     - `name`: 채팅방 이름
                     - `profileImageUrl`: 프로필 이미지 URL (그룹 채팅방은 채팅방 이미지, 1:1 채팅방은 null)
-                    - `memberCount` / `ownerUuid` / `ownerUserId` / `memberUuids` / `memberUserIds`: 멤버 정보
+                    - `memberCount` / `ownerUuid` / `ownerUserId`: 방장 및 멤버 수 정보
+                    - `members`: 입장 순서 기준 최대 3명의 멤버 목록 (`uuid` / `userId` / `profileImageUrl`)
                     """
     )
     @ApiResponses({
@@ -128,9 +130,11 @@ public class ChatController {
                     - `profileImageUrl`: 프로필 이미지 URL (그룹 채팅방은 채팅방 이미지, 1:1 채팅방은 상대방 프로필 이미지, 없으면 null)
                     - `memberCount`: 전체 멤버 수
                     - `ownerUuid` / `ownerUserId`: 방장 UUID / 아이디
-                    - `memberUuids` / `memberUserIds`: 입장 순서 기준 **최대 3명**의 멤버 UUID / 아이디 목록. 전체 인원은 `memberCount` 참고
+                    - `members`: 입장 순서 기준 **최대 3명**의 멤버 목록 (`uuid` / `userId` / `profileImageUrl`). 전체 인원은 `memberCount` 참고
                     - `lastMessage` / `lastMessageAt`: 마지막 메시지 내용 및 전송 시각 (없으면 null)
                     - `unreadCount`: 읽지 않은 메시지 수
+
+                    > 목록 조회에서 `members`는 최대 3명까지만 반환됩니다. 전체 멤버 목록은 채팅방 단건 조회를 사용하세요.
                     """
     )
     @ApiResponses({
@@ -161,7 +165,7 @@ public class ChatController {
                     - `profileImageUrl`: 프로필 이미지 URL (그룹 채팅방은 채팅방 이미지, 1:1 채팅방은 상대방 프로필 이미지, 없으면 null)
                     - `memberCount`: 전체 멤버 수
                     - `ownerUuid` / `ownerUserId`: 방장 UUID / 아이디
-                    - `memberUuids` / `memberUserIds`: 입장 순서 기준 **최대 3명**의 멤버 UUID / 아이디 목록
+                    - `members`: **전체 멤버 목록** (`uuid` / `userId` / `profileImageUrl`)
                     - `lastMessage` / `lastMessageAt`: 마지막 메시지 내용 및 전송 시각 (없으면 null)
                     - `unreadCount`: 읽지 않은 메시지 수
                     """
