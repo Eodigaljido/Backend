@@ -14,6 +14,8 @@ public interface ChatRoomMemberRepository extends JpaRepository<ChatRoomMember, 
 
     Optional<ChatRoomMember> findByRoomAndUserAndLeftAtIsNull(ChatRoom room, User user);
 
+    Optional<ChatRoomMember> findByRoomAndUser(ChatRoom room, User user);
+
     @Query("SELECT m FROM ChatRoomMember m JOIN FETCH m.user WHERE m.room = :room AND m.leftAt IS NULL")
     List<ChatRoomMember> findByRoomAndLeftAtIsNull(@Param("room") ChatRoom room);
 

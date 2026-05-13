@@ -54,7 +54,7 @@ public class ChatController {
                     - `name`: 채팅방 이름
                     - `profileImageUrl`: 프로필 이미지 URL (그룹 채팅방은 채팅방 이미지, 1:1 채팅방은 null)
                     - `memberCount` / `ownerUuid` / `ownerUserId`: 방장 및 멤버 수 정보
-                    - `members`: 입장 순서 기준 최대 3명의 멤버 목록 (`uuid` / `userId` / `profileImageUrl`)
+                    - `members`: 전체 멤버 목록 (`uuid` / `userId` / `profileImageUrl`)
                     """
     )
     @ApiResponses({
@@ -94,7 +94,7 @@ public class ChatController {
                     - `name`: 채팅방 이름
                     - `profileImageUrl`: 프로필 이미지 URL (그룹 채팅방은 채팅방 이미지, 1:1 채팅방은 null)
                     - `memberCount` / `ownerUuid` / `ownerUserId`: 방장 및 멤버 수 정보
-                    - `members`: 입장 순서 기준 최대 3명의 멤버 목록 (`uuid` / `userId` / `profileImageUrl`)
+                    - `members`: 전체 멤버 목록 (`uuid` / `userId` / `profileImageUrl`)
                     """
     )
     @ApiResponses({

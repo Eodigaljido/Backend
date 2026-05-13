@@ -14,8 +14,13 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, Long> {
     @Query("SELECT r FROM ChatRoom r JOIN FETCH r.createdBy WHERE r.uuid = :uuid AND r.deletedAt IS NULL")
     Optional<ChatRoom> findByUuidAndDeletedAtIsNull(@Param("uuid") String uuid);
 
-    @Query("SELECT r FROM ChatRoom r JOIN FETCH r.createdBy JOIN ChatRoomMember m ON m.room = r " +
-           "WHERE m.user = :user AND m.leftAt IS NULL AND r.deletedAt IS NULL " +
-           "ORDER BY r.createdAt DESC")
+    @Query("""
+        SELECT r FROM ChatRoom r JOIN FETCH r.createdBy JOIN ChatRoomMember m ON m.room = r
+        WHERE m.user = :user AND m.leftAt IS NULL AND r.deletedAt IS NULL
+        ORDER BY COALESCE(
+            (SELECT MAX(msg.createdAt) FROM ChatMessage msg WHERE msg.room = r),
+            r.createdAt
+        ) DESC
+    """)
     List<ChatRoom> findRoomsForUser(@Param("user") User user);
 }

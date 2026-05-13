@@ -18,7 +18,7 @@ public record ChatMessageResponse(
         @Schema(description = "발신자 프로필 이미지 URL (없으면 null)", example = "https://example.com/profile.jpg")
         String senderProfileImageUrl,
 
-        @Schema(description = "메시지 타입 (TEXT, IMAGE, ROUTE)", example = "TEXT")
+        @Schema(description = "메시지 타입 (TEXT, IMAGE, ROUTE, SYSTEM)", example = "TEXT")
         String messageType,
 
         @Schema(description = "메시지 내용 (삭제된 경우 null, IMAGE 타입은 null)", example = "안녕하세요!")

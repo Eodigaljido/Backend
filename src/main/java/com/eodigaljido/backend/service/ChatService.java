@@ -129,8 +129,14 @@ public class ChatService {
 
         String resolvedName = room.getName() != null ? room.getName() : generateRoomName(room, members, userId);
 
-        List<String> resolvedMemberUuids = members.stream().map(m -> m.getUser().getUuid()).toList();
-        List<String> memberUserIds = members.stream().map(m -> m.getUser().getUserId()).toList();
+        List<MemberSummary> memberSummaries = members.stream()
+                .map(m -> {
+                    String imgUrl = profileRepository.findByUser(m.getUser())
+                            .map(Profile::getProfileImageUrl)
+                            .orElse(null);
+                    return new MemberSummary(m.getUser().getUuid(), m.getUser().getUserId(), imgUrl);
+                })
+                .toList();
 
         return new CreateChatRoomResponse(
                 room.getUuid(),
@@ -139,8 +145,7 @@ public class ChatService {
                 members.size(),
                 me.getUuid(),
                 me.getUserId(),
-                resolvedMemberUuids,
-                memberUserIds
+                memberSummaries
         );
     }
 
@@ -157,12 +162,16 @@ public class ChatService {
                 .filter(f -> f.getStatus() == Friend.FriendStatus.ACCEPTED)
                 .orElseThrow(() -> new ChatException("친구 관계인 유저만 초대할 수 있습니다.", HttpStatus.FORBIDDEN));
 
-        if (chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(room, target).isPresent()) {
-            throw new ChatException("이미 채팅방에 참여 중인 유저입니다.", HttpStatus.CONFLICT);
-        }
-
-        chatRoomMemberRepository.save(
-                ChatRoomMember.builder().room(room).user(target).role(ChatRoomMember.MemberRole.MEMBER).build()
+        chatRoomMemberRepository.findByRoomAndUser(room, target).ifPresentOrElse(
+                existing -> {
+                    if (existing.getLeftAt() == null) {
+                        throw new ChatException("이미 채팅방에 참여 중인 유저입니다.", HttpStatus.CONFLICT);
+                    }
+                    existing.rejoin();
+                },
+                () -> chatRoomMemberRepository.save(
+                        ChatRoomMember.builder().room(room).user(target).role(ChatRoomMember.MemberRole.MEMBER).build()
+                )
         );
 
         String requesterNickname = profileRepository.findByUser(requester)
@@ -220,12 +229,16 @@ public class ChatService {
     public void leaveRoom(Long userId, String roomUuid) {
         ChatRoom room = getActiveRoom(roomUuid);
         ChatRoomMember membership = getMembership(room, userId);
+        ChatRoomMember.MemberRole leavingRole = membership.getRole();
         membership.leave();
 
-        List<ChatRoomMember> remaining = chatRoomMemberRepository.findByRoomAndLeftAtIsNull(room);
+        List<ChatRoomMember> remaining = chatRoomMemberRepository.findByRoomAndLeftAtIsNull(room)
+                .stream()
+                .filter(m -> !m.getId().equals(membership.getId()))
+                .toList();
         if (remaining.isEmpty()) {
             room.delete();
-        } else if (membership.getRole() == ChatRoomMember.MemberRole.ADMIN) {
+        } else if (leavingRole == ChatRoomMember.MemberRole.ADMIN) {
             remaining.get(0).promoteToAdmin();
         }
     }
@@ -484,8 +497,7 @@ public class ChatService {
 
     public void broadcastTyping(Long userId, String roomUuid, TypingRequest req) {
         ChatRoom room = getActiveRoom(roomUuid);
-        getMembership(room, userId);
-        User me = getUser(userId);
+        User me = getMembership(room, userId).getUser();
         String nickname = profileRepository.findByUser(me)
                 .map(Profile::getNickname).orElse(me.getUserId());
         messagingTemplate.convertAndSend(
@@ -572,8 +584,12 @@ public class ChatService {
                 .toList();
 
         ChatMessage lastMsg = chatMessageRepository.findTopByRoomOrderByCreatedAtDesc(room).orElse(null);
-        String lastContent = lastMsg != null ? lastMsg.getContent() : null;
-        java.time.LocalDateTime lastMsgAt = lastMsg != null ? lastMsg.getCreatedAt() : null;
+        String lastContent = null;
+        java.time.LocalDateTime lastMsgAt = null;
+        if (lastMsg != null) {
+            lastContent = lastMsg.getType() == ChatMessage.MessageType.IMAGE ? "[이미지]" : lastMsg.getContent();
+            lastMsgAt = lastMsg.getCreatedAt();
+        }
 
         long unreadCount = members.stream()
                 .filter(m -> m.getUser().getId().equals(currentUserId))

@@ -24,9 +24,6 @@ public record CreateChatRoomResponse(
         @Schema(description = "방장 아이디", example = "john123")
         String ownerUserId,
 
-        @Schema(description = "멤버 UUID 목록 (방장 포함)", example = "[\"a1b2c3d4-...\", \"550e8400-...\"]")
-        List<String> memberUuids,
-
-        @Schema(description = "멤버 아이디 목록 (방장 포함)", example = "[\"john123\", \"jane456\"]")
-        List<String> memberUserIds
+        @Schema(description = "전체 멤버 정보 목록 (방장 포함)")
+        List<MemberSummary> members
 ) {}
