@@ -171,6 +171,44 @@ public class CourseController {
     }
 
     // ──────────────────────────────────────────────────────────
+    // 내 루트 생성 (인증 필요)
+    // ──────────────────────────────────────────────────────────
+
+    @PostMapping("/my")
+    @Operation(
+            summary = "내 루트 생성",
+            description = """
+                    새 루트를 생성합니다.
+
+                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
+
+                    **Request Body:**
+                    - `title` (필수): 루트 이름 (최대 100자)
+                    - `collaborative` (선택): 공유 여부, 기본 false
+                    - `stops` (선택): 경유지 목록 — `kind`(start|via|end), `title`, `timeLine`, `lat`, `lng`
+                    - `legs` (선택): 이동 구간 목록 — `mode`(walk|transit|car|bike), `minutes`, `transitType`, `directionsSummary`, `directionsDetail`, `distanceMeters`
+
+                    **Response:** 생성된 루트 정보 (`uuid` 포함) — 201 Created
+                    """,
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "루트 생성 성공",
+                    content = @Content(schema = @Schema(implementation = MyCourseDetailResponse.class))),
+            @ApiResponse(responseCode = "400", description = "요청 값이 올바르지 않음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<MyCourseDetailResponse> createMyCourse(
+            @Valid @RequestBody CreateMyCourseRequest request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        MyCourseDetailResponse response = courseService.createMyCourse(userId, request);
+        return ResponseEntity.status(201).body(response);
+    }
+
+    // ──────────────────────────────────────────────────────────
     // 내 코스 목록 (인증 필요)
     // ──────────────────────────────────────────────────────────
 
@@ -215,6 +253,45 @@ public class CourseController {
     }
 
     // ──────────────────────────────────────────────────────────
+    // 내 루트 상세 조회 (인증 필요)
+    // ──────────────────────────────────────────────────────────
+
+    @GetMapping("/my/{courseId}")
+    @Operation(
+            summary = "내 루트 상세 조회",
+            description = """
+                    내 루트의 상세 정보를 조회합니다. stops/legs 포맷으로 반환합니다.
+
+                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
+
+                    **Response:**
+                    - `uuid`: 루트 UUID
+                    - `title`: 루트 이름
+                    - `collaborative`: 공유 여부
+                    - `stops`: 경유지 목록 (kind, title, timeLine, lat, lng)
+                    - `legs`: 이동 구간 목록 (mode, minutes, transitType 등)
+                    """,
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "내 루트 상세 반환",
+                    content = @Content(schema = @Schema(implementation = MyCourseDetailResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "본인 코스가 아님",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "코스를 찾을 수 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<MyCourseDetailResponse> getMyCourseDetail(
+            @Parameter(description = "코스 UUID", required = true)
+            @PathVariable String courseId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.ok(courseService.getMyCourseDetail(userId, courseId));
+    }
+
+    // ──────────────────────────────────────────────────────────
     // 내 코스 삭제 (인증 필요)
     // ──────────────────────────────────────────────────────────
 
@@ -252,16 +329,19 @@ public class CourseController {
 
     @PatchMapping("/my/{courseId}")
     @Operation(
-            summary = "내 코스 메타 수정",
-            description = "내 코스의 기본 정보(제목, 설명, 카테고리, 지역)를 수정합니다. 제공하지 않은 필드는 기존 값을 유지합니다.",
+            summary = "내 루트 수정",
+            description = """
+                    내 루트의 전체 정보(제목, 공유여부, stops, legs)를 수정합니다. 제공하지 않은 필드는 기존 값을 유지합니다.
+
+                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
+
+                    **Response:** 수정된 루트 상세 정보 (stops/legs 포맷)
+                    """,
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "수정된 코스 상세 정보 반환",
-                    content = @Content(schema = @Schema(implementation = CourseDetailResponse.class))
-            ),
+            @ApiResponse(responseCode = "200", description = "수정된 루트 상세 반환",
+                    content = @Content(schema = @Schema(implementation = MyCourseDetailResponse.class))),
             @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "403", description = "본인 코스가 아님",
@@ -269,18 +349,12 @@ public class CourseController {
             @ApiResponse(responseCode = "404", description = "코스를 찾을 수 없음",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    public ResponseEntity<CourseDetailResponse> updateMyCourse(
+    public ResponseEntity<MyCourseDetailResponse> updateMyCourse(
             @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
             @PathVariable String courseId,
-            @RequestBody UpdateCourseMetaRequest request,
+            @Valid @RequestBody CreateMyCourseRequest request,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
-        return ResponseEntity.ok(courseService.updateMyCourse(
-                courseId, userId,
-                request.title(),
-                request.description(),
-                request.category(),
-                request.region()
-        ));
+        return ResponseEntity.ok(courseService.updateMyCourse(userId, courseId, request));
     }
 }

@@ -51,6 +51,12 @@ public class RouteWaypoint {
     @Column(name = "stay_minutes")
     private Integer stayMinutes;
 
+    @Column(length = 10)
+    private String kind;
+
+    @Column(name = "time_line", length = 50)
+    private String timeLine;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

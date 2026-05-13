@@ -2,12 +2,14 @@ package com.eodigaljido.backend.service;
 
 import com.eodigaljido.backend.domain.route.Route;
 import com.eodigaljido.backend.domain.route.Route.RouteStatus;
+import com.eodigaljido.backend.domain.route.RouteLeg;
 import com.eodigaljido.backend.domain.route.RouteReview;
 import com.eodigaljido.backend.domain.route.RouteWaypoint;
 import com.eodigaljido.backend.domain.route.SavedRoute;
 import com.eodigaljido.backend.domain.following.FollowingNewsActionType;
 import com.eodigaljido.backend.domain.user.User;
 import com.eodigaljido.backend.dto.course.*;
+import com.eodigaljido.backend.repository.RouteLegRepository;
 import com.eodigaljido.backend.exception.RouteException;
 import com.eodigaljido.backend.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +32,7 @@ public class CourseService {
 
     private final RouteRepository routeRepository;
     private final RouteWaypointRepository waypointRepository;
+    private final RouteLegRepository legRepository;
     private final RouteReviewRepository reviewRepository;
     private final SavedRouteRepository savedRouteRepository;
     private final UserRepository userRepository;
@@ -182,6 +185,58 @@ public class CourseService {
     }
 
     // ──────────────────────────────────────────────────────────
+    // 내 루트 생성 (프론트 stops/legs 포맷)
+    // ──────────────────────────────────────────────────────────
+
+    @Transactional
+    public MyCourseDetailResponse createMyCourse(Long userId, CreateMyCourseRequest req) {
+        User user = findUser(userId);
+
+        int totalMinutes = req.legs() == null ? 0 :
+                req.legs().stream().mapToInt(l -> l.minutes() != null ? l.minutes() : 0).sum();
+        int totalMeters = req.legs() == null ? 0 :
+                req.legs().stream().mapToInt(l -> l.distanceMeters() != null ? l.distanceMeters() : 0).sum();
+        java.math.BigDecimal totalDistance = totalMeters > 0
+                ? java.math.BigDecimal.valueOf(totalMeters).divide(java.math.BigDecimal.valueOf(1000), 2, java.math.RoundingMode.HALF_UP)
+                : null;
+
+        Route route = Route.builder()
+                .uuid(java.util.UUID.randomUUID().toString())
+                .user(user)
+                .title(req.title())
+                .status(RouteStatus.DRAFT)
+                .isShared(Boolean.TRUE.equals(req.collaborative()))
+                .estimatedTime(totalMinutes > 0 ? totalMinutes : null)
+                .totalDistance(totalDistance)
+                .build();
+        routeRepository.save(route);
+
+        List<RouteWaypoint> waypoints = buildWaypoints(route, req.stops());
+        waypointRepository.saveAll(waypoints);
+
+        List<RouteLeg> legs = buildLegs(route, req.legs());
+        legRepository.saveAll(legs);
+
+        return toMyCourseDetail(route, waypoints, legs);
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 내 루트 상세 조회 (stops/legs 포맷)
+    // ──────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public MyCourseDetailResponse getMyCourseDetail(Long userId, String courseId) {
+        Route route = routeRepository.findByUuidAndStatusNot(courseId, RouteStatus.DELETED)
+                .orElseThrow(() -> new RouteException("코스를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        if (!route.getUser().getId().equals(userId)) {
+            throw new RouteException("해당 코스에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN);
+        }
+        List<RouteWaypoint> waypoints = waypointRepository.findByRouteOrderBySequenceAsc(route);
+        List<RouteLeg> legs = legRepository.findByRouteOrderBySequenceAsc(route);
+        return toMyCourseDetail(route, waypoints, legs);
+    }
+
+    // ──────────────────────────────────────────────────────────
     // 내 코스 삭제
     // ──────────────────────────────────────────────────────────
 
@@ -202,31 +257,49 @@ public class CourseService {
     }
 
     // ──────────────────────────────────────────────────────────
-    // 내 코스 수정 (메타 정보)
+    // 내 루트 수정 (stops/legs 포맷)
     // ──────────────────────────────────────────────────────────
 
     @Transactional
-    public CourseDetailResponse updateMyCourse(String courseId, Long userId,
-                                               String title, String description,
-                                               String category, String region) {
+    public MyCourseDetailResponse updateMyCourse(Long userId, String courseId, CreateMyCourseRequest req) {
         Route route = routeRepository.findByUuidAndStatusNot(courseId, RouteStatus.DELETED)
                 .orElseThrow(() -> new RouteException("코스를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
         if (!route.getUser().getId().equals(userId)) {
             throw new RouteException("해당 코스에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN);
         }
+
+        int totalMinutes = req.legs() == null ? 0 :
+                req.legs().stream().mapToInt(l -> l.minutes() != null ? l.minutes() : 0).sum();
+        int totalMeters = req.legs() == null ? 0 :
+                req.legs().stream().mapToInt(l -> l.distanceMeters() != null ? l.distanceMeters() : 0).sum();
+        java.math.BigDecimal totalDistance = totalMeters > 0
+                ? java.math.BigDecimal.valueOf(totalMeters).divide(java.math.BigDecimal.valueOf(1000), 2, java.math.RoundingMode.HALF_UP)
+                : route.getTotalDistance();
+
         route.update(
-                title != null ? title : route.getTitle(),
-                description != null ? description : route.getDescription(),
-                route.getTotalDistance(),
-                route.getEstimatedTime(),
+                req.title() != null ? req.title() : route.getTitle(),
+                route.getDescription(),
+                totalDistance,
+                totalMinutes > 0 ? totalMinutes : route.getEstimatedTime(),
                 route.getThumbnailUrl(),
-                region != null ? region : route.getRegion(),
-                category != null ? category : route.getActivityType()
+                route.getRegion(),
+                route.getActivityType()
         );
-        List<CourseStepResponse> steps = loadSteps(route);
-        List<ReviewResponse> reviews = reviewRepository.findByRouteOrderByCreatedAtDesc(route)
-                .stream().map(ReviewResponse::from).toList();
-        return CourseDetailResponse.of(route, steps, reviews);
+        if (req.collaborative() != null) {
+            if (Boolean.TRUE.equals(req.collaborative())) route.enableSharing();
+            else route.disableSharing();
+        }
+
+        waypointRepository.deleteAllByRoute(route);
+        legRepository.deleteAllByRoute(route);
+
+        List<RouteWaypoint> waypoints = buildWaypoints(route, req.stops());
+        waypointRepository.saveAll(waypoints);
+
+        List<RouteLeg> legs = buildLegs(route, req.legs());
+        legRepository.saveAll(legs);
+
+        return toMyCourseDetail(route, waypoints, legs);
     }
 
     // ──────────────────────────────────────────────────────────
@@ -261,6 +334,49 @@ public class CourseService {
             avg = avg.setScale(2, RoundingMode.HALF_UP);
         }
         route.updateRatingStats(avg, (int) count);
+    }
+
+    private List<RouteWaypoint> buildWaypoints(Route route, List<StopRequest> stops) {
+        if (stops == null || stops.isEmpty()) return List.of();
+        int seq = 1;
+        List<RouteWaypoint> result = new java.util.ArrayList<>();
+        for (StopRequest s : stops) {
+            result.add(RouteWaypoint.builder()
+                    .route(route)
+                    .sequence(seq++)
+                    .name(s.title())
+                    .latitude(s.lat())
+                    .longitude(s.lng())
+                    .kind(s.kind())
+                    .timeLine(s.timeLine())
+                    .build());
+        }
+        return result;
+    }
+
+    private List<RouteLeg> buildLegs(Route route, List<LegRequest> legs) {
+        if (legs == null || legs.isEmpty()) return List.of();
+        int seq = 1;
+        List<RouteLeg> result = new java.util.ArrayList<>();
+        for (LegRequest l : legs) {
+            result.add(RouteLeg.builder()
+                    .route(route)
+                    .sequence(seq++)
+                    .mode(l.mode())
+                    .minutes(l.minutes())
+                    .transitType(l.transitType())
+                    .directionsSummary(l.directionsSummary())
+                    .directionsDetail(l.directionsDetail())
+                    .distanceMeters(l.distanceMeters())
+                    .build());
+        }
+        return result;
+    }
+
+    private MyCourseDetailResponse toMyCourseDetail(Route route, List<RouteWaypoint> waypoints, List<RouteLeg> legs) {
+        List<StopResponse> stops = waypoints.stream().map(StopResponse::from).toList();
+        List<LegResponse> legResponses = legs.stream().map(LegResponse::from).toList();
+        return new MyCourseDetailResponse(route.getUuid(), route.getTitle(), route.isShared(), stops, legResponses);
     }
 
     private Sort resolveSort(String tab, String sort) {
