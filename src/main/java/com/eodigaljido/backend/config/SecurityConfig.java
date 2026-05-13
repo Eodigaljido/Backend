@@ -38,7 +38,6 @@ public class SecurityConfig {
             "/auth/find-account/send", "/auth/find-account/verify",
             "/auth/reset-password/send", "/auth/reset-password/verify",
             "/ws/chat/**",
-            "/routes/shared", "/routes/shared/**",
             "/uploads/**",
             "/images/**",
             "/api/weather",

@@ -1,5 +1,6 @@
 package com.eodigaljido.backend.service;
 
+import com.eodigaljido.backend.domain.notification.NotificationType;
 import com.eodigaljido.backend.domain.route.Route;
 import com.eodigaljido.backend.domain.route.Route.RouteStatus;
 import com.eodigaljido.backend.domain.route.RouteLeg;
@@ -9,9 +10,11 @@ import com.eodigaljido.backend.domain.route.SavedRoute;
 import com.eodigaljido.backend.domain.following.FollowingNewsActionType;
 import com.eodigaljido.backend.domain.user.User;
 import com.eodigaljido.backend.dto.course.*;
+import com.eodigaljido.backend.event.NotificationEvent;
 import com.eodigaljido.backend.repository.RouteLegRepository;
 import com.eodigaljido.backend.exception.RouteException;
 import com.eodigaljido.backend.repository.*;
+import org.springframework.context.ApplicationEventPublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -36,7 +39,9 @@ public class CourseService {
     private final RouteReviewRepository reviewRepository;
     private final SavedRouteRepository savedRouteRepository;
     private final UserRepository userRepository;
+    private final OnboardingAnswerRepository onboardingAnswerRepository;
     private final FollowingNewsService followingNewsService;
+    private final ApplicationEventPublisher eventPublisher;
 
     // ──────────────────────────────────────────────────────────
     // 홈 코스 목록 (인기/최근 공유 코스)
@@ -303,6 +308,161 @@ public class CourseService {
     }
 
     // ──────────────────────────────────────────────────────────
+    // 상태 변경 (DRAFT / PUBLISHED)
+    // ──────────────────────────────────────────────────────────
+
+    @Transactional
+    public MyCourseDetailResponse updateCourseStatus(Long userId, String courseId, RouteStatus status) {
+        if (status == RouteStatus.DELETED) {
+            throw new RouteException("상태를 DELETED로 변경할 수 없습니다.", HttpStatus.BAD_REQUEST);
+        }
+        Route route = findMyOwnedRoute(userId, courseId);
+        route.updateStatus(status);
+        List<RouteWaypoint> waypoints = waypointRepository.findByRouteOrderBySequenceAsc(route);
+        List<RouteLeg> legs = legRepository.findByRouteOrderBySequenceAsc(route);
+        return toMyCourseDetail(route, waypoints, legs);
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 내가 공유 중인 코스 목록
+    // ──────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public List<CourseItemResponse> getSharingCourses(Long userId) {
+        return routeRepository.findByUserIdAndIsSharedTrueAndStatusNot(userId, RouteStatus.DELETED)
+                .stream()
+                .map(this::toCourseItem)
+                .toList();
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 공유 활성화 / 비활성화
+    // ──────────────────────────────────────────────────────────
+
+    @Transactional
+    public void enableSharing(Long userId, String courseId) {
+        Route route = findMyOwnedRoute(userId, courseId);
+        boolean wasShared = route.isShared();
+        route.enableSharing();
+
+        if (!wasShared) {
+            followingNewsService.createNews(
+                    userId,
+                    FollowingNewsActionType.COURSE_PUBLISHED,
+                    route.getUuid(),
+                    route.getTitle()
+            );
+        }
+
+        if (route.getRegion() != null || route.getActivityType() != null) {
+            onboardingAnswerRepository
+                    .findMatchingUsers(route.getRegion(), route.getActivityType())
+                    .stream()
+                    .filter(answer -> !answer.getUser().getId().equals(userId))
+                    .limit(1000)
+                    .forEach(answer -> eventPublisher.publishEvent(NotificationEvent.of(
+                            answer.getUser().getId(), userId,
+                            NotificationType.ROUTE_RECOMMENDED,
+                            "추천 코스",
+                            "취향에 맞는 코스가 공유되었습니다: " + route.getTitle(),
+                            route.getUuid(), "ROUTE"
+                    )));
+        }
+    }
+
+    @Transactional
+    public void disableSharing(Long userId, String courseId) {
+        Route route = findMyOwnedRoute(userId, courseId);
+        route.disableSharing();
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 저장 취소
+    // ──────────────────────────────────────────────────────────
+
+    @Transactional
+    public void unsaveCourse(Long userId, String courseId) {
+        Route route = routeRepository.findByUuidAndStatusNot(courseId, RouteStatus.DELETED)
+                .orElseThrow(() -> new RouteException("코스를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        SavedRoute saved = savedRouteRepository.findByUserIdAndRouteId(userId, route.getId())
+                .orElseThrow(() -> new RouteException("저장된 코스가 아닙니다.", HttpStatus.NOT_FOUND));
+        savedRouteRepository.delete(saved);
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 코스 복사
+    // ──────────────────────────────────────────────────────────
+
+    @Transactional
+    public MyCourseDetailResponse copyCourse(Long userId, String courseId) {
+        Route original = routeRepository.findByUuidAndStatusNot(courseId, RouteStatus.DELETED)
+                .orElseThrow(() -> new RouteException("코스를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        if (!original.isShared() && !original.getUser().getId().equals(userId)) {
+            throw new RouteException("공유되지 않은 코스는 복사할 수 없습니다.", HttpStatus.FORBIDDEN);
+        }
+
+        User user = findUser(userId);
+
+        Route copied = Route.builder()
+                .uuid(java.util.UUID.randomUUID().toString())
+                .user(user)
+                .title(original.getTitle() + " (복사)")
+                .description(original.getDescription())
+                .status(RouteStatus.DRAFT)
+                .totalDistance(original.getTotalDistance())
+                .estimatedTime(original.getEstimatedTime())
+                .thumbnailUrl(original.getThumbnailUrl())
+                .region(original.getRegion())
+                .activityType(original.getActivityType())
+                .build();
+        routeRepository.save(copied);
+
+        List<RouteWaypoint> waypoints = waypointRepository.findByRouteOrderBySequenceAsc(original)
+                .stream()
+                .map(w -> RouteWaypoint.builder()
+                        .route(copied)
+                        .sequence(w.getSequence())
+                        .name(w.getName())
+                        .latitude(w.getLatitude())
+                        .longitude(w.getLongitude())
+                        .address(w.getAddress())
+                        .memo(w.getMemo())
+                        .stayMinutes(w.getStayMinutes())
+                        .kind(w.getKind())
+                        .timeLine(w.getTimeLine())
+                        .build())
+                .toList();
+        waypointRepository.saveAll(waypoints);
+
+        List<RouteLeg> legs = legRepository.findByRouteOrderBySequenceAsc(original)
+                .stream()
+                .map(l -> RouteLeg.builder()
+                        .route(copied)
+                        .sequence(l.getSequence())
+                        .mode(l.getMode())
+                        .minutes(l.getMinutes())
+                        .transitType(l.getTransitType())
+                        .directionsSummary(l.getDirectionsSummary())
+                        .directionsDetail(l.getDirectionsDetail())
+                        .distanceMeters(l.getDistanceMeters())
+                        .build())
+                .toList();
+        legRepository.saveAll(legs);
+
+        if (!original.getUser().getId().equals(userId)) {
+            eventPublisher.publishEvent(NotificationEvent.of(
+                    original.getUser().getId(), userId,
+                    NotificationType.ROUTE_USED,
+                    "코스 사용",
+                    user.getUserId() + "님이 회원님의 코스를 사용했습니다: " + original.getTitle(),
+                    original.getUuid(), "ROUTE"
+            ));
+        }
+
+        return toMyCourseDetail(copied, waypoints, legs);
+    }
+
+    // ──────────────────────────────────────────────────────────
     // private helpers
     // ──────────────────────────────────────────────────────────
 
@@ -388,5 +548,14 @@ public class CourseService {
         }
         // date, all, 기본 → 최신순
         return Sort.by(Sort.Direction.DESC, "createdAt");
+    }
+
+    private Route findMyOwnedRoute(Long userId, String courseId) {
+        Route route = routeRepository.findByUuidAndStatusNot(courseId, RouteStatus.DELETED)
+                .orElseThrow(() -> new RouteException("코스를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        if (!route.getUser().getId().equals(userId)) {
+            throw new RouteException("해당 코스에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN);
+        }
+        return route;
     }
 }

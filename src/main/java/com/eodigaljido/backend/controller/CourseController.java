@@ -1,8 +1,10 @@
 package com.eodigaljido.backend.controller;
 
+import com.eodigaljido.backend.domain.route.Route.RouteStatus;
 import com.eodigaljido.backend.dto.common.ErrorResponse;
 import com.eodigaljido.backend.dto.course.*;
 import com.eodigaljido.backend.service.CourseService;
+import java.util.List;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -356,5 +358,168 @@ public class CourseController {
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
         return ResponseEntity.ok(courseService.updateMyCourse(userId, courseId, request));
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 내 루트 상태 변경 (인증 필요)
+    // ──────────────────────────────────────────────────────────
+
+    @PatchMapping("/my/{courseId}/status")
+    @Operation(
+            summary = "내 루트 상태 변경",
+            description = "내 루트의 상태를 DRAFT 또는 PUBLISHED로 변경합니다. DELETED로는 변경 불가.",
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "변경된 루트 상세 반환",
+                    content = @Content(schema = @Schema(implementation = MyCourseDetailResponse.class))),
+            @ApiResponse(responseCode = "400", description = "DELETED로 변경 시도",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "본인 코스가 아님",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "코스를 찾을 수 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<MyCourseDetailResponse> updateCourseStatus(
+            @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
+            @PathVariable String courseId,
+            @Valid @RequestBody UpdateCourseStatusRequest request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.ok(courseService.updateCourseStatus(userId, courseId, request.status()));
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 내가 공유 중인 코스 목록 (인증 필요)
+    // ──────────────────────────────────────────────────────────
+
+    @GetMapping("/my/sharing")
+    @Operation(
+            summary = "내가 공유 중인 코스 목록",
+            description = "현재 공유(공개) 상태인 내 코스 목록을 조회합니다.",
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "공유 중인 코스 목록 반환",
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = CourseItemResponse.class)))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<List<CourseItemResponse>> getSharingCourses(
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.ok(courseService.getSharingCourses(userId));
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 내 루트 공유 활성화 (인증 필요)
+    // ──────────────────────────────────────────────────────────
+
+    @PostMapping("/my/{courseId}/share")
+    @Operation(
+            summary = "내 루트 공유 활성화",
+            description = "내 루트를 공개합니다. 팔로워에게 팔로잉 소식이 발행되고, 취향이 맞는 사용자에게 추천 알림이 전송됩니다.",
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "공유 활성화 성공"),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "본인 코스가 아님",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "코스를 찾을 수 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<Void> enableSharing(
+            @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
+            @PathVariable String courseId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        courseService.enableSharing(userId, courseId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 내 루트 공유 비활성화 (인증 필요)
+    // ──────────────────────────────────────────────────────────
+
+    @DeleteMapping("/my/{courseId}/share")
+    @Operation(
+            summary = "내 루트 공유 비활성화",
+            description = "내 루트를 비공개로 전환합니다.",
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "공유 비활성화 성공"),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "본인 코스가 아님",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "코스를 찾을 수 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<Void> disableSharing(
+            @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
+            @PathVariable String courseId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        courseService.disableSharing(userId, courseId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 저장된 코스 취소 (인증 필요)
+    // ──────────────────────────────────────────────────────────
+
+    @DeleteMapping("/{courseId}/save")
+    @Operation(
+            summary = "저장된 코스 취소",
+            description = "내 루트에 저장했던 공유 코스를 제거합니다.",
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "저장 취소 성공"),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "코스 또는 저장 기록을 찾을 수 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<Void> unsaveCourse(
+            @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
+            @PathVariable String courseId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        courseService.unsaveCourse(userId, courseId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 코스 복사 (인증 필요)
+    // ──────────────────────────────────────────────────────────
+
+    @PostMapping("/{courseId}/copy")
+    @Operation(
+            summary = "코스 복사",
+            description = "공유된 코스(또는 본인 코스)를 복사하여 내 루트로 추가합니다. 원본 소유자에게 알림이 전송됩니다.",
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "복사된 루트 상세 반환",
+                    content = @Content(schema = @Schema(implementation = MyCourseDetailResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "공유되지 않은 코스",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "코스를 찾을 수 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<MyCourseDetailResponse> copyCourse(
+            @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
+            @PathVariable String courseId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.status(201).body(courseService.copyCourse(userId, courseId));
     }
 }
