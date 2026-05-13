@@ -61,3 +61,13 @@ weather:
   kma-api-key: ${KMA_API_KEY:}
   air-korea-api-key: ${AIR_KOREA_API_KEY:}
   kakao-api-key: ${KAKAO_API_KEY:}
+
+ai:
+  gemini:
+    api-key: ${GEMINI_API_KEY:}
+    model: ${GEMINI_MODEL:gemini-2.0-flash}
+    max-tokens: ${GEMINI_MAX_TOKENS:4096}
+    base-url: https://generativelanguage.googleapis.com/v1beta/openai/
+  session:
+    ttl-seconds: 3600
+    max-messages: 20
