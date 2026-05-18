@@ -24,7 +24,7 @@ public record ChatMessageResponse(
         @Schema(description = "메시지 내용 (삭제된 경우 null, IMAGE 타입은 null)", example = "안녕하세요!")
         String content,
 
-        @Schema(description = "첨부 이미지 URL (messageType=IMAGE 일 때만, 없으면 null)", example = "/uploads/chat-messages/room-uuid/msg-uuid.jpg")
+        @Schema(description = "첨부 이미지 URL (messageType=IMAGE 일 때만, 없으면 null)", example = "https://your-project-ref.supabase.co/storage/v1/object/public/chat/chat-messages/room-uuid/msg-uuid.jpg")
         String attachmentUrl,
 
         @Schema(description = "공유된 루트 UUID (messageType=ROUTE 일 때만, 없으면 null)", example = "550e8400-e29b-41d4-a716-446655440000")

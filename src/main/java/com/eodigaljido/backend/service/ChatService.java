@@ -532,9 +532,7 @@ public class ChatService {
             throw new ChatException("파일 업로드 중 오류가 발생했습니다.", HttpStatus.INTERNAL_SERVER_ERROR);
         }
 
-        if (oldUrl != null && oldUrl.startsWith("/uploads/")) {
-            fileStorageService.delete(oldUrl);
-        }
+        fileStorageService.delete(oldUrl);
         room.updateProfileImage(newUrl);
 
         List<ChatRoomMember> members = chatRoomMemberRepository.findByRoomAndLeftAtIsNull(room);
@@ -553,9 +551,7 @@ public class ChatService {
         }
 
         String oldUrl = room.getProfileImageUrl();
-        if (oldUrl != null && oldUrl.startsWith("/uploads/")) {
-            fileStorageService.delete(oldUrl);
-        }
+        fileStorageService.delete(oldUrl);
         room.updateProfileImage(randomDefaultImage());
 
         List<ChatRoomMember> members = chatRoomMemberRepository.findByRoomAndLeftAtIsNull(room);

@@ -2,6 +2,7 @@ package com.eodigaljido.backend;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.scheduling.annotation.EnableAsync;
 
 import java.io.IOException;
@@ -11,6 +12,7 @@ import java.nio.file.Paths;
 import java.util.TimeZone;
 
 @EnableAsync
+@ConfigurationPropertiesScan
 @SpringBootApplication
 public class BackendApplication {
 
