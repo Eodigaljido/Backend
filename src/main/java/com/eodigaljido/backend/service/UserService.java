@@ -11,7 +11,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.List;
 
 @Service
@@ -21,6 +23,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final ProfileRepository profileRepository;
     private final UserOAuthProviderRepository oAuthProviderRepository;
+    private final FileStorageService fileStorageService;
 
     // 내 프로필 전체 조회
     @Transactional(readOnly = true)
@@ -67,11 +70,23 @@ public class UserService {
 
     // 프로필 이미지 변경
     @Transactional
-    public void updateProfileImage(Long userId, UpdateProfileImageRequest request) {
+    public MyProfileResponse updateProfileImage(Long userId, MultipartFile image) {
         User user = findActiveUser(userId);
         Profile profile = profileRepository.findByUser(user)
                 .orElseThrow(() -> new UserException("프로필을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
-        profile.updateProfileImage(request.profileImageUrl());
+        String oldUrl = profile.getProfileImageUrl();
+        String newUrl;
+        try {
+            newUrl = fileStorageService.store(image, "profiles", user.getUuid());
+        } catch (IllegalArgumentException e) {
+            throw new UserException(e.getMessage(), HttpStatus.BAD_REQUEST);
+        } catch (IOException e) {
+            throw new UserException("이미지 업로드 중 오류가 발생했습니다.", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+
+        profile.updateProfileImage(newUrl);
+        fileStorageService.delete(oldUrl);
+        return MyProfileResponse.of(user, profile, oAuthProviderRepository.findAllByUser(user));
     }
 
     // 프로필 이미지 삭제 (기본 이미지로 변경)
@@ -80,7 +95,9 @@ public class UserService {
         User user = findActiveUser(userId);
         Profile profile = profileRepository.findByUser(user)
                 .orElseThrow(() -> new UserException("프로필을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        String oldUrl = profile.getProfileImageUrl();
         profile.resetToDefaultImage();
+        fileStorageService.delete(oldUrl);
     }
 
     // 유저 검색 (닉네임)

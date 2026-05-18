@@ -12,10 +12,12 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -102,32 +104,32 @@ public class UserController {
         return ResponseEntity.noContent().build();
     }
 
-    @PatchMapping("/me/profile-image")
+    @PatchMapping(value = "/me/profile-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(
-            summary = "프로필 이미지 변경",
+            summary = "프로필 이미지 업로드 및 변경",
             description = """
-                    프로필 이미지 URL을 변경합니다.
+                    프로필 이미지 파일을 업로드하고 프로필에 반영합니다.
+                    업로드된 파일은 Supabase Storage S3 호환 저장소에 저장됩니다.
 
                     **헤더:** `Authorization: Bearer {accessToken}` (필수)
 
-                    **Request Body:**
-                    - `profileImageUrl` (필수): 새 프로필 이미지 URL (512자 이하)
+                    **Request (multipart/form-data):**
+                    - `image` (필수): 업로드할 프로필 이미지 파일 (JPEG, PNG, GIF, WebP, 최대 10MB)
                     """
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "이미지 변경 성공"),
-            @ApiResponse(responseCode = "400", description = "요청 값이 올바르지 않음 (URL 누락 또는 길이 초과)",
+            @ApiResponse(responseCode = "200", description = "이미지 변경 성공"),
+            @ApiResponse(responseCode = "400", description = "파일이 없거나 지원하지 않는 이미지 형식",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "410", description = "이미 탈퇴한 계정",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    public ResponseEntity<Void> updateProfileImage(
+    public ResponseEntity<MyProfileResponse> updateProfileImage(
             @AuthenticationPrincipal UserDetails userDetails,
-            @Valid @RequestBody UpdateProfileImageRequest request) {
-        userService.updateProfileImage(Long.valueOf(userDetails.getUsername()), request);
-        return ResponseEntity.noContent().build();
+            @RequestPart("image") MultipartFile image) {
+        return ResponseEntity.ok(userService.updateProfileImage(Long.valueOf(userDetails.getUsername()), image));
     }
 
     @DeleteMapping("/me/profile-image")
