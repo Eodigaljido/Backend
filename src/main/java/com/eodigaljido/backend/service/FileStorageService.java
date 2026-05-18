@@ -31,6 +31,7 @@ public class FileStorageService {
         validateImageFile(file);
         storageProperties.validateConfigured();
 
+        byte[] bytes = file.getBytes();
         String ext = extractExtension(file.getOriginalFilename());
         String objectKey = normalizeObjectKey(subDir + "/" + filename + "." + ext);
 
@@ -39,11 +40,11 @@ public class FileStorageService {
                 .key(objectKey)
                 .contentType(file.getContentType())
                 .cacheControl(storageProperties.cacheControl())
-                .contentLength(file.getSize())
+                .contentLength((long) bytes.length)
                 .build();
 
         try (S3Client s3Client = createS3Client()) {
-            s3Client.putObject(request, RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
+            s3Client.putObject(request, RequestBody.fromBytes(bytes));
         }
         return storageProperties.publicUrl(objectKey);
     }
