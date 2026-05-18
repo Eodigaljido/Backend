@@ -104,7 +104,7 @@ public class ChatService {
                 try {
                     profileImageUrl = fileStorageService.store(image, "chat-rooms", roomUuid);
                 } catch (IllegalStateException e) {
-                    throw new ChatException("파일 저장소 설정이 누락되었습니다. STORAGE_S3_* 환경변수를 설정하세요.", HttpStatus.SERVICE_UNAVAILABLE);
+                    throw new ChatException("파일 저장소 설정이 누락되었습니다. SUPABASE_S3_ENDPOINT, SUPABASE_S3_REGION, SUPABASE_S3_ACCESS_KEY, SUPABASE_S3_SECRET_KEY, SUPABASE_BUCKET을 설정하세요.", HttpStatus.SERVICE_UNAVAILABLE);
                 } catch (IOException e) {
                     throw new ChatException("프로필 이미지 업로드 중 오류가 발생했습니다.", HttpStatus.INTERNAL_SERVER_ERROR);
                 }
@@ -459,7 +459,7 @@ public class ChatService {
         try {
             attachmentUrl = fileStorageService.store(image, "chat-messages/" + roomUuid, messageUuid);
         } catch (IllegalStateException e) {
-            throw new ChatException("파일 저장소 설정이 누락되었습니다. STORAGE_S3_* 환경변수를 설정하세요.", HttpStatus.SERVICE_UNAVAILABLE);
+            throw new ChatException("파일 저장소 설정이 누락되었습니다. SUPABASE_S3_ENDPOINT, SUPABASE_S3_REGION, SUPABASE_S3_ACCESS_KEY, SUPABASE_S3_SECRET_KEY, SUPABASE_BUCKET을 설정하세요.", HttpStatus.SERVICE_UNAVAILABLE);
         } catch (IllegalArgumentException e) {
             throw new ChatException(e.getMessage(), HttpStatus.BAD_REQUEST);
         } catch (IOException e) {
@@ -533,7 +533,7 @@ public class ChatService {
         try {
             newUrl = fileStorageService.store(image, "chat-rooms", room.getUuid());
         } catch (IllegalStateException e) {
-            throw new ChatException("파일 저장소 설정이 누락되었습니다. STORAGE_S3_* 환경변수를 설정하세요.", HttpStatus.SERVICE_UNAVAILABLE);
+            throw new ChatException("파일 저장소 설정이 누락되었습니다. SUPABASE_S3_ENDPOINT, SUPABASE_S3_REGION, SUPABASE_S3_ACCESS_KEY, SUPABASE_S3_SECRET_KEY, SUPABASE_BUCKET을 설정하세요.", HttpStatus.SERVICE_UNAVAILABLE);
         } catch (IOException e) {
             throw new ChatException("파일 업로드 중 오류가 발생했습니다.", HttpStatus.INTERNAL_SERVER_ERROR);
         }
