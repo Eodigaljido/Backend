@@ -24,6 +24,13 @@ springdoc:
   api-docs:
     path: /v3/api-docs
 
+logging:
+  level:
+    # HTTPS/TLS probes or scanners sent to the plain HTTP port can create noisy Tomcat parser stack traces.
+    org.apache.coyote.http11.Http11Processor: ERROR
+    # Spring logs broker statistics every 30 minutes by default; keep production logs focused on actionable events.
+    org.springframework.web.socket.config.WebSocketMessageBrokerStats: WARN
+
 jwt:
   secret: ${JWT_SECRET:}
   access-token-expiry: 3600000       # 1시간 (ms)
