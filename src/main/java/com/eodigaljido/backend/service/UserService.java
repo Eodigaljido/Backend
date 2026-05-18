@@ -78,6 +78,8 @@ public class UserService {
         String newUrl;
         try {
             newUrl = fileStorageService.store(image, "profiles", user.getUuid());
+        } catch (IllegalStateException e) {
+            throw new UserException("파일 저장소 설정이 누락되었습니다. STORAGE_S3_ENDPOINT, STORAGE_S3_BUCKET, STORAGE_S3_ACCESS_KEY, STORAGE_S3_SECRET_KEY, STORAGE_PUBLIC_BASE_URL을 설정하세요.", HttpStatus.SERVICE_UNAVAILABLE);
         } catch (IllegalArgumentException e) {
             throw new UserException(e.getMessage(), HttpStatus.BAD_REQUEST);
         } catch (IOException e) {

@@ -30,6 +30,8 @@ logging:
     org.apache.coyote.http11.Http11Processor: ERROR
     # Spring logs broker statistics every 30 minutes by default; keep production logs focused on actionable events.
     org.springframework.web.socket.config.WebSocketMessageBrokerStats: WARN
+    # Springdoc warns when Swagger is enabled in prod; this project intentionally exposes it for API testing.
+    org.springdoc.core.events.SpringDocAppInitializer: ERROR
 
 jwt:
   secret: ${JWT_SECRET:}
