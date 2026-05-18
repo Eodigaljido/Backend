@@ -79,7 +79,7 @@ public class UserService {
         try {
             newUrl = fileStorageService.store(image, "profiles", user.getUuid());
         } catch (IllegalStateException e) {
-            throw new UserException("파일 저장소 설정이 누락되었습니다. SUPABASE_S3_ENDPOINT, SUPABASE_S3_REGION, SUPABASE_S3_ACCESS_KEY, SUPABASE_S3_SECRET_KEY, SUPABASE_BUCKET을 설정하세요.", HttpStatus.SERVICE_UNAVAILABLE);
+            throw new UserException("파일 저장소 설정이 누락되었습니다. " + e.getMessage(), HttpStatus.SERVICE_UNAVAILABLE);
         } catch (IllegalArgumentException e) {
             throw new UserException(e.getMessage(), HttpStatus.BAD_REQUEST);
         } catch (IOException e) {

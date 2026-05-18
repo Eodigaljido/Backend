@@ -64,11 +64,15 @@ public record StorageProperties(
     }
 
     public void validateConfigured() {
-        require(endpoint, "SUPABASE_S3_ENDPOINT");
-        require(bucket, "SUPABASE_BUCKET");
-        require(accessKey, "SUPABASE_S3_ACCESS_KEY");
-        require(secretKey, "SUPABASE_S3_SECRET_KEY");
-        require(publicBaseUrl, "SUPABASE_PUBLIC_BASE_URL or derived public URL");
+        StringBuilder missing = new StringBuilder();
+        appendMissing(missing, endpoint, "SUPABASE_S3_ENDPOINT");
+        appendMissing(missing, bucket, "SUPABASE_BUCKET");
+        appendMissing(missing, accessKey, "SUPABASE_S3_ACCESS_KEY");
+        appendMissing(missing, secretKey, "SUPABASE_S3_SECRET_KEY");
+        appendMissing(missing, publicBaseUrl, "SUPABASE_PUBLIC_BASE_URL or derived public URL");
+        if (!missing.isEmpty()) {
+            throw new IllegalStateException("Missing file upload settings: " + missing);
+        }
     }
 
     public String publicUrl(String objectKey) {
@@ -76,9 +80,12 @@ public record StorageProperties(
         return trimTrailingSlash(publicBaseUrl) + "/" + objectKey;
     }
 
-    private static void require(String value, String propertyName) {
+    private static void appendMissing(StringBuilder missing, String value, String propertyName) {
         if (value == null || value.isBlank()) {
-            throw new IllegalStateException(propertyName + " must be configured for file uploads.");
+            if (!missing.isEmpty()) {
+                missing.append(", ");
+            }
+            missing.append(propertyName);
         }
     }
 
