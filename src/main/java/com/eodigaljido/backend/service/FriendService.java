@@ -3,6 +3,7 @@ package com.eodigaljido.backend.service;
 import com.eodigaljido.backend.domain.friend.Friend;
 import com.eodigaljido.backend.domain.user.Profile;
 import com.eodigaljido.backend.domain.user.User;
+import com.eodigaljido.backend.dto.friend.FriendCodeResponse;
 import com.eodigaljido.backend.dto.friend.FriendRequestResponse;
 import com.eodigaljido.backend.dto.friend.FriendResponse;
 import com.eodigaljido.backend.dto.friend.RecentFriendResponse;
@@ -32,6 +33,13 @@ public class FriendService {
     private final UserRepository userRepository;
     private final ProfileRepository profileRepository;
     private final ChatMessageRepository chatMessageRepository;
+    private final FriendCodeService friendCodeService;
+
+    @Transactional
+    public FriendCodeResponse getMyFriendCode(Long userId) {
+        User me = findUser(userId);
+        return new FriendCodeResponse(friendCodeService.assignIfMissing(me));
+    }
 
     // 친구 목록 조회 (한글 → 영어 → 숫자 → 특수기호 순, 각 그룹 내 가나다/abc/123 정렬)
     @Transactional(readOnly = true)
@@ -111,9 +119,9 @@ public class FriendService {
 
     // 친구 요청 전송
     @Transactional
-    public void sendRequest(Long requesterId, String targetUuid) {
+    public void sendRequest(Long requesterId, String targetUuid, String friendCode) {
         User requester = findUser(requesterId);
-        User target = userRepository.findByUuid(targetUuid)
+        User target = findTargetUser(targetUuid, friendCode)
                 .orElseThrow(() -> new UserException("존재하지 않는 사용자입니다.", HttpStatus.NOT_FOUND));
 
         if (requester.getId().equals(target.getId())) {
@@ -188,6 +196,13 @@ public class FriendService {
     private User findUser(Long userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new UserException("존재하지 않는 사용자입니다.", HttpStatus.NOT_FOUND));
+    }
+
+    private java.util.Optional<User> findTargetUser(String targetUuid, String friendCode) {
+        if (friendCode != null && !friendCode.isBlank()) {
+            return userRepository.findByFriendCode(friendCode.toUpperCase(Locale.ROOT));
+        }
+        return userRepository.findByUuid(targetUuid);
     }
 
     private Map<Long, Profile> buildProfileMap(List<User> users) {

@@ -24,11 +24,13 @@ public class UserService {
     private final ProfileRepository profileRepository;
     private final UserOAuthProviderRepository oAuthProviderRepository;
     private final FileStorageService fileStorageService;
+    private final FriendCodeService friendCodeService;
 
     // 내 프로필 전체 조회
-    @Transactional(readOnly = true)
+    @Transactional
     public MyProfileResponse getMyProfile(Long userId) {
         User user = findActiveUser(userId);
+        friendCodeService.assignIfMissing(user);
         Profile profile = profileRepository.findByUser(user).orElse(null);
         return MyProfileResponse.of(user, profile, oAuthProviderRepository.findAllByUser(user));
     }

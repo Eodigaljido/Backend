@@ -1,6 +1,7 @@
 package com.eodigaljido.backend.controller;
 
 import com.eodigaljido.backend.dto.common.ErrorResponse;
+import com.eodigaljido.backend.dto.friend.FriendCodeResponse;
 import com.eodigaljido.backend.dto.friend.FriendRequestDto;
 import com.eodigaljido.backend.dto.friend.FriendRequestResponse;
 import com.eodigaljido.backend.dto.friend.FriendRespondDto;
@@ -30,6 +31,26 @@ import java.util.List;
 public class FriendController {
 
     private final FriendService friendService;
+
+    @GetMapping("/code")
+    @Operation(
+            summary = "내 친구 코드 조회",
+            description = """
+                    로그인한 사용자의 친구 코드를 조회합니다.
+                    친구 코드는 서버에서 1회 발급되는 대문자 영어와 숫자가 섞인 6자리 값이며, 계정마다 고정됩니다.
+
+                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
+                    """
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "친구 코드 반환"),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<FriendCodeResponse> getMyFriendCode(
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(friendService.getMyFriendCode(Long.parseLong(userDetails.getUsername())));
+    }
 
     @GetMapping("/recent")
     @Operation(
@@ -76,12 +97,14 @@ public class FriendController {
     @Operation(
             summary = "친구 요청 전송",
             description = """
-                    상대방의 UUID로 친구 요청을 전송합니다.
+                    상대방의 친구 코드로 친구 요청을 전송합니다.
+                    기존 호환을 위해 `targetUuid`로도 요청할 수 있으며, `friendCode`가 있으면 친구 코드를 우선 사용합니다.
 
                     **헤더:** `Authorization: Bearer {accessToken}` (필수)
 
                     **Request Body:**
-                    - `targetUuid` (필수): 친구 요청을 보낼 상대방의 UUID
+                    - `friendCode` (권장): 친구 요청을 보낼 상대방의 친구 코드 (대문자 영어+숫자 6자리)
+                    - `targetUuid` (기존 호환): 친구 요청을 보낼 상대방의 UUID
                     """
     )
     @ApiResponses({
@@ -98,7 +121,7 @@ public class FriendController {
     public ResponseEntity<Void> sendRequest(
             @AuthenticationPrincipal UserDetails userDetails,
             @Valid @RequestBody FriendRequestDto request) {
-        friendService.sendRequest(Long.parseLong(userDetails.getUsername()), request.targetUuid());
+        friendService.sendRequest(Long.parseLong(userDetails.getUsername()), request.targetUuid(), request.friendCode());
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 

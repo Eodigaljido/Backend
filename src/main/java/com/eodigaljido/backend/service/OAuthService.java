@@ -44,6 +44,7 @@ public class OAuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final UserOAuthProviderRepository oAuthProviderRepository;
     private final JwtTokenProvider jwtTokenProvider;
+    private final FriendCodeService friendCodeService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -162,6 +163,7 @@ public class OAuthService {
         User newUser = User.builder()
                 .uuid(UUID.randomUUID().toString())
                 .email(email)
+                .friendCode(friendCodeService.generateUniqueCode())
                 .build();
         userRepository.save(newUser);
         profileRepository.save(Profile.builder()
@@ -173,6 +175,7 @@ public class OAuthService {
     }
 
     private OAuthLoginResponse issueTokens(User user, boolean isNew) {
+        friendCodeService.assignIfMissing(user);
         user.updateLastLoginAt(LocalDateTime.now());
 
         String accessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getRole().name());

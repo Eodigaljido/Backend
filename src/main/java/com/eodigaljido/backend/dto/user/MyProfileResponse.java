@@ -10,6 +10,7 @@ import java.util.List;
 
 public record MyProfileResponse(
         String uuid,
+        String friendCode,
         String email,
         String phone,
         List<String> loginMethods,
@@ -26,6 +27,7 @@ public record MyProfileResponse(
 
         return new MyProfileResponse(
                 user.getUuid(),
+                user.getFriendCode(),
                 user.getEmail(),
                 user.getPhone(),
                 methods,

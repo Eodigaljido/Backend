@@ -32,6 +32,7 @@ public class AuthService {
     private final JwtProperties jwtProperties;
     private final PasswordEncoder passwordEncoder;
     private final PhoneVerificationService phoneVerificationService;
+    private final FriendCodeService friendCodeService;
 
     @Transactional
     public LoginResponse register(RegisterRequest request) {
@@ -65,6 +66,7 @@ public class AuthService {
                 .userId(userId)
                 .email(email)
                 .passwordHash(passwordEncoder.encode(request.password()))
+                .friendCode(friendCodeService.generateUniqueCode())
                 .build();
 
         userRepository.save(user);
@@ -214,6 +216,8 @@ public class AuthService {
     }
 
     private LoginResponse issueTokens(User user, String deviceInfo, String ipAddress) {
+        friendCodeService.assignIfMissing(user);
+
         String accessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getRole().name());
         String refreshTokenStr = jwtTokenProvider.generateRefreshToken(user.getId());
 

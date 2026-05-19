@@ -12,7 +12,8 @@ import java.time.LocalDateTime;
     indexes = {
         @Index(name = "idx_users_uuid", columnList = "uuid"),
         @Index(name = "idx_users_email", columnList = "email"),
-        @Index(name = "idx_users_phone", columnList = "phone")
+        @Index(name = "idx_users_phone", columnList = "phone"),
+        @Index(name = "idx_users_friend_code", columnList = "friend_code")
     }
 )
 @Getter
@@ -30,6 +31,9 @@ public class User extends BaseTimeEntity {
 
     @Column(name = "user_id", length = 8, unique = true)
     private String userId;
+
+    @Column(name = "friend_code", length = 6, unique = true)
+    private String friendCode;
 
     @Column(length = 255, unique = true)
     private String email;
@@ -83,6 +87,13 @@ public class User extends BaseTimeEntity {
 
     public void updateUserId(String userId) {
         this.userId = userId;
+    }
+
+    public void assignFriendCode(String friendCode) {
+        if (this.friendCode != null && !this.friendCode.isBlank()) {
+            return;
+        }
+        this.friendCode = friendCode;
     }
 
     public void linkLocalCredentials(String passwordHash, String phone, LocalDateTime verifiedAt) {
