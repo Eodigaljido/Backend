@@ -322,7 +322,8 @@ public class OAuthService {
 
             if (response.statusCode() >= 400) {
                 // 내부 에러 상세는 서버 로그에만 기록
-                log.error("[OAuth 사용자 정보 조회 실패] url={}, status={}", url, response.statusCode());
+                log.error("[OAuth 사용자 정보 조회 실패] url={}, status={}, body={}",
+                        url, response.statusCode(), response.body());
                 throw new AuthException("OAuth 사용자 정보를 가져오는 데 실패했습니다. 다시 시도해주세요.", HttpStatus.valueOf(response.statusCode()));
             }
             return json;
