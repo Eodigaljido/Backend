@@ -54,8 +54,7 @@ oauth:
     client-id: ${KAKAO_CLIENT_ID:}
     client-secret: ${KAKAO_CLIENT_SECRET:}
     redirect-uri: ${KAKAO_REDIRECT_URI:}
-    allowed-redirect-uris:
-      - ${KAKAO_REDIRECT_URI:}
+    allowed-redirect-uris: ${KAKAO_ALLOWED_REDIRECT_URIS:${KAKAO_REDIRECT_URI:}}
 
 websocket:
   # WebSocket CORS 허용 오리진 목록 (쉼표 구분)
