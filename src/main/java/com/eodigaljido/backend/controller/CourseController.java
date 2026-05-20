@@ -189,8 +189,9 @@ public class CourseController {
                     - `collaborative` (선택): 공유 여부, 기본 false
                     - `stops` (선택): 경유지 목록 — `kind`(start|via|end), `title`, `timeLine`, `lat`, `lng`
                     - `legs` (선택): 이동 구간 목록 — `mode`(walk|transit|car|bike), `minutes`, `transitType`, `directionsSummary`, `directionsDetail`, `distanceMeters`
+                    - `tags` (선택): 태그 목록 (최대 2개). 허용값: `산책 카페 맛집 데이트 관광 야경 쇼핑 역사 해변 가족 운동 반려동물`
 
-                    **Response:** 생성된 루트 정보 (`uuid` 포함) — 201 Created
+                    **Response:** 생성된 루트 정보 (`uuid`, `tags` 포함) — 201 Created
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
@@ -272,6 +273,7 @@ public class CourseController {
                     - `collaborative`: 공유 여부
                     - `stops`: 경유지 목록 (kind, title, timeLine, lat, lng)
                     - `legs`: 이동 구간 목록 (mode, minutes, transitType 등)
+                    - `tags`: 태그 목록 (없으면 빈 배열 `[]`)
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
@@ -333,11 +335,18 @@ public class CourseController {
     @Operation(
             summary = "내 루트 수정",
             description = """
-                    내 루트의 전체 정보(제목, 공유여부, stops, legs)를 수정합니다. 제공하지 않은 필드는 기존 값을 유지합니다.
+                    내 루트의 정보를 수정합니다. 제공하지 않은 필드는 기존 값을 유지합니다.
 
                     **헤더:** `Authorization: Bearer {accessToken}` (필수)
 
-                    **Response:** 수정된 루트 상세 정보 (stops/legs 포맷)
+                    **태그 수정 정책:**
+                    - `tags` 필드 **생략** → 기존 태그 유지
+                    - `tags: []` (빈 배열) → 태그 전체 삭제
+                    - `tags: ["산책", "카페"]` → 해당 값으로 교체 (최대 2개)
+
+                    **허용 태그:** `산책 카페 맛집 데이트 관광 야경 쇼핑 역사 해변 가족 운동 반려동물`
+
+                    **Response:** 수정된 루트 상세 정보 (stops/legs/tags 포함)
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )

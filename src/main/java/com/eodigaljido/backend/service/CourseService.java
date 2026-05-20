@@ -3,6 +3,7 @@ package com.eodigaljido.backend.service;
 import com.eodigaljido.backend.domain.notification.NotificationType;
 import com.eodigaljido.backend.domain.route.Route;
 import com.eodigaljido.backend.domain.route.Route.RouteStatus;
+import com.eodigaljido.backend.domain.route.RouteTag;
 import com.eodigaljido.backend.domain.route.RouteLeg;
 import com.eodigaljido.backend.domain.route.RouteReview;
 import com.eodigaljido.backend.domain.route.RouteWaypoint;
@@ -215,6 +216,7 @@ public class CourseService {
                 .totalDistance(totalDistance)
                 .build();
         routeRepository.save(route);
+        route.updateTags(processTags(req.tags()));
 
         List<RouteWaypoint> waypoints = buildWaypoints(route, req.stops());
         waypointRepository.saveAll(waypoints);
@@ -293,6 +295,9 @@ public class CourseService {
         if (req.collaborative() != null) {
             if (Boolean.TRUE.equals(req.collaborative())) route.enableSharing();
             else route.disableSharing();
+        }
+        if (req.tags() != null) {
+            route.updateTags(processTags(req.tags()));
         }
 
         waypointRepository.deleteAllByRoute(route);
@@ -416,6 +421,7 @@ public class CourseService {
                 .activityType(original.getActivityType())
                 .build();
         routeRepository.save(copied);
+        copied.updateTags(new java.util.ArrayList<>(original.getTags()));
 
         List<RouteWaypoint> waypoints = waypointRepository.findByRouteOrderBySequenceAsc(original)
                 .stream()
@@ -536,7 +542,17 @@ public class CourseService {
     private MyCourseDetailResponse toMyCourseDetail(Route route, List<RouteWaypoint> waypoints, List<RouteLeg> legs) {
         List<StopResponse> stops = waypoints.stream().map(StopResponse::from).toList();
         List<LegResponse> legResponses = legs.stream().map(LegResponse::from).toList();
-        return new MyCourseDetailResponse(route.getUuid(), route.getTitle(), route.isShared(), stops, legResponses);
+        List<String> tags = route.getTags() != null ? List.copyOf(route.getTags()) : List.of();
+        return new MyCourseDetailResponse(route.getUuid(), route.getTitle(), route.isShared(), stops, legResponses, tags);
+    }
+
+    private List<String> processTags(List<RouteTag> tags) {
+        if (tags == null) return List.of();
+        return tags.stream()
+                .filter(java.util.Objects::nonNull)
+                .limit(2)
+                .map(Enum::name)
+                .toList();
     }
 
     private Sort resolveSort(String tab, String sort) {

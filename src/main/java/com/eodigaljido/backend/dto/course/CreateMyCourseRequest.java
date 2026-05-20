@@ -1,5 +1,7 @@
 package com.eodigaljido.backend.dto.course;
 
+import com.eodigaljido.backend.domain.route.RouteTag;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -20,5 +22,15 @@ public record CreateMyCourseRequest(
         List<StopRequest> stops,
 
         @Schema(description = "이동 구간 목록 (stop[i]~stop[i+1] 사이의 이동 정보)")
-        List<LegRequest> legs
+        List<LegRequest> legs,
+
+        @Size(max = 2, message = "태그는 최대 2개까지 입력 가능합니다.")
+        @ArraySchema(
+                arraySchema = @Schema(
+                        description = "태그 목록 (선택, 최대 2개). 필드를 생략하면 기존 태그를 유지하고, 빈 배열(`[]`)을 전달하면 태그를 모두 삭제합니다.",
+                        example = "[\"산책\", \"카페\"]"
+                ),
+                schema = @Schema(implementation = RouteTag.class)
+        )
+        List<RouteTag> tags
 ) {}

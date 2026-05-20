@@ -48,6 +48,13 @@ public record CourseDetailResponse(
         @ArraySchema(schema = @Schema(implementation = CourseStepResponse.class, description = "경유지(스텝) 목록"))
         List<CourseStepResponse> routeSteps,
 
+        @ArraySchema(
+                arraySchema = @Schema(description = "태그 목록 (없으면 빈 배열)", example = "[\"산책\", \"카페\"]"),
+                schema = @Schema(description = "태그", example = "산책",
+                        allowableValues = {"산책","카페","맛집","데이트","관광","야경","쇼핑","역사","해변","가족","운동","반려동물"})
+        )
+        List<String> tags,
+
         @ArraySchema(schema = @Schema(implementation = ReviewResponse.class, description = "리뷰 목록"))
         List<ReviewResponse> reviews,
 
@@ -76,6 +83,7 @@ public record CourseDetailResponse(
                 route.getAverageRating(),
                 route.getReviewCount(),
                 steps,
+                route.getTags() != null ? List.copyOf(route.getTags()) : List.of(),
                 reviews,
                 route.getUser().getUuid(),
                 route.getUser().getUserId()

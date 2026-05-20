@@ -1,5 +1,6 @@
 package com.eodigaljido.backend.dto.course;
 
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
@@ -19,5 +20,12 @@ public record MyCourseDetailResponse(
         List<StopResponse> stops,
 
         @Schema(description = "이동 구간 목록")
-        List<LegResponse> legs
+        List<LegResponse> legs,
+
+        @ArraySchema(
+                arraySchema = @Schema(description = "태그 목록 (없으면 빈 배열)", example = "[\"산책\", \"카페\"]"),
+                schema = @Schema(description = "태그", example = "산책",
+                        allowableValues = {"산책","카페","맛집","데이트","관광","야경","쇼핑","역사","해변","가족","운동","반려동물"})
+        )
+        List<String> tags
 ) {}

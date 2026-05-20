@@ -8,6 +8,8 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(
@@ -84,6 +86,12 @@ public class Route extends BaseTimeEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "route_tags", joinColumns = @JoinColumn(name = "route_id"))
+    @Column(name = "tag", length = 20)
+    @Builder.Default
+    private List<String> tags = new ArrayList<>();
+
     public enum RouteStatus {
         DRAFT, PUBLISHED, DELETED
     }
@@ -124,5 +132,12 @@ public class Route extends BaseTimeEntity {
         this.status = RouteStatus.DELETED;
         this.isShared = false;
         this.deletedAt = LocalDateTime.now();
+    }
+
+    public void updateTags(List<String> newTags) {
+        this.tags.clear();
+        if (newTags != null) {
+            this.tags.addAll(newTags);
+        }
     }
 }
