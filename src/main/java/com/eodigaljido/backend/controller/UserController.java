@@ -60,7 +60,7 @@ public class UserController {
                     **헤더:** `Authorization: Bearer {accessToken}` (필수)
 
                     **Request Body:**
-                    - `nickname` (선택): 변경할 닉네임 (2~20자)
+                    - `nickname` (선택): 변경할 닉네임 (2~14자)
                     - `bio` (선택): 변경할 자기소개 (255자 이하)
                     """
     )
