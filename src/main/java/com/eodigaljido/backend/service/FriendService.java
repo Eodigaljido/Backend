@@ -4,6 +4,7 @@ import com.eodigaljido.backend.domain.friend.Friend;
 import com.eodigaljido.backend.domain.user.Profile;
 import com.eodigaljido.backend.domain.user.User;
 import com.eodigaljido.backend.dto.friend.FriendCodeResponse;
+import com.eodigaljido.backend.dto.friend.FriendPreviewResponse;
 import com.eodigaljido.backend.dto.friend.FriendRequestResponse;
 import com.eodigaljido.backend.dto.friend.FriendResponse;
 import com.eodigaljido.backend.dto.friend.RecentFriendResponse;
@@ -34,6 +35,39 @@ public class FriendService {
     private final ProfileRepository profileRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final FriendCodeService friendCodeService;
+
+    // 친구 코드로 초대자 preview 조회 (비로그인 허용)
+    @Transactional(readOnly = true)
+    public FriendPreviewResponse getFriendPreview(String friendCode) {
+        User user = userRepository.findByFriendCode(friendCode.toUpperCase(Locale.ROOT))
+                .filter(u -> u.getStatus() == com.eodigaljido.backend.domain.user.User.UserStatus.ACTIVE)
+                .orElseThrow(() -> new FriendException("존재하지 않는 친구 코드입니다.", HttpStatus.NOT_FOUND));
+
+        Profile profile = profileRepository.findByUser(user).orElse(null);
+        return FriendPreviewResponse.of(user, profile);
+    }
+
+    // 친구 코드로 직접 친구 요청 전송 (POST /api/friends/add 전용)
+    @Transactional
+    public void addFriendByCode(Long requesterId, String friendCode) {
+        User requester = findUser(requesterId);
+        User target = userRepository.findByFriendCode(friendCode.toUpperCase(Locale.ROOT))
+                .orElseThrow(() -> new FriendException("존재하지 않는 친구 코드입니다.", HttpStatus.NOT_FOUND));
+
+        if (requester.getId().equals(target.getId())) {
+            throw new FriendException("자신의 친구 코드는 추가할 수 없습니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        friendRepository.findBetween(requester, target).ifPresent(f -> {
+            switch (f.getStatus()) {
+                case PENDING -> throw new FriendException("이미 대기 중인 친구 요청이 있습니다.", HttpStatus.CONFLICT);
+                case ACCEPTED -> throw new FriendException("이미 친구입니다.", HttpStatus.CONFLICT);
+                case REJECTED, BLOCKED -> throw new FriendException("친구 요청을 보낼 수 없는 상태입니다.", HttpStatus.CONFLICT);
+            }
+        });
+
+        friendRepository.save(Friend.builder().requester(requester).receiver(target).build());
+    }
 
     @Transactional
     public FriendCodeResponse getMyFriendCode(Long userId) {

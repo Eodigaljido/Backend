@@ -50,7 +50,8 @@ public class WeatherController {
                     1. `location` → 격자좌표(nx/ny) 및 측정소명 변환
                     2. 기상청 초단기실황 · 단기예보 · 에어코리아 3개 API **병렬 호출**
                     3. 통합 응답 반환
-                    """
+                    """,
+            security = {}
     )
     @ApiResponses({
             @ApiResponse(

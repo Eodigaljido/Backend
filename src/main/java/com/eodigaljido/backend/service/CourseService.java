@@ -45,6 +45,27 @@ public class CourseService {
     private final ApplicationEventPublisher eventPublisher;
 
     // ──────────────────────────────────────────────────────────
+    // 코스 공유 링크 preview (비로그인 허용, 조회수 증가 없음)
+    // ──────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public CoursePreviewResponse getCoursePreview(String courseId) {
+        Route route = findSharedRoute(courseId);
+
+        List<RouteWaypoint> waypoints = waypointRepository.findByRouteOrderBySequenceAsc(route);
+        String departure = waypoints.isEmpty() ? null : waypoints.get(0).getName();
+        String arrival = waypoints.size() < 2 ? departure : waypoints.get(waypoints.size() - 1).getName();
+
+        List<String> tags = route.getTags() != null
+                ? route.getTags().stream().limit(4).toList()
+                : List.of();
+
+        long saveCount = savedRouteRepository.countByRouteId(route.getId());
+
+        return CoursePreviewResponse.of(route, tags, departure, arrival, saveCount);
+    }
+
+    // ──────────────────────────────────────────────────────────
     // 홈 코스 목록 (인기/최근 공유 코스)
     // ──────────────────────────────────────────────────────────
 

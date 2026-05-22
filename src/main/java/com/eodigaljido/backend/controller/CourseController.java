@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -41,7 +42,8 @@ public class CourseController {
 
                     `friends` 탭은 인증 토큰이 있는 경우에만 친구 필터가 적용되며,
                     미인증 시에는 전체 목록과 동일하게 반환됩니다.
-                    """
+                    """,
+            security = {}
     )
     @ApiResponses({
             @ApiResponse(
@@ -80,6 +82,62 @@ public class CourseController {
     }
 
     // ──────────────────────────────────────────────────────────
+    // 공유 코스 preview (비로그인 허용, share-web / OG 카드용)
+    // ──────────────────────────────────────────────────────────
+
+    @GetMapping("/public/{courseId}/preview")
+    @Operation(
+            summary = "공유 코스 preview 조회",
+            description = """
+                    공유 링크·share-web OG 카드용 최소 필드를 반환합니다.
+                    인증 없이 접근 가능합니다. 조회수는 증가하지 않습니다.
+
+                    **Cache-Control:** `public, max-age=300` (5분 캐시)
+                    """,
+            security = {}
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "코스 preview 반환",
+                    content = @Content(
+                            schema = @Schema(implementation = CoursePreviewResponse.class),
+                            examples = @ExampleObject(
+                                    name = "한강 데이트 코스 예시",
+                                    value = """
+                                            {
+                                              "courseId": "7ecc5401-1234-5678-abcd-000000000001",
+                                              "title": "한강 데이트 코스",
+                                              "region": "서울",
+                                              "category": "데이트",
+                                              "durationLabel": "약 3시간",
+                                              "thumbnailUrl": "https://cdn.example.com/thumb.jpg",
+                                              "departure": "여의도역",
+                                              "arrival": "뚝섬",
+                                              "tags": ["야경", "산책"],
+                                              "saveCount": 120,
+                                              "rating": 4.50,
+                                              "isPublic": true
+                                            }
+                                            """
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "없는 ID, 비공개, 삭제 코스",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    public ResponseEntity<CoursePreviewResponse> getCoursePreview(
+            @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
+            @PathVariable String courseId) {
+        return ResponseEntity.ok()
+                .header("Cache-Control", "public, max-age=300")
+                .body(courseService.getCoursePreview(courseId));
+    }
+
+    // ──────────────────────────────────────────────────────────
     // 공유 코스 상세 (인증 불필요)
     // ──────────────────────────────────────────────────────────
 
@@ -89,7 +147,9 @@ public class CourseController {
             description = """
                     코스 UUID로 상세 정보, 경유지(`routeSteps`), 리뷰(`reviews`)를 조회합니다.
                     조회할 때마다 `views`(조회수)가 1 증가합니다. 인증 없이 접근 가능합니다.
-                    """
+                    비공개 코스는 404를 반환합니다.
+                    """,
+            security = {}
     )
     @ApiResponses({
             @ApiResponse(
@@ -149,7 +209,8 @@ public class CourseController {
 
                     - **인증 O**: 작성자 정보가 자동으로 설정됩니다. `userName` 무시.
                     - **인증 X**: `userName` 필드를 직접 제공해야 합니다. 미제공 시 '익명' 처리.
-                    """
+                    """,
+            security = {}
     )
     @ApiResponses({
             @ApiResponse(

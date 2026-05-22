@@ -34,7 +34,8 @@ public class HomeController {
                     홈 화면에서 표시할 인기 코스 목록을 반환합니다. 인증 없이 접근 가능합니다.
                     조회수(`views`) 기준 내림차순으로 정렬됩니다.
                     각 코스에는 `routeSteps`, `rating`, `reviewCount`, `departure`, `arrival` 등 홈 렌더링에 필요한 필드가 모두 포함됩니다.
-                    """
+                    """,
+            security = {}
     )
     @ApiResponses({
             @ApiResponse(

@@ -2,6 +2,7 @@ package com.eodigaljido.backend.config;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.List;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,6 +18,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import com.eodigaljido.backend.security.JwtAuthenticationFilter;
 
@@ -42,7 +46,13 @@ public class SecurityConfig {
             "/images/**",
             "/api/weather",
             "/api/home/**",
-            "/api/courses/public" 
+            "/api/courses/public"
+    };
+
+    private static final String[] SHARE_ALLOWED_ORIGINS = {
+            "https://share.eodigaljido.rjsgud.com",
+            "http://localhost:5173",
+            "http://localhost:3000"
     };
 
     // Swagger 엔드포인트 (전체 환경 공개 허용)
@@ -63,6 +73,7 @@ public class SecurityConfig {
         boolean isLocalProfile = Arrays.asList(environment.getActiveProfiles()).contains("local");
 
         http
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -86,6 +97,9 @@ public class SecurityConfig {
                     // 코스 상세 조회 및 리뷰 작성은 GET/POST 모두 공개 (인증 선택)
                     auth.requestMatchers(HttpMethod.GET, "/api/courses/*").permitAll();
                     auth.requestMatchers(HttpMethod.POST, "/api/courses/*/reviews").permitAll();
+                    // 공유 링크 preview — 비로그인 허용 (share-web, 카톡 인앱 브라우저)
+                    auth.requestMatchers(HttpMethod.GET, "/api/courses/public/*/preview").permitAll();
+                    auth.requestMatchers(HttpMethod.GET, "/api/friends/code/*/preview").permitAll();
                     auth.anyRequest().authenticated();
                 })
                 .exceptionHandling(ex -> ex
@@ -107,5 +121,19 @@ public class SecurityConfig {
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(Arrays.asList(SHARE_ALLOWED_ORIGINS));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("Content-Type", "Authorization"));
+        config.setAllowCredentials(false);
+        config.setMaxAge(3600L);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/api/**", config);
+        return source;
     }
 }
