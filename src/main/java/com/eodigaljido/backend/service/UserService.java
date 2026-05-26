@@ -40,12 +40,7 @@ public class UserService {
         friendCodeService.assignIfMissing(user);
         Profile profile = profileRepository.findByUser(user).orElse(null);
 
-        long sharedCourseCount = routeRepository.countByUserIdAndIsSharedTrueAndStatusNot(userId, Route.RouteStatus.DELETED);
-        BigDecimal averageRating = routeRepository.findAverageRatingOfSharedRoutesByUserId(userId, Route.RouteStatus.DELETED);
-        long savedCourseCount = savedRouteRepository.countByUserId(userId);
-
-        return MyProfileResponse.of(user, profile, oAuthProviderRepository.findAllByUser(user),
-                sharedCourseCount, averageRating, savedCourseCount);
+        return toMyProfileResponse(user, profile);
     }
 
     // 다른 유저 프로필 조회
@@ -110,7 +105,7 @@ public class UserService {
         if (oldUrl != null && !oldUrl.equals(newUrl)) {
             fileStorageService.delete(oldUrl);
         }
-        return MyProfileResponse.of(user, profile, oAuthProviderRepository.findAllByUser(user));
+        return toMyProfileResponse(user, profile);
     }
 
     // 프로필 이미지 삭제 (기본 이미지로 변경)
@@ -146,5 +141,22 @@ public class UserService {
             throw new UserException("이미 탈퇴한 계정입니다.", HttpStatus.GONE);
         }
         return user;
+    }
+
+    private MyProfileResponse toMyProfileResponse(User user, Profile profile) {
+        long sharedCourseCount = routeRepository.countByUserIdAndIsSharedTrueAndStatusNot(
+                user.getId(), Route.RouteStatus.DELETED);
+        BigDecimal averageRating = routeRepository.findAverageRatingOfSharedRoutesByUserId(
+                user.getId(), Route.RouteStatus.DELETED);
+        long savedCourseCount = savedRouteRepository.countByUserId(user.getId());
+
+        return MyProfileResponse.of(
+                user,
+                profile,
+                oAuthProviderRepository.findAllByUser(user),
+                sharedCourseCount,
+                averageRating,
+                savedCourseCount
+        );
     }
 }
