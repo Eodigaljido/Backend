@@ -1,6 +1,9 @@
 package com.eodigaljido.backend.service;
 
 import com.eodigaljido.backend.domain.notification.NotificationType;
+import com.eodigaljido.backend.domain.chat.ChatRoom;
+import com.eodigaljido.backend.domain.chat.ChatRoomMember;
+import com.eodigaljido.backend.domain.friend.Friend;
 import com.eodigaljido.backend.domain.route.Route;
 import com.eodigaljido.backend.domain.route.Route.RouteStatus;
 import com.eodigaljido.backend.domain.route.RouteTag;
@@ -40,6 +43,10 @@ public class CourseService {
     private final RouteReviewRepository reviewRepository;
     private final SavedRouteRepository savedRouteRepository;
     private final UserRepository userRepository;
+    private final FriendRepository friendRepository;
+    private final ChatRoomRepository chatRoomRepository;
+    private final ChatRoomMemberRepository chatRoomMemberRepository;
+    private final ProfileRepository profileRepository;
     private final OnboardingAnswerRepository onboardingAnswerRepository;
     private final FollowingNewsService followingNewsService;
     private final ApplicationEventPublisher eventPublisher;
@@ -232,7 +239,7 @@ public class CourseService {
                 .user(user)
                 .title(req.title())
                 .status(RouteStatus.DRAFT)
-                .isShared(Boolean.TRUE.equals(req.collaborative()))
+                .isCollaborative(Boolean.TRUE.equals(req.collaborative()))
                 .estimatedTime(totalMinutes > 0 ? totalMinutes : null)
                 .totalDistance(totalDistance)
                 .build();
@@ -265,6 +272,85 @@ public class CourseService {
     }
 
     // ──────────────────────────────────────────────────────────
+    // 공동 루트 링크 진입 (소유자 또는 공동 편집 링크 활성 사용자)
+    // ──────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public CollaborativeCourseResponse getCollaborativeCourse(Long userId, String courseId) {
+        Route route = routeRepository.findByUuidAndStatusNot(courseId, RouteStatus.DELETED)
+                .orElseThrow(() -> new RouteException("코스를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        boolean canEdit = canEditRoute(route, userId);
+        if (!canEdit) {
+            throw new RouteException("해당 공동 루트에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN);
+        }
+        List<RouteWaypoint> waypoints = waypointRepository.findByRouteOrderBySequenceAsc(route);
+        List<RouteLeg> legs = legRepository.findByRouteOrderBySequenceAsc(route);
+        List<String> tags = route.getTags() != null ? List.copyOf(route.getTags()) : List.of();
+        return CollaborativeCourseResponse.of(
+                route,
+                true,
+                waypoints.stream().map(StopResponse::from).toList(),
+                legs.stream().map(LegResponse::from).toList(),
+                tags
+        );
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 공동 루트 초대 링크/멤버 초대
+    // ──────────────────────────────────────────────────────────
+
+    @Transactional
+    public CollaborativeInviteResponse createCollaborativeInvite(Long userId, String courseId,
+                                                                 CollaborativeInviteRequest request) {
+        Route route = findMyOwnedRoute(userId, courseId);
+        route.enableCollaboration();
+        ChatRoom room = ensureCollaborativeRoom(route);
+
+        String targetUserId = request != null ? request.userId() : null;
+        String invitedUserId = null;
+        if (targetUserId != null && !targetUserId.isBlank()) {
+            User requester = route.getUser();
+            User target = userRepository.findByUserId(targetUserId)
+                    .orElseThrow(() -> new RouteException("초대할 사용자를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+            if (requester.getId().equals(target.getId())) {
+                throw new RouteException("자기 자신은 초대할 수 없습니다.", HttpStatus.BAD_REQUEST);
+            }
+            friendRepository.findBetween(requester, target)
+                    .filter(f -> f.getStatus() == Friend.FriendStatus.ACCEPTED)
+                    .orElseThrow(() -> new RouteException("친구 관계인 유저만 초대할 수 있습니다.", HttpStatus.FORBIDDEN));
+
+            addCollaborativeMember(room, target);
+            invitedUserId = target.getUserId();
+        }
+
+        return CollaborativeInviteResponse.of(route.getUuid(), room.getUuid(), invitedUserId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CollaborativeMemberResponse> getCollaborativeMembers(Long userId, String courseId) {
+        Route route = routeRepository.findByUuidAndStatusNot(courseId, RouteStatus.DELETED)
+                .orElseThrow(() -> new RouteException("코스를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        if (!canViewCollaborativeMembers(route, userId)) {
+            throw new RouteException("해당 공동 루트 멤버를 조회할 권한이 없습니다.", HttpStatus.FORBIDDEN);
+        }
+
+        if (route.getChatRoom() == null) {
+            return List.of(CollaborativeMemberResponse.ofOwner(
+                    route.getUser(),
+                    profileRepository.findByUser(route.getUser()).orElse(null)
+            ));
+        }
+
+        List<ChatRoomMember> members = chatRoomMemberRepository.findByRoomAndLeftAtIsNull(route.getChatRoom());
+        return members.stream()
+                .map(member -> CollaborativeMemberResponse.of(
+                        member,
+                        profileRepository.findByUser(member.getUser()).orElse(null)
+                ))
+                .toList();
+    }
+
+    // ──────────────────────────────────────────────────────────
     // 내 코스 삭제
     // ──────────────────────────────────────────────────────────
 
@@ -292,7 +378,7 @@ public class CourseService {
     public MyCourseDetailResponse updateMyCourse(Long userId, String courseId, CreateMyCourseRequest req) {
         Route route = routeRepository.findByUuidAndStatusNot(courseId, RouteStatus.DELETED)
                 .orElseThrow(() -> new RouteException("코스를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
-        if (!route.getUser().getId().equals(userId)) {
+        if (!canEditRoute(route, userId)) {
             throw new RouteException("해당 코스에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN);
         }
 
@@ -314,8 +400,8 @@ public class CourseService {
                 route.getActivityType()
         );
         if (req.collaborative() != null) {
-            if (Boolean.TRUE.equals(req.collaborative())) route.enableSharing();
-            else route.disableSharing();
+            if (Boolean.TRUE.equals(req.collaborative())) route.enableCollaboration();
+            else route.disableCollaboration();
         }
         if (req.tags() != null) {
             route.updateTags(processTags(req.tags()));
@@ -564,7 +650,7 @@ public class CourseService {
         List<StopResponse> stops = waypoints.stream().map(StopResponse::from).toList();
         List<LegResponse> legResponses = legs.stream().map(LegResponse::from).toList();
         List<String> tags = route.getTags() != null ? List.copyOf(route.getTags()) : List.of();
-        return new MyCourseDetailResponse(route.getUuid(), route.getTitle(), route.isShared(), stops, legResponses, tags);
+        return new MyCourseDetailResponse(route.getUuid(), route.getTitle(), route.isCollaborative(), stops, legResponses, tags);
     }
 
     private List<String> processTags(List<RouteTag> tags) {
@@ -594,5 +680,56 @@ public class CourseService {
             throw new RouteException("해당 코스에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN);
         }
         return route;
+    }
+
+    private boolean canEditRoute(Route route, Long userId) {
+        return route.getUser().getId().equals(userId) || route.isCollaborative();
+    }
+
+    private boolean canViewCollaborativeMembers(Route route, Long userId) {
+        if (route.getUser().getId().equals(userId)) {
+            return true;
+        }
+        if (route.getChatRoom() == null) {
+            return false;
+        }
+        User user = findUser(userId);
+        return chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(route.getChatRoom(), user).isPresent();
+    }
+
+    private ChatRoom ensureCollaborativeRoom(Route route) {
+        if (route.getChatRoom() != null && route.getChatRoom().getDeletedAt() == null) {
+            return route.getChatRoom();
+        }
+        ChatRoom room = ChatRoom.builder()
+                .uuid(java.util.UUID.randomUUID().toString())
+                .name(route.getTitle())
+                .type(ChatRoom.RoomType.GROUP)
+                .createdBy(route.getUser())
+                .build();
+        chatRoomRepository.save(room);
+        chatRoomMemberRepository.save(ChatRoomMember.builder()
+                .room(room)
+                .user(route.getUser())
+                .role(ChatRoomMember.MemberRole.ADMIN)
+                .build());
+        route.assignChatRoom(room);
+        return room;
+    }
+
+    private void addCollaborativeMember(ChatRoom room, User target) {
+        chatRoomMemberRepository.findByRoomAndUser(room, target).ifPresentOrElse(
+                existing -> {
+                    if (existing.getLeftAt() == null) {
+                        throw new RouteException("이미 공동 루트에 참여 중인 유저입니다.", HttpStatus.CONFLICT);
+                    }
+                    existing.rejoin();
+                },
+                () -> chatRoomMemberRepository.save(ChatRoomMember.builder()
+                        .room(room)
+                        .user(target)
+                        .role(ChatRoomMember.MemberRole.MEMBER)
+                        .build())
+        );
     }
 }

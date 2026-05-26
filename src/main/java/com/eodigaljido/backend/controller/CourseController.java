@@ -357,6 +357,106 @@ public class CourseController {
     }
 
     // ──────────────────────────────────────────────────────────
+    // 공동 루트 링크 진입 (인증 필요)
+    // ──────────────────────────────────────────────────────────
+
+    @GetMapping("/collaborative/{courseId}")
+    @Operation(
+            summary = "공동 루트 링크 진입 조회",
+            description = """
+                    `/routes/collaborative/{courseId}` 딥링크로 앱에 들어온 사용자가
+                    해당 루트를 편집할 수 있는지 확인하고 루트 메타·경유지·이동 구간을 반환합니다.
+
+                    현재 최소 정책은 `collaborative=true` 링크가 활성화된 루트이거나 소유자이면 편집 가능합니다.
+                    편집 요청은 `PATCH /api/courses/my/{courseId}`를 사용합니다.
+                    """,
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "공동 루트 정보 반환",
+                    content = @Content(schema = @Schema(implementation = CollaborativeCourseResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "공동 편집 권한 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "코스를 찾을 수 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<CollaborativeCourseResponse> getCollaborativeCourse(
+            @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
+            @PathVariable String courseId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.ok(courseService.getCollaborativeCourse(userId, courseId));
+    }
+
+    @PostMapping("/my/{courseId}/invites")
+    @Operation(
+            summary = "공동 루트 초대 링크 활성화/멤버 초대",
+            description = """
+                    내 루트를 공동 편집 가능 상태로 전환하고 초대 링크 정보를 반환합니다.
+                    요청 본문에 `userId`를 넣으면 해당 친구를 연결 채팅방 멤버로 초대합니다.
+
+                    **Request Body:** 생략 가능
+                    - `userId` (선택): 초대할 유저 아이디. 친구 관계인 사용자만 초대할 수 있습니다.
+
+                    **초대 경로:** `/routes/collaborative/{courseId}`
+                    """,
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "초대 링크 활성화 또는 멤버 초대 성공",
+                    content = @Content(schema = @Schema(implementation = CollaborativeInviteResponse.class))),
+            @ApiResponse(responseCode = "400", description = "자기 자신 초대 등 잘못된 요청",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "본인 코스가 아니거나 초대 대상이 친구가 아님",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "코스 또는 초대 대상 사용자를 찾을 수 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "이미 참여 중인 유저",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<CollaborativeInviteResponse> createCollaborativeInvite(
+            @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
+            @PathVariable String courseId,
+            @RequestBody(required = false) CollaborativeInviteRequest request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.ok(courseService.createCollaborativeInvite(userId, courseId, request));
+    }
+
+    @GetMapping("/my/{courseId}/members")
+    @Operation(
+            summary = "공동 루트 멤버 목록 조회",
+            description = """
+                    공동 루트에 연결된 멤버 목록을 조회합니다.
+                    소유자 또는 공동 루트 연결 채팅방 멤버만 조회할 수 있습니다.
+
+                    아직 초대 링크가 활성화되지 않은 루트는 소유자 1명만 반환합니다.
+                    """,
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "멤버 목록 반환",
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = CollaborativeMemberResponse.class)))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "멤버 조회 권한 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "코스를 찾을 수 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<List<CollaborativeMemberResponse>> getCollaborativeMembers(
+            @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
+            @PathVariable String courseId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.ok(courseService.getCollaborativeMembers(userId, courseId));
+    }
+
+    // ──────────────────────────────────────────────────────────
     // 내 코스 삭제 (인증 필요)
     // ──────────────────────────────────────────────────────────
 

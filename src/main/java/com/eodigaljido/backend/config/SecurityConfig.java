@@ -51,6 +51,7 @@ public class SecurityConfig {
 
     private static final String[] SHARE_ALLOWED_ORIGINS = {
             "https://share.eodigaljido.rjsgud.com",
+            "https://share-staging.eodigaljido.rjsgud.com",
             "http://localhost:5173",
             "http://localhost:3000"
     };
@@ -91,6 +92,7 @@ public class SecurityConfig {
                                 .policy("camera=(), microphone=(), geolocation=(self), payment=()"))
                 )
                 .authorizeHttpRequests(auth -> {
+                    auth.requestMatchers(HttpMethod.OPTIONS, "/api/**").permitAll();
                     auth.requestMatchers(PUBLIC_ENDPOINTS).permitAll();
                     auth.requestMatchers(ACTUATOR_ENDPOINTS).permitAll();
                     auth.requestMatchers(SWAGGER_ENDPOINTS).permitAll();

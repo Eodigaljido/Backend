@@ -53,6 +53,10 @@ public class Route extends BaseTimeEntity {
     @Builder.Default
     private boolean isShared = false;
 
+    @Column(name = "is_collaborative", nullable = false, columnDefinition = "boolean default false")
+    @Builder.Default
+    private boolean isCollaborative = false;
+
     @Column(name = "total_distance", precision = 10, scale = 2)
     private BigDecimal totalDistance;
 
@@ -128,9 +132,22 @@ public class Route extends BaseTimeEntity {
         this.isShared = false;
     }
 
+    public void enableCollaboration() {
+        this.isCollaborative = true;
+    }
+
+    public void disableCollaboration() {
+        this.isCollaborative = false;
+    }
+
+    public void assignChatRoom(ChatRoom chatRoom) {
+        this.chatRoom = chatRoom;
+    }
+
     public void markDeleted() {
         this.status = RouteStatus.DELETED;
         this.isShared = false;
+        this.isCollaborative = false;
         this.deletedAt = LocalDateTime.now();
     }
 

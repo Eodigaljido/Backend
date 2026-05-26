@@ -6,6 +6,7 @@ import com.eodigaljido.backend.domain.user.User;
 
 public record FriendResponse(
         Long friendId,
+        Long userId,
         String uuid,
         String nickname,
         String profileImageUrl,
@@ -17,6 +18,7 @@ public record FriendResponse(
                 : friend.getRequester();
         return new FriendResponse(
                 friend.getId(),
+                other.getId(),
                 other.getUuid(),
                 otherProfile != null ? otherProfile.getNickname() : null,
                 otherProfile != null ? otherProfile.getProfileImageUrl() : null,
