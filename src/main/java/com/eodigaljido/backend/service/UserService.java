@@ -1,10 +1,13 @@
 package com.eodigaljido.backend.service;
 
+import com.eodigaljido.backend.domain.route.Route;
 import com.eodigaljido.backend.domain.user.Profile;
 import com.eodigaljido.backend.domain.user.User;
 import com.eodigaljido.backend.dto.user.*;
 import com.eodigaljido.backend.exception.UserException;
 import com.eodigaljido.backend.repository.ProfileRepository;
+import com.eodigaljido.backend.repository.RouteRepository;
+import com.eodigaljido.backend.repository.SavedRouteRepository;
 import com.eodigaljido.backend.repository.UserOAuthProviderRepository;
 import com.eodigaljido.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.util.List;
 
 @Service
@@ -23,6 +27,8 @@ public class UserService {
     private final UserRepository userRepository;
     private final ProfileRepository profileRepository;
     private final UserOAuthProviderRepository oAuthProviderRepository;
+    private final RouteRepository routeRepository;
+    private final SavedRouteRepository savedRouteRepository;
     private final FileStorageService fileStorageService;
     private final FriendCodeService friendCodeService;
 
@@ -32,7 +38,13 @@ public class UserService {
         User user = findActiveUser(userId);
         friendCodeService.assignIfMissing(user);
         Profile profile = profileRepository.findByUser(user).orElse(null);
-        return MyProfileResponse.of(user, profile, oAuthProviderRepository.findAllByUser(user));
+
+        long sharedCourseCount = routeRepository.countByUserIdAndIsSharedTrueAndStatusNot(userId, Route.RouteStatus.DELETED);
+        BigDecimal averageRating = routeRepository.findAverageRatingOfSharedRoutesByUserId(userId, Route.RouteStatus.DELETED);
+        long savedCourseCount = savedRouteRepository.countByUserId(userId);
+
+        return MyProfileResponse.of(user, profile, oAuthProviderRepository.findAllByUser(user),
+                sharedCourseCount, averageRating, savedCourseCount);
     }
 
     // 다른 유저 프로필 조회
@@ -42,7 +54,12 @@ public class UserService {
                 .filter(u -> u.getStatus() == User.UserStatus.ACTIVE)
                 .orElseThrow(() -> new UserException("존재하지 않는 사용자입니다.", HttpStatus.NOT_FOUND));
         Profile profile = profileRepository.findByUser(user).orElse(null);
-        return UserProfileResponse.of(user, profile);
+
+        long sharedCourseCount = routeRepository.countByUserIdAndIsSharedTrueAndStatusNot(user.getId(), Route.RouteStatus.DELETED);
+        BigDecimal averageRating = routeRepository.findAverageRatingOfSharedRoutesByUserId(user.getId(), Route.RouteStatus.DELETED);
+        long savedCourseCount = savedRouteRepository.countByUserId(user.getId());
+
+        return UserProfileResponse.of(user, profile, sharedCourseCount, averageRating, savedCourseCount);
     }
 
     // 닉네임/바이오 수정
@@ -90,7 +107,13 @@ public class UserService {
 
         profile.updateProfileImage(newUrl);
         fileStorageService.delete(oldUrl);
-        return MyProfileResponse.of(user, profile, oAuthProviderRepository.findAllByUser(user));
+
+        long sharedCourseCount = routeRepository.countByUserIdAndIsSharedTrueAndStatusNot(userId, Route.RouteStatus.DELETED);
+        BigDecimal averageRating = routeRepository.findAverageRatingOfSharedRoutesByUserId(userId, Route.RouteStatus.DELETED);
+        long savedCourseCount = savedRouteRepository.countByUserId(userId);
+
+        return MyProfileResponse.of(user, profile, oAuthProviderRepository.findAllByUser(user),
+                sharedCourseCount, averageRating, savedCourseCount);
     }
 
     // 프로필 이미지 삭제 (기본 이미지로 변경)

@@ -4,6 +4,7 @@ import com.eodigaljido.backend.dto.common.ErrorResponse;
 import com.eodigaljido.backend.dto.notification.NotificationResponse;
 import com.eodigaljido.backend.service.NotificationService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -48,6 +49,7 @@ public class NotificationController {
     })
     public ResponseEntity<List<NotificationResponse>> getNotifications(
             @AuthenticationPrincipal UserDetails userDetails,
+            @Parameter(description = "페이지 번호 (0부터 시작, 10개씩 반환)", example = "0")
             @RequestParam(defaultValue = "0") int page
     ) {
         Long userId = Long.parseLong(userDetails.getUsername());
@@ -100,6 +102,7 @@ public class NotificationController {
     })
     public ResponseEntity<NotificationResponse> markAsRead(
             @AuthenticationPrincipal UserDetails userDetails,
+            @Parameter(description = "읽음 처리할 알림 ID", required = true, example = "42")
             @PathVariable Long id
     ) {
         Long userId = Long.parseLong(userDetails.getUsername());

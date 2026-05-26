@@ -50,6 +50,20 @@ public class SwaggerConfig {
                                 }
                                 ```
 
+                                ### 프로필 응답 필드 (`GET /users/me`, `GET /users/{uuid}`)
+                                | 필드 | 설명 |
+                                |------|------|
+                                | `sharedCourseCount` | 공유 중인 코스 수 |
+                                | `averageRating` | 공유 코스들의 평균 평점 (리뷰 없으면 null) |
+                                | `savedCourseCount` | 즐겨찾기한 코스 수 |
+                                | `email` | 이메일 (`GET /users/{uuid}` 전용) |
+
+                                ### 즐겨찾기 코스 목록 API
+                                | 경로 | 설명 |
+                                |------|------|
+                                | `GET /users/me/saved-courses` | 내가 즐겨찾기한 코스 목록 |
+                                | `GET /users/{uuid}/saved-courses` | 다른 유저가 즐겨찾기한 코스 목록 |
+
                                 ### 공유 링크 도메인
                                 | 유형 | 링크 패턴 | 앱 화면 |
                                 |------|-----------|---------|
@@ -85,7 +99,7 @@ public class SwaggerConfig {
                                 .description("로그인 후 발급받은 accessToken을 입력하세요.")))
                 .tags(List.of(
                         new Tag().name("Auth").description("로그인 / 인증 / OAuth"),
-                        new Tag().name("User").description("회원 / 프로필"),
+                        new Tag().name("User").description("회원 / 프로필 / 즐겨찾기 코스"),
                         new Tag().name("Course").description("코스 (공유루트 / 내루트 / 공동루트 / preview)"),
                         new Tag().name("Friend").description("친구 / 친구 코드 / 초대 preview"),
                         new Tag().name("Chat").description("채팅방 / 메시지 (REST + WebSocket)"),

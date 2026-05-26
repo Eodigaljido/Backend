@@ -227,6 +227,7 @@ public class FriendController {
     })
     public ResponseEntity<Void> deleteFriend(
             @AuthenticationPrincipal UserDetails userDetails,
+            @Parameter(description = "삭제할 친구 ID (친구 목록 응답의 friendId)", required = true, example = "7")
             @PathVariable Long friendId) {
         friendService.deleteFriend(Long.parseLong(userDetails.getUsername()), friendId);
         return ResponseEntity.noContent().build();
@@ -257,6 +258,7 @@ public class FriendController {
     })
     public ResponseEntity<Void> respondToRequest(
             @AuthenticationPrincipal UserDetails userDetails,
+            @Parameter(description = "수락/거절할 친구 요청 ID (요청 목록 응답의 requestId)", required = true, example = "15")
             @PathVariable Long requestId,
             @Valid @RequestBody FriendRespondDto request) {
         friendService.respondToRequest(Long.parseLong(userDetails.getUsername()), requestId, request.accept());
