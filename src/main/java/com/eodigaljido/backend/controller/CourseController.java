@@ -279,7 +279,7 @@ public class CourseController {
     @GetMapping("/my")
     @Operation(
             summary = "내 코스 목록 조회",
-            description = "내가 직접 만들었거나 저장한 코스 목록을 페이징하여 조회합니다.",
+            description = "내가 직접 만들었거나 저장한 코스 목록을 페이징하여 조회합니다. 검색·필터·정렬 지원.",
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
@@ -457,6 +457,40 @@ public class CourseController {
     }
 
     // ──────────────────────────────────────────────────────────
+    // 공동 루트 채팅방 UUID 조회 (인증 필요)
+    // ──────────────────────────────────────────────────────────
+
+    @GetMapping("/my/{courseId}/chat-room")
+    @Operation(
+            summary = "공동 루트 채팅방 UUID 조회",
+            description = """
+                    공동 루트에 연결된 채팅방 UUID를 반환합니다.
+                    `POST /api/chats/{roomUuid}/members`로 멤버를 추가할 때 사용합니다.
+
+                    공동 루트가 아니거나 아직 채팅방이 생성되지 않은 경우 `chatRoomUuid`는 `null`입니다.
+                    채팅방은 `POST /api/courses/my/{courseId}/invites` 호출 시 자동으로 생성됩니다.
+                    """,
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "채팅방 UUID 반환 (없으면 null)",
+                    content = @Content(schema = @Schema(implementation = CourseChatRoomResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "본인 코스가 아니거나 멤버 아님",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "코스를 찾을 수 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<CourseChatRoomResponse> getMyCourseChatRoom(
+            @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
+            @PathVariable String courseId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.ok(courseService.getMyCourseChatRoom(userId, courseId));
+    }
+
+    // ──────────────────────────────────────────────────────────
     // 내 코스 삭제 (인증 필요)
     // ──────────────────────────────────────────────────────────
 
@@ -568,7 +602,7 @@ public class CourseController {
     @GetMapping("/my/sharing")
     @Operation(
             summary = "내가 공유 중인 코스 목록",
-            description = "현재 공유(공개) 상태인 내 코스 목록을 조회합니다.",
+            description = "현재 공개(shared=true) 상태인 내 코스 목록을 조회합니다.",
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({

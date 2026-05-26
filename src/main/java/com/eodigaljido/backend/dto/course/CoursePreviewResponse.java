@@ -42,11 +42,14 @@ public record CoursePreviewResponse(
         BigDecimal rating,
 
         @Schema(description = "공개 여부")
-        boolean isPublic
+        boolean isPublic,
+
+        @Schema(description = "작성자 닉네임 (OG 카드·share-web 표시용)")
+        String authorNickname
 ) {
     public static CoursePreviewResponse of(Route route, List<String> tags,
                                            String departure, String arrival,
-                                           long saveCount) {
+                                           long saveCount, String authorNickname) {
         return new CoursePreviewResponse(
                 route.getUuid(),
                 route.getTitle(),
@@ -59,7 +62,8 @@ public record CoursePreviewResponse(
                 tags,
                 saveCount,
                 route.getAverageRating(),
-                route.isShared()
+                route.isShared(),
+                authorNickname
         );
     }
 

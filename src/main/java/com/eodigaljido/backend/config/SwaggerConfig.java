@@ -1,7 +1,6 @@
 package com.eodigaljido.backend.config;
 
 import io.swagger.v3.oas.models.Components;
-import io.swagger.v3.oas.models.ExternalDocumentation;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
@@ -36,10 +35,11 @@ public class SwaggerConfig {
                                 |------|------|
                                 | `GET /api/courses/public` | 공유 코스 목록 |
                                 | `GET /api/courses/{courseId}` | 공개 코스 상세 |
-                                | `GET /api/courses/public/{courseId}/preview` | 코스 공유 링크 preview |
-                                | `GET /api/friends/code/{friendCode}/preview` | 친구 초대 링크 preview |
+                                | `GET /api/courses/public/{courseId}/preview` | 코스 공유 링크 preview (share-web / OG 카드) |
+                                | `GET /api/friends/code/{friendCode}/preview` | 친구 초대 링크 preview (share-web) |
                                 | `GET /api/weather` | 날씨 |
                                 | `GET /api/home/courses` | 홈 인기 코스 |
+                                | `POST /api/courses/{courseId}/reviews` | 코스 리뷰 (비로그인 가능) |
 
                                 ### 에러 응답 형식
                                 ```json
@@ -51,8 +51,22 @@ public class SwaggerConfig {
                                 ```
 
                                 ### 공유 링크 도메인
-                                - 코스 공유: `https://share.eodigaljido.rjsgud.com/courses/public/{courseId}`
-                                - 친구 초대: `https://share.eodigaljido.rjsgud.com/friends/add/{friendCode}`
+                                | 유형 | 링크 패턴 | 앱 화면 |
+                                |------|-----------|---------|
+                                | 코스 공유 | `https://share.eodigaljido.rjsgud.com/courses/public/{courseId}` | SharedRoute |
+                                | 친구 초대 | `https://share.eodigaljido.rjsgud.com/friends/add/{friendCode}` | 친구 추가 |
+                                | 공동 루트 | `https://share.eodigaljido.rjsgud.com/routes/collaborative/{courseId}` | RouteCreate (편집) |
+
+                                ### 공동 루트 채팅방 연결 흐름
+                                1. `POST /api/courses/my/{courseId}/invites` → 공동 편집 활성화 + 채팅방 자동 생성
+                                2. `GET /api/courses/my/{courseId}/chat-room` → `chatRoomUuid` 조회
+                                3. `POST /chats/{roomUuid}/members` (`userId` 사용) → 멤버 초대
+
+                                ### WebSocket (실시간 채팅)
+                                - 연결 엔드포인트: `ws://{host}/ws/chat` (SockJS 지원)
+                                - CONNECT 헤더: `Authorization: Bearer {accessToken}`
+                                - 메시지 수신 구독: `/topic/chat/{roomUuid}`
+                                - 타이핑 인디케이터: `/topic/chat/{roomUuid}/typing`
                                 """)
                         .version("v1.0.0")
                         .contact(new Contact()
@@ -72,17 +86,14 @@ public class SwaggerConfig {
                 .tags(List.of(
                         new Tag().name("Auth").description("로그인 / 인증 / OAuth"),
                         new Tag().name("User").description("회원 / 프로필"),
-                        new Tag().name("Course").description("코스 (공유루트 / 내루트 / preview)"),
+                        new Tag().name("Course").description("코스 (공유루트 / 내루트 / 공동루트 / preview)"),
                         new Tag().name("Friend").description("친구 / 친구 코드 / 초대 preview"),
-                        new Tag().name("Chat").description("채팅방 / 메시지"),
+                        new Tag().name("Chat").description("채팅방 / 메시지 (REST + WebSocket)"),
                         new Tag().name("Notification").description("알림"),
                         new Tag().name("Following News").description("팔로잉 소식"),
                         new Tag().name("Onboarding").description("온보딩 설문"),
                         new Tag().name("Home").description("홈 화면"),
                         new Tag().name("Weather").description("날씨")
-                ))
-                .externalDocs(new ExternalDocumentation()
-                        .description("공유·친구 초대 기능 백엔드 작업 명세")
-                        .url("https://share.eodigaljido.rjsgud.com"));
+                ));
     }
 }

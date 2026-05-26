@@ -87,11 +87,7 @@ public class FriendController {
     @PostMapping("/add")
     @Operation(
             summary = "친구 코드로 친구 추가",
-            description = """
-                    친구 초대 링크에서 앱으로 복귀 시 친구 코드로 바로 친구 요청을 전송합니다.
-
-                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
-                    """,
+            description = "친구 초대 링크에서 앱으로 복귀 시 친구 코드로 바로 친구 요청을 전송합니다.",
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
@@ -119,12 +115,7 @@ public class FriendController {
     @GetMapping("/code")
     @Operation(
             summary = "내 친구 코드 조회",
-            description = """
-                    로그인한 사용자의 친구 코드를 조회합니다.
-                    친구 코드는 서버에서 1회 발급되는 대문자 영어와 숫자가 섞인 6자리 값이며, 계정마다 고정됩니다.
-
-                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
-                    """,
+            description = "로그인한 사용자의 친구 코드를 조회합니다. 대문자 영어+숫자 6자리 고정값입니다.",
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
@@ -144,12 +135,7 @@ public class FriendController {
     @GetMapping("/recent")
     @Operation(
             summary = "최근 연락한 친구 5명 조회",
-            description = """
-                    가장 최근에 채팅을 나눈 친구를 최대 5명 반환합니다.
-                    채팅 이력이 없는 친구는 포함되지 않습니다.
-
-                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
-                    """,
+            description = "가장 최근에 채팅을 나눈 친구를 최대 5명 반환합니다. 채팅 이력이 없는 친구는 포함되지 않습니다.",
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
@@ -170,10 +156,11 @@ public class FriendController {
     @Operation(
             summary = "전체 친구 목록 조회",
             description = """
-                    로그인한 사용자의 수락된 친구 목록을 조회합니다.
-                    닉네임 기준으로 한글 → 영어 → 숫자 → 특수기호 순으로 정렬됩니다.
+                    수락된 친구 목록을 닉네임 기준 한글 → 영어 → 숫자 → 특수기호 순으로 정렬하여 반환합니다.
 
-                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
+                    **Response 주요 필드:**
+                    - `userId`: 채팅방 멤버 초대 시 사용 (`POST /chats/{roomUuid}/members`)
+                    - `uuid`: 채팅방 생성 시 사용 (`POST /chats`)
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
@@ -195,13 +182,11 @@ public class FriendController {
     @Operation(
             summary = "친구 요청 전송",
             description = """
-                    상대방의 친구 코드로 친구 요청을 전송합니다.
+                    상대방에게 친구 요청을 전송합니다.
 
-                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
-
-                    **Request Body:**
-                    - `friendCode` (권장): 친구 요청을 보낼 상대방의 친구 코드
-                    - `targetUuid` (기존 호환): 상대방의 UUID
+                    **Request Body (둘 중 하나 필수):**
+                    - `friendCode` (권장): 상대방의 친구 코드
+                    - `targetUuid` (호환): 상대방의 UUID
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
@@ -230,11 +215,7 @@ public class FriendController {
     @DeleteMapping("/{friendId}")
     @Operation(
             summary = "친구 삭제",
-            description = """
-                    수락된 친구 관계를 삭제합니다.
-
-                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
-                    """,
+            description = "수락된 친구 관계를 삭제합니다.",
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
@@ -258,11 +239,7 @@ public class FriendController {
     @PatchMapping("/requests/{requestId}")
     @Operation(
             summary = "친구 요청 수락/거절",
-            description = """
-                    받은 친구 요청을 수락하거나 거절합니다.
-
-                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
-                    """,
+            description = "받은 친구 요청을 수락하거나 거절합니다.",
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
@@ -295,12 +272,7 @@ public class FriendController {
             summary = "보낸/받은 친구 요청 목록 조회",
             description = """
                     대기 중인 보낸 요청과 받은 요청 목록을 모두 반환합니다.
-                    각 항목의 `direction` 필드로 구분합니다.
-
-                    - `SENT`: 내가 보낸 요청
-                    - `RECEIVED`: 내가 받은 요청
-
-                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
+                    각 항목의 `direction` 필드로 구분합니다: `SENT`(내가 보낸) / `RECEIVED`(내가 받은)
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
