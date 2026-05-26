@@ -33,6 +33,11 @@ logging:
     # Springdoc warns when Swagger is enabled in prod; this project intentionally exposes it for API testing.
     org.springdoc.core.events.SpringDocAppInitializer: ERROR
 
+cors:
+  # 브라우저에서 백엔드 API를 호출할 수 있는 Origin 목록 (쉼표 구분)
+  # 예: https://api.eodigaljido.uk,https://eodigaljido.uk,https://share.eodigaljido.uk
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:https://api.eodigaljido.uk,https://eodigaljido.uk,https://share.eodigaljido.rjsgud.com,https://share-staging.eodigaljido.rjsgud.com,http://localhost:5173,http://localhost:3000,http://localhost:8080}
+
 jwt:
   secret: ${JWT_SECRET:}
   access-token-expiry: 3600000       # 1시간 (ms)
