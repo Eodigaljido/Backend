@@ -117,7 +117,7 @@ public class UserService {
     @Transactional
     public void deleteProfileImage(Long userId) {
         User user = findActiveUser(userId);
-        Profile profile = profileRepository.findByUser(user)
+        Profile profile = profileRepository.findByUser(user) 
                 .orElseThrow(() -> new UserException("프로필을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
         String oldUrl = profile.getProfileImageUrl();
         profile.resetToDefaultImage();
