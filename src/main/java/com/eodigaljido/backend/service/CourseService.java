@@ -17,6 +17,7 @@ import com.eodigaljido.backend.dto.course.*;
 import com.eodigaljido.backend.event.NotificationEvent;
 import com.eodigaljido.backend.repository.RouteLegRepository;
 import com.eodigaljido.backend.exception.RouteException;
+import com.eodigaljido.backend.exception.UserException;
 import com.eodigaljido.backend.repository.*;
 import org.springframework.context.ApplicationEventPublisher;
 import lombok.RequiredArgsConstructor;
@@ -461,6 +462,31 @@ public class CourseService {
     public List<CourseItemResponse> getSharingCourses(Long userId) {
         return routeRepository.findByUserIdAndIsSharedTrueAndStatusNot(userId, RouteStatus.DELETED)
                 .stream()
+                .map(this::toCourseItem)
+                .toList();
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 즐겨찾기(저장)한 코스 목록 조회
+    // ──────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public List<CourseItemResponse> getMySavedCourses(Long userId) {
+        return savedRouteRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
+                .map(sr -> sr.getRoute())
+                .filter(r -> r.getStatus() != RouteStatus.DELETED)
+                .map(this::toCourseItem)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<CourseItemResponse> getUserSavedCourses(String uuid) {
+        User user = userRepository.findByUuid(uuid)
+                .filter(u -> u.getStatus() == User.UserStatus.ACTIVE)
+                .orElseThrow(() -> new UserException("존재하지 않는 사용자입니다.", HttpStatus.NOT_FOUND));
+        return savedRouteRepository.findByUserIdOrderByCreatedAtDesc(user.getId()).stream()
+                .map(sr -> sr.getRoute())
+                .filter(r -> r.getStatus() != RouteStatus.DELETED)
                 .map(this::toCourseItem)
                 .toList();
     }

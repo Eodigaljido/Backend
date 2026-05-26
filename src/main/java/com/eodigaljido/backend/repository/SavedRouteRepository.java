@@ -15,4 +15,6 @@ public interface SavedRouteRepository extends JpaRepository<SavedRoute, Long> {
     List<SavedRoute> findByUserIdOrderByCreatedAtDesc(Long userId);
 
     long countByRouteId(Long routeId);
+
+    long countByUserId(Long userId);
 }

@@ -86,4 +86,11 @@ public interface RouteRepository extends JpaRepository<Route, Long> {
                               @Param("region") String region,
                               @Param("q") String q,
                               Pageable pageable);
+
+    // 유저 프로필용: 공유 코스 수
+    long countByUserIdAndIsSharedTrueAndStatusNot(Long userId, RouteStatus status);
+
+    // 유저 프로필용: 공유 코스들의 평균 평점
+    @Query("SELECT AVG(r.averageRating) FROM Route r WHERE r.user.id = :userId AND r.isShared = true AND r.status <> :status AND r.averageRating IS NOT NULL")
+    java.math.BigDecimal findAverageRatingOfSharedRoutesByUserId(@Param("userId") Long userId, @Param("status") RouteStatus status);
 }

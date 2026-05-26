@@ -4,10 +4,12 @@ import com.eodigaljido.backend.dto.common.ErrorResponse;
 import com.eodigaljido.backend.dto.onboarding.*;
 import com.eodigaljido.backend.service.OnboardingService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -27,11 +29,8 @@ public class OnboardingController {
     @PostMapping("/start")
     @Operation(
             summary = "온보딩 시작",
-            description = """
-                    '시작하기' 버튼 클릭 시 호출합니다. 온보딩 진행 기록을 생성합니다.
-
-                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
-                    """
+            description = "'시작하기' 버튼 클릭 시 호출합니다. 온보딩 진행 기록을 생성합니다.",
+            security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "온보딩 시작 성공"),
@@ -52,13 +51,12 @@ public class OnboardingController {
             description = """
                     현재 유저의 온보딩 완료 여부 및 진행 단계를 조회합니다.
 
-                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
-
                     **응답:**
                     - `status`: NOT_STARTED / IN_PROGRESS / SKIPPED / COMPLETED
                     - `completed`: 온보딩 완료 여부
                     - `currentStep`: 현재 완료된 스텝 (0~4)
-                    """
+                    """,
+            security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "온보딩 상태 반환"),
@@ -74,11 +72,8 @@ public class OnboardingController {
     @PostMapping("/skip")
     @Operation(
             summary = "온보딩 건너뛰기",
-            description = """
-                    온보딩 설문을 나중으로 미룹니다. (skipped 상태로 저장)
-
-                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
-                    """
+            description = "온보딩 설문을 나중으로 미룹니다. (SKIPPED 상태로 저장)",
+            security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "온보딩 건너뛰기 성공"),
@@ -96,11 +91,8 @@ public class OnboardingController {
     @GetMapping("/questions")
     @Operation(
             summary = "설문 질문 목록 조회",
-            description = """
-                    4단계 설문의 질문 및 선택지 전체 목록을 조회합니다.
-
-                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
-                    """
+            description = "4단계 설문의 질문 및 선택지 전체 목록을 조회합니다.",
+            security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "질문 목록 반환"),
@@ -117,16 +109,12 @@ public class OnboardingController {
             description = """
                     현재 스텝 답변을 임시 저장합니다. (중간 이탈 대비)
 
-                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
-
-                    **Path Variable:**
-                    - `step` (필수): 현재 스텝 번호 (1~4)
-
                     **Request Body:**
                     - `answers` (필수): 선택한 답변 목록 (List)
-                      - step 1·2·4 (단일 선택): 항목 1개만 포함 (`["서울특별시"]`)
-                      - step 3 activity (복수 선택 가능): 1개 이상 포함 (`["운동/건강", "예술/문화"]`)
-                    """
+                      - step 1·2·4 (단일 선택): 항목 1개만 포함 (예: `["서울특별시"]`)
+                      - step 3 activity (복수 선택): 1개 이상 포함 (예: `["운동/건강", "예술/문화"]`)
+                    """,
+            security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "임시 저장 성공"),
@@ -139,6 +127,7 @@ public class OnboardingController {
     })
     public ResponseEntity<Void> saveStep(
             @AuthenticationPrincipal UserDetails userDetails,
+            @Parameter(description = "현재 스텝 번호 (1~4)", required = true, example = "2")
             @PathVariable int step,
             @Valid @RequestBody OnboardingStepAnswerBody body) {
         onboardingService.saveStep(Long.valueOf(userDetails.getUsername()),
@@ -152,14 +141,13 @@ public class OnboardingController {
             description = """
                     4단계 모든 답변을 한번에 제출하고 추천 루트 3개를 수신합니다.
 
-                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
-
                     **Request Body:**
                     - `region` (필수): 거주 지역 (문자열)
                     - `age` (필수): 나이대 (문자열)
-                    - `activity` (필수): 좋아하는 활동 목록 (List, 복수 선택 가능, 예: `["운동/건강", "예술/문화"]`)
+                    - `activity` (필수): 좋아하는 활동 목록 (List, 복수 선택 가능)
                     - `gender` (필수): 성별 (문자열)
-                    """
+                    """,
+            security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "제출 성공 및 추천 루트 반환"),
@@ -182,12 +170,10 @@ public class OnboardingController {
             summary = "저장된 답변 조회",
             description = """
                     현재까지 저장된 온보딩 답변을 조회합니다.
-
                     중간 이탈 후 재진입 시 이전 선택 상태를 UI에 복원하는 데 사용합니다.
                     미답변 항목은 null로 반환됩니다.
-
-                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
-                    """
+                    """,
+            security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "저장된 답변 반환"),
@@ -205,11 +191,8 @@ public class OnboardingController {
     @DeleteMapping("/answers")
     @Operation(
             summary = "설문 재설정 - 기존 답변 초기화",
-            description = """
-                    기존 설문 답변을 초기화하고 재설문을 시작합니다.
-
-                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
-                    """
+            description = "기존 설문 답변을 초기화하고 재설문을 시작합니다.",
+            security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "초기화 성공"),
@@ -230,14 +213,13 @@ public class OnboardingController {
             description = """
                     완료된 온보딩 답변 중 특정 항목만 부분 수정합니다. (전체 재설문 없이)
 
-                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
-
                     **Request Body:** (변경할 항목만 포함)
                     - `region` (선택): 거주 지역 (문자열)
                     - `age` (선택): 나이대 (문자열)
-                    - `activity` (선택): 좋아하는 활동 목록 (List, 예: `["운동/건강", "여행/레저"]`)
+                    - `activity` (선택): 좋아하는 활동 목록 (List)
                     - `gender` (선택): 성별 (문자열)
-                    """
+                    """,
+            security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "수정 성공"),

@@ -1,8 +1,10 @@
 package com.eodigaljido.backend.controller;
 
 import com.eodigaljido.backend.dto.common.ErrorResponse;
+import com.eodigaljido.backend.dto.course.CourseItemResponse;
 import com.eodigaljido.backend.dto.user.*;
 import com.eodigaljido.backend.service.AuthService;
+import com.eodigaljido.backend.service.CourseService;
 import com.eodigaljido.backend.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -32,6 +34,7 @@ public class UserController {
 
     private final AuthService authService;
     private final UserService userService;
+    private final CourseService courseService;
 
     @GetMapping("/me")
     @Operation(
@@ -182,6 +185,42 @@ public class UserController {
     public ResponseEntity<UserProfileResponse> getUserProfile(
             @Parameter(description = "조회할 유저 UUID", required = true) @PathVariable String uuid) {
         return ResponseEntity.ok(userService.getUserProfile(uuid));
+    }
+
+    @GetMapping("/me/saved-courses")
+    @Operation(
+            summary = "내 즐겨찾기 코스 목록 조회",
+            description = "로그인한 사용자가 즐겨찾기(저장)한 코스 목록을 최신순으로 반환합니다.",
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "즐겨찾기 코스 목록 반환",
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = CourseItemResponse.class)))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<List<CourseItemResponse>> getMySavedCourses(
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(courseService.getMySavedCourses(Long.valueOf(userDetails.getUsername())));
+    }
+
+    @GetMapping("/{uuid}/saved-courses")
+    @Operation(
+            summary = "다른 유저의 즐겨찾기 코스 목록 조회",
+            description = "UUID로 지정한 유저가 즐겨찾기(저장)한 코스 목록을 최신순으로 반환합니다.",
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "즐겨찾기 코스 목록 반환",
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = CourseItemResponse.class)))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "존재하지 않거나 탈퇴한 사용자",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<List<CourseItemResponse>> getUserSavedCourses(
+            @Parameter(description = "조회할 유저 UUID", required = true) @PathVariable String uuid) {
+        return ResponseEntity.ok(courseService.getUserSavedCourses(uuid));
     }
 
     @PatchMapping("/me/phone")
