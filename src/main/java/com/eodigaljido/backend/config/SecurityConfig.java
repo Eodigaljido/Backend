@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -34,6 +35,9 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final Environment environment;
 
+    @Value("${cors.allowed-origins:https://api.eodigaljido.uk,https://eodigaljido.uk,https://share.eodigaljido.rjsgud.com,https://share-staging.eodigaljido.rjsgud.com,http://localhost:5173,http://localhost:3000,http://localhost:8080}")
+    private String[] allowedOrigins;
+
     private static final String[] PUBLIC_ENDPOINTS = {
             "/test.html",
             "/auth/login", "/auth/register",
@@ -47,13 +51,6 @@ public class SecurityConfig {
             "/api/weather",
             "/api/home/**",
             "/api/courses/public"
-    };
-
-    private static final String[] SHARE_ALLOWED_ORIGINS = {
-            "https://share.eodigaljido.rjsgud.com",
-            "https://share-staging.eodigaljido.rjsgud.com",
-            "http://localhost:5173",
-            "http://localhost:3000"
     };
 
     // Swagger 엔드포인트 (전체 환경 공개 허용)
@@ -128,14 +125,14 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(Arrays.asList(SHARE_ALLOWED_ORIGINS));
+        config.setAllowedOrigins(Arrays.asList(allowedOrigins));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Content-Type", "Authorization"));
         config.setAllowCredentials(false);
         config.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/api/**", config);
+        source.registerCorsConfiguration("/**", config);
         return source;
     }
 }

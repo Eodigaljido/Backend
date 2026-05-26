@@ -203,6 +203,28 @@ public class AuthController {
         return ResponseEntity.ok(oAuthService.loginWithGoogle(request.code(), request.redirectUri()));
     }
 
+    @GetMapping("/oauth/google")
+    @Operation(
+            summary = "Google OAuth 리디렉션 콜백",
+            description = """
+                    Google Cloud Console의 승인된 리디렉션 URI가 `/auth/oauth/google`인 경우
+                    브라우저가 `GET /auth/oauth/google?code=...`로 돌아오므로 해당 인가 코드를 즉시 처리합니다.
+
+                    테스트 페이지를 사용하는 경우에는 `redirect_uri`를 `/test.html`로 두고
+                    기존 `POST /auth/oauth/google` API를 호출해도 됩니다.
+                    """
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "로그인/회원가입 성공"),
+            @ApiResponse(responseCode = "400", description = "유효하지 않은 Google 인가 코드",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    ResponseEntity<OAuthLoginResponse> googleOAuthCallback(
+            @RequestParam String code,
+            @RequestParam(required = false) String redirectUri) {
+        return ResponseEntity.ok(oAuthService.loginWithGoogle(code, redirectUri));
+    }
+
     @PostMapping("/oauth/kakao")
     @Operation(
             summary = "Kakao OAuth 로그인/회원가입",
@@ -234,6 +256,22 @@ public class AuthController {
     })
     ResponseEntity<OAuthLoginResponse> kakaoOAuth(@Valid @RequestBody OAuthLoginRequest request) {
         return ResponseEntity.ok(oAuthService.loginWithKakao(request.code(), request.redirectUri()));
+    }
+
+    @GetMapping("/oauth/kakao")
+    @Operation(
+            summary = "Kakao OAuth 리디렉션 콜백",
+            description = "카카오 리디렉션 URI가 `/auth/oauth/kakao`인 경우 `GET` 콜백으로 전달된 인가 코드를 즉시 처리합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "로그인/회원가입 성공"),
+            @ApiResponse(responseCode = "400", description = "유효하지 않은 Kakao 인가 코드",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    ResponseEntity<OAuthLoginResponse> kakaoOAuthCallback(
+            @RequestParam String code,
+            @RequestParam(required = false) String redirectUri) {
+        return ResponseEntity.ok(oAuthService.loginWithKakao(code, redirectUri));
     }
 
     @PostMapping("/oauth/kakao/link")

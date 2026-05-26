@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -140,6 +141,14 @@ public class GlobalExceptionHandler {
         log.warn("[지원하지 않는 Content-Type] {}", e.getMessage());
         return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
                 .body(new ErrorResponse(415, "지원하지 않는 Content-Type입니다: " + e.getContentType(), LocalDateTime.now()));
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    ResponseEntity<ErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException e) {
+        String method = e.getMethod() != null ? e.getMethod() : "요청 메서드";
+        log.warn("[지원하지 않는 HTTP 메서드] method={}", method);
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(new ErrorResponse(405, method + " 메서드는 지원하지 않습니다.", LocalDateTime.now()));
     }
 
     @ExceptionHandler(AsyncRequestNotUsableException.class)
