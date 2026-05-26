@@ -69,7 +69,11 @@ public class CourseService {
 
         long saveCount = savedRouteRepository.countByRouteId(route.getId());
 
-        return CoursePreviewResponse.of(route, tags, departure, arrival, saveCount);
+        String authorNickname = profileRepository.findByUser(route.getUser())
+                .map(p -> p.getNickname())
+                .orElse(route.getUser().getUserId());
+
+        return CoursePreviewResponse.of(route, tags, departure, arrival, saveCount, authorNickname);
     }
 
     // ──────────────────────────────────────────────────────────
@@ -348,6 +352,20 @@ public class CourseService {
                         profileRepository.findByUser(member.getUser()).orElse(null)
                 ))
                 .toList();
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 공동 루트 채팅방 UUID 조회
+    // ──────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public CourseChatRoomResponse getMyCourseChatRoom(Long userId, String courseId) {
+        Route route = routeRepository.findByUuidAndStatusNot(courseId, RouteStatus.DELETED)
+                .orElseThrow(() -> new RouteException("코스를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        if (!canViewCollaborativeMembers(route, userId)) {
+            throw new RouteException("해당 코스에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN);
+        }
+        return CourseChatRoomResponse.of(route.getUuid(), route.getChatRoom());
     }
 
     // ──────────────────────────────────────────────────────────
