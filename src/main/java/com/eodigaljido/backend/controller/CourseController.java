@@ -329,19 +329,22 @@ public class CourseController {
     @Operation(
             summary = "공동 루트 초대",
             description = """
-                    내 루트를 공동 편집 가능 상태로 전환하고 초대 정보를 반환합니다.
-                    요청 본문에 `userId`를 포함하면 해당 친구를 초대합니다.
+                    내 루트를 공동 편집 가능 상태로 전환하고 초대 알림을 발송합니다.
+                    요청 본문에 `userId`를 포함하면 해당 친구에게 초대 알림이 전송됩니다.
 
-                    **초대 방식 (`requiresApproval`):**
-                    - `false` (기본값): 초대 즉시 상대방을 채팅방 멤버로 추가합니다 **(직접 입장)**.
-                    - `true`: 입장 요청 상태로 생성됩니다. 소유자가 `POST .../join-requests/{id}/approve`로 **승인해야** 입장됩니다.
+                    **초대는 알림만 발송합니다.** 실제 채팅방 입장은 초대받은 친구가
+                    `POST /api/courses/{courseId}/join`을 호출해야 이루어집니다.
+
+                    **입장 방식은 루트 생성 시 설정한 `requiresApproval` 값을 따릅니다:**
+                    - `false`: 친구가 join 호출 시 즉시 멤버로 추가됩니다.
+                    - `true`: 친구가 join 호출 시 PENDING 요청 생성 → 소유자 승인 필요.
 
                     **Request Body:** 생략 가능 (생략 시 링크만 활성화)
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "초대 성공 또는 입장 요청 생성",
+            @ApiResponse(responseCode = "200", description = "초대 알림 발송 성공",
                     content = @Content(schema = @Schema(implementation = CollaborativeInviteResponse.class))),
             @ApiResponse(responseCode = "400", description = "자기 자신 초대 등 잘못된 요청",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
@@ -351,7 +354,7 @@ public class CourseController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "코스 또는 초대 대상 사용자를 찾을 수 없음",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "409", description = "이미 참여 중이거나 처리 대기 중인 요청 있음",
+            @ApiResponse(responseCode = "409", description = "이미 참여 중인 유저",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<CollaborativeInviteResponse> createCollaborativeInvite(
@@ -360,6 +363,42 @@ public class CourseController {
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
         return ResponseEntity.ok(courseService.createCollaborativeInvite(userId, courseId, request));
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 공동 루트 참여 요청 (초대받은 유저)
+    // ──────────────────────────────────────────────────────────
+
+    @PostMapping("/{courseId}/join")
+    @Operation(
+            summary = "공동 루트 참여 요청",
+            description = """
+                    초대받은 유저가 공동 루트에 참여를 요청합니다.
+                    소유자가 초대(`POST /api/courses/my/{courseId}/invites`) 후, 초대받은 본인이 이 API를 호출합니다.
+
+                    **루트 생성 시 설정한 `requiresApproval` 값에 따라 결과가 달라집니다:**
+                    - `false`: 즉시 멤버로 추가됩니다. `status: "JOINED"`, `chatRoomUuid` 포함.
+                    - `true`: 입장 요청(PENDING) 생성 후 소유자 알림 발송. `status: "PENDING"`, `chatRoomUuid: null`.
+                    """,
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "참여 완료(JOINED) 또는 승인 대기(PENDING)",
+                    content = @Content(schema = @Schema(implementation = JoinRouteResponse.class))),
+            @ApiResponse(responseCode = "400", description = "공동 루트가 아님",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "코스 또는 채팅방을 찾을 수 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "이미 참여 중이거나 대기 중인 요청 있음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<JoinRouteResponse> joinCollaborativeRoute(
+            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.ok(courseService.joinCollaborativeRoute(userId, courseId));
     }
 
     // ──────────────────────────────────────────────────────────

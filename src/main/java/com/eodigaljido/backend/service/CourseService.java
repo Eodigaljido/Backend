@@ -385,15 +385,62 @@ public class CourseService {
                     .filter(f -> f.getStatus() == Friend.FriendStatus.ACCEPTED)
                     .orElseThrow(() -> new RouteException("친구 관계인 유저만 초대할 수 있습니다.", HttpStatus.FORBIDDEN));
 
-            if (requiresApproval) {
-                createJoinRequest(room, target, requester);
-            } else {
-                addCollaborativeMember(room, target);
-            }
+            chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(room, target).ifPresent(m -> {
+                throw new RouteException("이미 공동 루트에 참여 중인 유저입니다.", HttpStatus.CONFLICT);
+            });
+
+            String inviterNickname = profileRepository.findByUser(requester)
+                    .map(p -> p.getNickname()).orElse(requester.getUserId());
+            eventPublisher.publishEvent(NotificationEvent.of(
+                    target.getId(), requester.getId(),
+                    NotificationType.ROUTE_INVITED,
+                    "공동 루트 초대",
+                    inviterNickname + "님이 '" + route.getTitle() + "' 루트에 초대했습니다.",
+                    route.getUuid(), "ROUTE"
+            ));
             invitedUserId = target.getUserId();
         }
 
         return CollaborativeInviteResponse.of(route.getUuid(), room.getUuid(), invitedUserId, requiresApproval);
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 공동 루트 참여 요청 (초대받은 유저가 직접 호출)
+    // ──────────────────────────────────────────────────────────
+
+    @Transactional
+    public JoinRouteResponse joinCollaborativeRoute(Long userId, String courseId) {
+        Route route = routeRepository.findByUuidAndStatusNot(courseId, RouteStatus.DELETED)
+                .orElseThrow(() -> new RouteException("코스를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        if (!route.isCollaborative()) {
+            throw new RouteException("공동 루트가 아닙니다.", HttpStatus.BAD_REQUEST);
+        }
+        ChatRoom room = route.getChatRoom();
+        if (room == null || room.getDeletedAt() != null) {
+            throw new RouteException("연결된 채팅방이 없습니다.", HttpStatus.NOT_FOUND);
+        }
+
+        User user = findUser(userId);
+
+        if (route.getUser().getId().equals(userId)) {
+            throw new RouteException("소유자는 이미 채팅방에 속해 있습니다.", HttpStatus.CONFLICT);
+        }
+
+        chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(room, user).ifPresent(m -> {
+            throw new RouteException("이미 공동 루트에 참여 중입니다.", HttpStatus.CONFLICT);
+        });
+
+        if (room.isRequiresApproval()) {
+            if (joinRequestRepository.existsByChatRoomAndRequesterAndStatus(
+                    room, user, RouteJoinRequest.RequestStatus.PENDING)) {
+                throw new RouteException("이미 처리 대기 중인 입장 요청이 있습니다.", HttpStatus.CONFLICT);
+            }
+            createJoinRequest(room, user, route.getUser());
+            return new JoinRouteResponse("PENDING", null);
+        } else {
+            addCollaborativeMember(room, user);
+            return new JoinRouteResponse("JOINED", room.getUuid());
+        }
     }
 
     @Transactional(readOnly = true)
