@@ -2,6 +2,7 @@ package com.eodigaljido.backend.exception;
 
 import com.eodigaljido.backend.dto.common.ErrorResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -115,6 +116,13 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(400, "요청 본문이 올바르지 않습니다. 필드 타입을 확인해주세요.", LocalDateTime.now()));
     }
 
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    ResponseEntity<ErrorResponse> handleDataIntegrityViolation(DataIntegrityViolationException e) {
+        log.warn("[데이터 제약조건 위반] {}", rootMessage(e));
+        return ResponseEntity.badRequest()
+                .body(new ErrorResponse(400, "요청 데이터가 올바르지 않습니다. 필수 값과 중복 여부를 확인해주세요.", LocalDateTime.now()));
+    }
+
     @ExceptionHandler(NoResourceFoundException.class)
     ResponseEntity<ErrorResponse> handleNoResource(NoResourceFoundException e) {
         log.debug("[정적 리소스 없음] {}", e.getMessage());
@@ -161,5 +169,13 @@ public class GlobalExceptionHandler {
         log.error("[서버 내부 오류] {}", e.getMessage(), e);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(new ErrorResponse(500, "서버 오류가 발생했습니다.", LocalDateTime.now()));
+    }
+
+    private String rootMessage(Throwable e) {
+        Throwable current = e;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current.getMessage() != null ? current.getMessage() : e.getMessage();
     }
 }

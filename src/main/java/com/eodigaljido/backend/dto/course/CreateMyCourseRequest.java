@@ -3,6 +3,7 @@ package com.eodigaljido.backend.dto.course;
 import com.eodigaljido.backend.domain.route.RouteTag;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -19,7 +20,7 @@ public record CreateMyCourseRequest(
         Boolean collaborative,
 
         @Schema(description = "경유지 목록 (start → via → end 순서)")
-        List<StopRequest> stops,
+        List<@Valid StopRequest> stops,
 
         @Schema(description = "이동 구간 목록 (stop[i]~stop[i+1] 사이의 이동 정보)")
         List<LegRequest> legs,
