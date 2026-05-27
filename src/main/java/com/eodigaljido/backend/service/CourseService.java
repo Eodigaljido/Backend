@@ -266,7 +266,7 @@ public class CourseService {
         route.updateTags(processTags(req.tags()));
 
         if (Boolean.TRUE.equals(req.collaborative())) {
-            ensureCollaborativeRoom(route, Boolean.TRUE.equals(req.requiresApproval()));
+            ensureCollaborativeRooms(route, Boolean.TRUE.equals(req.requiresApproval()));
         }
 
         List<RouteWaypoint> waypoints = buildWaypoints(route, req.stops());
@@ -368,10 +368,14 @@ public class CourseService {
                                                                  CollaborativeInviteRequest request) {
         Route route = findMyOwnedRoute(userId, courseId);
         route.enableCollaboration();
-        ChatRoom room = ensureCollaborativeRoom(route, false);
+
+        ChatRoom teamRoom = route.getTeamRoom();
+        if (teamRoom == null || teamRoom.getDeletedAt() != null) {
+            teamRoom = ensureCollaborativeRooms(route, false);
+        }
 
         String targetUserId = request != null ? request.userId() : null;
-        boolean requiresApproval = room.isRequiresApproval();
+        boolean requiresApproval = teamRoom.isRequiresApproval();
         String invitedUserId = null;
 
         if (targetUserId != null && !targetUserId.isBlank()) {
@@ -385,7 +389,7 @@ public class CourseService {
                     .filter(f -> f.getStatus() == Friend.FriendStatus.ACCEPTED)
                     .orElseThrow(() -> new RouteException("친구 관계인 유저만 초대할 수 있습니다.", HttpStatus.FORBIDDEN));
 
-            chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(room, target).ifPresent(m -> {
+            chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(teamRoom, target).ifPresent(m -> {
                 throw new RouteException("이미 공동 루트에 참여 중인 유저입니다.", HttpStatus.CONFLICT);
             });
 
@@ -401,7 +405,7 @@ public class CourseService {
             invitedUserId = target.getUserId();
         }
 
-        return CollaborativeInviteResponse.of(route.getUuid(), room.getUuid(), invitedUserId, requiresApproval);
+        return CollaborativeInviteResponse.of(route.getUuid(), teamRoom.getUuid(), invitedUserId, requiresApproval);
     }
 
     // ──────────────────────────────────────────────────────────
@@ -415,9 +419,9 @@ public class CourseService {
         if (!route.isCollaborative()) {
             throw new RouteException("공동 루트가 아닙니다.", HttpStatus.BAD_REQUEST);
         }
-        ChatRoom room = route.getChatRoom();
-        if (room == null || room.getDeletedAt() != null) {
-            throw new RouteException("연결된 채팅방이 없습니다.", HttpStatus.NOT_FOUND);
+        ChatRoom teamRoom = route.getTeamRoom();
+        if (teamRoom == null || teamRoom.getDeletedAt() != null) {
+            throw new RouteException("연결된 팀 채팅방이 없습니다.", HttpStatus.NOT_FOUND);
         }
 
         User user = findUser(userId);
@@ -426,20 +430,20 @@ public class CourseService {
             throw new RouteException("소유자는 이미 채팅방에 속해 있습니다.", HttpStatus.CONFLICT);
         }
 
-        chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(room, user).ifPresent(m -> {
+        chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(teamRoom, user).ifPresent(m -> {
             throw new RouteException("이미 공동 루트에 참여 중입니다.", HttpStatus.CONFLICT);
         });
 
-        if (room.isRequiresApproval()) {
+        if (teamRoom.isRequiresApproval()) {
             if (joinRequestRepository.existsByChatRoomAndRequesterAndStatus(
-                    room, user, RouteJoinRequest.RequestStatus.PENDING)) {
+                    teamRoom, user, RouteJoinRequest.RequestStatus.PENDING)) {
                 throw new RouteException("이미 처리 대기 중인 입장 요청이 있습니다.", HttpStatus.CONFLICT);
             }
-            createJoinRequest(room, user, route.getUser());
+            createJoinRequest(teamRoom, user, route.getUser());
             return new JoinRouteResponse("PENDING", null);
         } else {
-            addCollaborativeMember(room, user);
-            return new JoinRouteResponse("JOINED", room.getUuid());
+            addCollaborativeMember(teamRoom, user);
+            return new JoinRouteResponse("JOINED", teamRoom.getUuid());
         }
     }
 
@@ -451,14 +455,14 @@ public class CourseService {
             throw new RouteException("해당 공동 루트 멤버를 조회할 권한이 없습니다.", HttpStatus.FORBIDDEN);
         }
 
-        if (route.getChatRoom() == null) {
+        if (route.getTeamRoom() == null) {
             return List.of(CollaborativeMemberResponse.ofOwner(
                     route.getUser(),
                     profileRepository.findByUser(route.getUser()).orElse(null)
             ));
         }
 
-        List<ChatRoomMember> members = chatRoomMemberRepository.findByRoomAndLeftAtIsNull(route.getChatRoom());
+        List<ChatRoomMember> members = chatRoomMemberRepository.findByRoomAndLeftAtIsNull(route.getTeamRoom());
         return members.stream()
                 .map(member -> CollaborativeMemberResponse.of(
                         member,
@@ -478,7 +482,7 @@ public class CourseService {
         if (!canViewCollaborativeMembers(route, userId)) {
             throw new RouteException("해당 코스에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN);
         }
-        return CourseChatRoomResponse.of(route.getUuid(), route.getChatRoom());
+        return CourseChatRoomResponse.of(route.getUuid(), route.getTeamRoom());
     }
 
     // ──────────────────────────────────────────────────────────
@@ -835,8 +839,9 @@ public class CourseService {
         List<StopResponse> stops = waypoints.stream().map(StopResponse::from).toList();
         List<LegResponse> legResponses = legs.stream().map(LegResponse::from).toList();
         List<String> tags = route.getTags() != null ? List.copyOf(route.getTags()) : List.of();
-        String chatRoomUuid = route.getChatRoom() != null ? route.getChatRoom().getUuid() : null;
-        boolean requiresApproval = route.getChatRoom() != null && route.getChatRoom().isRequiresApproval();
+        ChatRoom teamRoom = route.getTeamRoom();
+        String chatRoomUuid = teamRoom != null ? teamRoom.getUuid() : null;
+        boolean requiresApproval = teamRoom != null && teamRoom.isRequiresApproval();
         return new MyCourseDetailResponse(
                 route.getUuid(),
                 route.getTitle(),
@@ -887,32 +892,51 @@ public class CourseService {
         if (route.getUser().getId().equals(userId)) {
             return true;
         }
-        if (route.getChatRoom() == null) {
+        if (route.getTeamRoom() == null) {
             return false;
         }
         User user = findUser(userId);
-        return chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(route.getChatRoom(), user).isPresent();
+        return chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(route.getTeamRoom(), user).isPresent();
     }
 
-    private ChatRoom ensureCollaborativeRoom(Route route, boolean requiresApproval) {
-        if (route.getChatRoom() != null && route.getChatRoom().getDeletedAt() == null) {
-            return route.getChatRoom();
+    private ChatRoom ensureCollaborativeRooms(Route route, boolean requiresApproval) {
+        if (route.getTeamRoom() != null && route.getTeamRoom().getDeletedAt() == null) {
+            return route.getTeamRoom();
         }
-        ChatRoom room = ChatRoom.builder()
+
+        // 팀방 (사람 모으는 방)
+        ChatRoom teamRoom = ChatRoom.builder()
                 .uuid(java.util.UUID.randomUUID().toString())
                 .name(route.getTitle())
                 .type(ChatRoom.RoomType.ROUTE)
                 .createdBy(route.getUser())
                 .requiresApproval(requiresApproval)
                 .build();
-        chatRoomRepository.save(room);
+        chatRoomRepository.save(teamRoom);
         chatRoomMemberRepository.save(ChatRoomMember.builder()
-                .room(room)
+                .room(teamRoom)
                 .user(route.getUser())
                 .role(ChatRoomMember.MemberRole.ADMIN)
                 .build());
-        route.assignChatRoom(room);
-        return room;
+
+        // 작업방 (실제 루트 편집 채팅방)
+        ChatRoom workRoom = ChatRoom.builder()
+                .uuid(java.util.UUID.randomUUID().toString())
+                .name(route.getTitle())
+                .type(ChatRoom.RoomType.ROUTE)
+                .createdBy(route.getUser())
+                .build();
+        workRoom.assignParent(teamRoom);
+        chatRoomRepository.save(workRoom);
+        chatRoomMemberRepository.save(ChatRoomMember.builder()
+                .room(workRoom)
+                .user(route.getUser())
+                .role(ChatRoomMember.MemberRole.ADMIN)
+                .build());
+
+        route.assignTeamRoom(teamRoom);
+        route.assignChatRoom(workRoom);
+        return teamRoom;
     }
 
     // ──────────────────────────────────────────────────────────
@@ -975,6 +999,7 @@ public class CourseService {
                 .build());
 
         route.assignChatRoom(childRoom);
+        route.assignTeamRoom(parentRoom);
 
         return new SubCourseResponse(
                 childRoom.getUuid(),
@@ -1045,11 +1070,11 @@ public class CourseService {
     @Transactional(readOnly = true)
     public List<JoinRequestResponse> getJoinRequests(Long ownerId, String courseId) {
         Route route = findMyOwnedRoute(ownerId, courseId);
-        ChatRoom room = route.getChatRoom();
-        if (room == null) {
+        ChatRoom teamRoom = route.getTeamRoom();
+        if (teamRoom == null) {
             return List.of();
         }
-        return joinRequestRepository.findByChatRoomAndStatus(room, RouteJoinRequest.RequestStatus.PENDING)
+        return joinRequestRepository.findByChatRoomAndStatus(teamRoom, RouteJoinRequest.RequestStatus.PENDING)
                 .stream()
                 .map(req -> JoinRequestResponse.of(req,
                         profileRepository.findByUser(req.getRequester()).orElse(null)))
@@ -1066,11 +1091,9 @@ public class CourseService {
         RouteJoinRequest joinRequest = joinRequestRepository.findById(requestId)
                 .orElseThrow(() -> new RouteException("입장 요청을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
 
-        ChatRoom room = joinRequest.getChatRoom();
-        Route route = routeRepository.findByChatRoomIdAndStatusNot(room.getId(), RouteStatus.DELETED)
-                .orElseThrow(() -> new RouteException("연결된 루트를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        ChatRoom teamRoom = joinRequest.getChatRoom();
 
-        if (!route.getUser().getId().equals(ownerId)) {
+        if (!teamRoom.getCreatedBy().getId().equals(ownerId)) {
             throw new RouteException("해당 루트의 소유자가 아닙니다.", HttpStatus.FORBIDDEN);
         }
         if (joinRequest.getStatus() != RouteJoinRequest.RequestStatus.PENDING) {
@@ -1083,13 +1106,13 @@ public class CourseService {
 
         if (action == ProcessJoinRequestRequest.Action.APPROVE) {
             joinRequest.approve(admin);
-            addCollaborativeMember(room, joinRequest.getRequester());
+            addCollaborativeMember(teamRoom, joinRequest.getRequester());
             eventPublisher.publishEvent(NotificationEvent.of(
                     joinRequest.getRequester().getId(), ownerId,
                     NotificationType.ROUTE_JOIN_APPROVED,
                     "입장 요청 승인",
-                    adminNickname + "님이 '" + route.getTitle() + "' 루트 입장 요청을 승인했습니다.",
-                    route.getUuid(), "ROUTE"
+                    adminNickname + "님이 '" + teamRoom.getName() + "' 루트 입장 요청을 승인했습니다.",
+                    teamRoom.getUuid(), "CHAT_ROOM"
             ));
         } else {
             joinRequest.reject(admin);
@@ -1097,8 +1120,8 @@ public class CourseService {
                     joinRequest.getRequester().getId(), ownerId,
                     NotificationType.ROUTE_JOIN_REJECTED,
                     "입장 요청 거절",
-                    adminNickname + "님이 '" + route.getTitle() + "' 루트 입장 요청을 거절했습니다.",
-                    route.getUuid(), "ROUTE"
+                    adminNickname + "님이 '" + teamRoom.getName() + "' 루트 입장 요청을 거절했습니다.",
+                    teamRoom.getUuid(), "CHAT_ROOM"
             ));
         }
     }

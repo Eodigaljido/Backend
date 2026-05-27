@@ -67,6 +67,10 @@ public class Route extends BaseTimeEntity {
     private String thumbnailUrl;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "team_room_id")
+    private ChatRoom teamRoom;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "chat_room_id")
     private ChatRoom chatRoom;
 
@@ -142,6 +146,10 @@ public class Route extends BaseTimeEntity {
 
     public void disableCollaboration() {
         this.isCollaborative = false;
+    }
+
+    public void assignTeamRoom(ChatRoom teamRoom) {
+        this.teamRoom = teamRoom;
     }
 
     public void assignChatRoom(ChatRoom chatRoom) {

@@ -207,13 +207,15 @@ public class CourseController {
 
                     **Request Body:**
                     - `title` (필수): 루트 이름 (최대 100자)
-                    - `collaborative` (선택, 기본 `false`): `true`로 설정하면 공동 루트로 생성되며, **루트 채팅방이 자동으로 생성**됩니다.
+                    - `collaborative` (선택, 기본 `false`): `true`로 설정하면 공동 루트로 생성됩니다.
+                    - `requiresApproval` (선택, 기본 `false`): `collaborative=true`일 때만 유효. `true`면 팀방 참여 시 소유자 승인이 필요합니다.
                     - `stops` (선택): 경유지 목록 — `kind`(start|via|end), `title`, `timeLine`, `lat`, `lng`
                     - `legs` (선택): 이동 구간 목록 — `mode`(walk|transit|car|bike), `minutes`, `transitType`, `directionsSummary`, `directionsDetail`, `distanceMeters`
                     - `tags` (선택, 최대 2개): 허용값 `산책 카페 맛집 데이트 관광 야경 쇼핑 역사 해변 가족 운동 반려동물`
 
-                    **공동 루트(collaborative=true) 응답:**
-                    - `chatRoomUuid` 필드에 자동 생성된 루트 채팅방 UUID가 포함됩니다.
+                    **공동 루트(`collaborative=true`) 생성 시 자동으로 2개의 채팅방이 생성됩니다:**
+                    - **팀방** (부모): 멤버를 모으고 소통하는 공간. `chatRoomUuid`로 반환됩니다.
+                    - **작업방** (자식): 해당 루트를 함께 편집하는 공간. 팀방 하위에 위치합니다.
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
@@ -371,14 +373,17 @@ public class CourseController {
 
     @PostMapping("/{courseId}/join")
     @Operation(
-            summary = "공동 루트 참여 요청",
+            summary = "공동 루트 팀방 참여 요청",
             description = """
-                    초대받은 유저가 공동 루트에 참여를 요청합니다.
+                    초대받은 유저가 공동 루트 **팀방**에 참여를 요청합니다.
                     소유자가 초대(`POST /api/courses/my/{courseId}/invites`) 후, 초대받은 본인이 이 API를 호출합니다.
 
                     **루트 생성 시 설정한 `requiresApproval` 값에 따라 결과가 달라집니다:**
-                    - `false`: 즉시 멤버로 추가됩니다. `status: "JOINED"`, `chatRoomUuid` 포함.
+                    - `false`: 팀방에 즉시 멤버로 추가됩니다. `status: "JOINED"`, `chatRoomUuid`(팀방 UUID) 포함.
                     - `true`: 입장 요청(PENDING) 생성 후 소유자 알림 발송. `status: "PENDING"`, `chatRoomUuid: null`.
+
+                    팀방에 입장한 후, 팀방 내 작업 루트 목록(`GET /api/courses/rooms/{teamRoomUuid}/work-routes`)에서
+                    각 루트의 작업방으로 이동할 수 있습니다.
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
@@ -511,11 +516,12 @@ public class CourseController {
 
     @GetMapping("/my/{courseId}/chat-room")
     @Operation(
-            summary = "공동 루트 채팅방 UUID 조회",
+            summary = "공동 루트 팀방 UUID 조회",
             description = """
-                    공동 루트에 연결된 채팅방 UUID를 반환합니다.
-                    `collaborative=true`로 루트를 생성하면 채팅방이 자동 생성됩니다.
-                    채팅방이 없는 경우 `chatRoomUuid`는 `null`입니다.
+                    공동 루트의 **팀방(부모 채팅방)** UUID를 반환합니다.
+                    팀방은 멤버를 모으고 소통하는 공간입니다.
+                    `collaborative=true`로 루트를 생성하면 팀방과 작업방이 자동 생성됩니다.
+                    팀방이 없는 경우 `chatRoomUuid`는 `null`입니다.
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
@@ -825,17 +831,20 @@ public class CourseController {
     // 루트 채팅방 내 서브 루트 생성
     // ──────────────────────────────────────────────────────────
 
-    @PostMapping("/rooms/{chatRoomUuid}/sub-routes")
+    @PostMapping("/rooms/{chatRoomUuid}/work-routes")
     @Operation(
-            summary = "서브 루트 생성",
+            summary = "팀방 내 작업 루트 생성",
             description = """
-                    루트 채팅방(버섯) 내에서 새 서브 루트(마산버섯 등)를 생성합니다.
+                    공동 루트 **팀방** 안에서 새 작업 루트를 생성합니다.
+
+                    **구조:**
+                    - 팀방은 멤버를 모으는 공간이고, 작업 루트는 팀방 안에서 실제 루트 편집이 이루어지는 단위입니다.
+                    - 하나의 팀방에 여러 개의 독립적인 작업 루트를 만들 수 있습니다.
 
                     **동작:**
-                    - 요청자는 해당 루트 채팅방의 멤버여야 합니다.
-                    - 서브 루트용 자식 루트 채팅방이 자동으로 생성됩니다. 생성자만 초기 멤버로 추가됩니다.
-                    - 나머지 참여자는 초대(`POST /api/courses/my/{courseId}/invites`)로 직접 합류해야 합니다.
-                    - 생성된 서브 루트는 `collaborative=true` 상태이며 `chatRoomUuid`가 포함됩니다.
+                    - 요청자는 해당 팀방의 멤버여야 합니다.
+                    - 작업 루트용 **작업방(자식 채팅방)** 이 자동으로 생성됩니다. 생성자만 초기 ADMIN으로 추가됩니다.
+                    - 나머지 팀원은 초대(`POST /api/courses/my/{courseId}/invites`)로 직접 작업방에 합류해야 합니다.
 
                     **Request Body:** `CreateMyCourseRequest`와 동일 (title 필수, stops/legs/tags 선택)
                     """,
@@ -865,14 +874,14 @@ public class CourseController {
     // 루트 채팅방 내 서브 루트 목록 조회
     // ──────────────────────────────────────────────────────────
 
-    @GetMapping("/rooms/{chatRoomUuid}/sub-routes")
+    @GetMapping("/rooms/{chatRoomUuid}/work-routes")
     @Operation(
-            summary = "서브 루트 목록 조회",
+            summary = "팀방 내 작업 루트 목록 조회",
             description = """
-                    루트 채팅방(버섯)에 귀속된 서브 루트(마산버섯, 창원버섯 등) 목록을 조회합니다.
+                    공동 루트 **팀방** 안에 생성된 작업 루트 목록을 조회합니다.
 
-                    각 항목에는 자식 채팅방 UUID, 연결된 루트 UUID, 마지막 메시지, 미읽음 수가 포함됩니다.
-                    요청자는 해당 루트 채팅방의 멤버여야 합니다.
+                    각 항목에는 작업방 UUID, 연결된 루트 UUID, 마지막 메시지, 미읽음 수가 포함됩니다.
+                    요청자는 해당 팀방의 멤버여야 합니다.
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
