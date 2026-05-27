@@ -19,6 +19,17 @@ public record CreateMyCourseRequest(
         @Schema(description = "공동 편집 여부 (true면 isShared = true)", example = "false")
         Boolean collaborative,
 
+        @Schema(
+                description = """
+                        공동 루트일 때 입장 승인 방식.
+                        - `false` (기본값): 초대 즉시 멤버로 추가됩니다.
+                        - `true`: 소유자가 승인해야 입장됩니다.
+                        `collaborative`가 `false`이면 무시됩니다.
+                        """,
+                example = "false"
+        )
+        Boolean requiresApproval,
+
         @Schema(description = "경유지 목록 (start → via → end 순서)")
         List<@Valid StopRequest> stops,
 

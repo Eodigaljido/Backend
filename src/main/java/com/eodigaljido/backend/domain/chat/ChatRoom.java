@@ -44,6 +44,10 @@ public class ChatRoom extends BaseTimeEntity {
     @Column(name = "profile_image_url", length = 512)
     private String profileImageUrl;
 
+    @Column(name = "requires_approval", nullable = false)
+    @Builder.Default
+    private boolean requiresApproval = false;
+
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 

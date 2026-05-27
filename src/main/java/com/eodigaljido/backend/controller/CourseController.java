@@ -399,12 +399,12 @@ public class CourseController {
     // 입장 요청 승인/거절 (소유자 전용)
     // ──────────────────────────────────────────────────────────
 
-    @PostMapping("/my/{courseId}/join-requests/{requestId}")
+    @PostMapping("/join-requests/{requestId}")
     @Operation(
             summary = "공동 루트 입장 요청 승인 또는 거절",
             description = """
                     대기 중인 입장 요청을 승인하거나 거절합니다.
-                    루트 소유자(방장)만 처리할 수 있습니다.
+                    `requestId`만으로 처리할 수 있으며, 해당 루트의 소유자(방장)만 처리할 수 있습니다.
 
                     **action 값:**
                     - `APPROVE`: 요청자를 채팅방 멤버로 추가하고 승인 알림을 발송합니다.
@@ -414,24 +414,23 @@ public class CourseController {
     )
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "처리 성공 (승인 또는 거절)"),
-            @ApiResponse(responseCode = "400", description = "해당 루트의 요청이 아니거나 action 값 오류",
+            @ApiResponse(responseCode = "400", description = "action 값 오류",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "403", description = "소유자가 아님",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "코스 또는 입장 요청을 찾을 수 없음",
+            @ApiResponse(responseCode = "404", description = "입장 요청을 찾을 수 없음",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "409", description = "이미 처리된 요청",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<Void> processJoinRequest(
-            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
             @Parameter(description = "입장 요청 ID", required = true) @PathVariable Long requestId,
             @Valid @RequestBody ProcessJoinRequestRequest request,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
-        courseService.processJoinRequest(userId, courseId, requestId, request.action());
+        courseService.processJoinRequest(userId, requestId, request.action());
         return ResponseEntity.noContent().build();
     }
 
