@@ -789,18 +789,7 @@ public class CourseService {
         List<LegResponse> legResponses = legs.stream().map(LegResponse::from).toList();
         List<String> tags = route.getTags() != null ? List.copyOf(route.getTags()) : List.of();
         String chatRoomUuid = route.getChatRoom() != null ? route.getChatRoom().getUuid() : null;
-        boolean requiresApproval = route.getChatRoom() != null && route.getChatRoom().isRequiresApproval();
-        return new MyCourseDetailResponse(
-                route.getUuid(),
-                route.getTitle(),
-                route.getThumbnailUrl(),
-                route.isCollaborative(),
-                chatRoomUuid,
-                requiresApproval,
-                stops,
-                legResponses,
-                tags
-        );
+        return new MyCourseDetailResponse(route.getUuid(), route.getTitle(), route.getThumbnailUrl(), route.isCollaborative(), chatRoomUuid, stops, legResponses, tags);
     }
 
     private List<String> processTags(List<RouteTag> tags) {
