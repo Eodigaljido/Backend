@@ -30,15 +30,24 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class CourseService {
+
+    private static final long COURSE_THUMBNAIL_MAX_BYTES = 10L * 1024 * 1024;
+    private static final Set<String> COURSE_THUMBNAIL_CONTENT_TYPES = Set.of(
+            "image/jpeg", "image/jpg", "image/png", "image/webp"
+    );
 
     private final RouteRepository routeRepository;
     private final RouteWaypointRepository waypointRepository;
@@ -55,6 +64,7 @@ public class CourseService {
     private final OnboardingAnswerRepository onboardingAnswerRepository;
     private final FollowingNewsService followingNewsService;
     private final ApplicationEventPublisher eventPublisher;
+    private final FileStorageService fileStorageService;
 
     // ──────────────────────────────────────────────────────────
     // 코스 공유 링크 preview (비로그인 허용, 조회수 증가 없음)
@@ -282,6 +292,47 @@ public class CourseService {
         List<RouteWaypoint> waypoints = waypointRepository.findByRouteOrderBySequenceAsc(route);
         List<RouteLeg> legs = legRepository.findByRouteOrderBySequenceAsc(route);
         return toMyCourseDetail(route, waypoints, legs);
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 내 루트 대표 이미지
+    // ──────────────────────────────────────────────────────────
+
+    @Transactional
+    public CourseThumbnailResponse updateMyCourseThumbnail(Long userId, String courseId, MultipartFile image) {
+        Route route = findMyOwnedRoute(userId, courseId);
+        validateCourseThumbnail(image);
+
+        String oldUrl = route.getThumbnailUrl();
+        String newUrl;
+        try {
+            newUrl = fileStorageService.store(
+                    image,
+                    "courses/" + route.getUuid(),
+                    "thumbnail-" + UUID.randomUUID()
+            );
+        } catch (IllegalStateException e) {
+            throw new RouteException("파일 저장소 설정이 누락되었습니다. " + e.getMessage(), HttpStatus.SERVICE_UNAVAILABLE);
+        } catch (IllegalArgumentException e) {
+            throw new RouteException(e.getMessage(), HttpStatus.BAD_REQUEST);
+        } catch (IOException e) {
+            throw new RouteException("대표 이미지 업로드 중 오류가 발생했습니다.", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+
+        route.updateThumbnailUrl(newUrl);
+        if (oldUrl != null && !oldUrl.equals(newUrl)) {
+            fileStorageService.delete(oldUrl);
+        }
+        return new CourseThumbnailResponse(newUrl);
+    }
+
+    @Transactional
+    public CourseThumbnailResponse deleteMyCourseThumbnail(Long userId, String courseId) {
+        Route route = findMyOwnedRoute(userId, courseId);
+        String oldUrl = route.getThumbnailUrl();
+        route.updateThumbnailUrl(null);
+        fileStorageService.delete(oldUrl);
+        return new CourseThumbnailResponse(null);
     }
 
     // ──────────────────────────────────────────────────────────
@@ -701,6 +752,19 @@ public class CourseService {
         }
     }
 
+    private void validateCourseThumbnail(MultipartFile image) {
+        if (image == null || image.isEmpty()) {
+            throw new RouteException("대표 이미지 파일은 필수입니다.", HttpStatus.BAD_REQUEST);
+        }
+        if (image.getSize() > COURSE_THUMBNAIL_MAX_BYTES) {
+            throw new RouteException("대표 이미지 파일은 10MB를 초과할 수 없습니다.", HttpStatus.BAD_REQUEST);
+        }
+        String contentType = image.getContentType();
+        if (contentType == null || !COURSE_THUMBNAIL_CONTENT_TYPES.contains(contentType.toLowerCase())) {
+            throw new RouteException("대표 이미지는 JPEG, PNG, WebP 형식만 업로드할 수 있습니다.", HttpStatus.BAD_REQUEST);
+        }
+    }
+
     private List<RouteLeg> buildLegs(Route route, List<LegRequest> legs) {
         if (legs == null || legs.isEmpty()) return List.of();
         int seq = 1;
@@ -725,7 +789,7 @@ public class CourseService {
         List<LegResponse> legResponses = legs.stream().map(LegResponse::from).toList();
         List<String> tags = route.getTags() != null ? List.copyOf(route.getTags()) : List.of();
         String chatRoomUuid = route.getChatRoom() != null ? route.getChatRoom().getUuid() : null;
-        return new MyCourseDetailResponse(route.getUuid(), route.getTitle(), route.isCollaborative(), chatRoomUuid, stops, legResponses, tags);
+        return new MyCourseDetailResponse(route.getUuid(), route.getTitle(), route.getThumbnailUrl(), route.isCollaborative(), chatRoomUuid, stops, legResponses, tags);
     }
 
     private List<String> processTags(List<RouteTag> tags) {

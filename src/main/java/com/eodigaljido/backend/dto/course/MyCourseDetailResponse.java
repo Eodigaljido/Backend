@@ -13,6 +13,9 @@ public record MyCourseDetailResponse(
         @Schema(description = "루트 이름", example = "서울 고궁 투어")
         String title,
 
+        @Schema(description = "대표 이미지 URL", example = "https://cdn.example.com/courses/550e8400/cover.jpg")
+        String thumbnail,
+
         @Schema(description = "공동 편집(공유) 여부", example = "false")
         boolean collaborative,
 

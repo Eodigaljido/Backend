@@ -120,6 +120,10 @@ public class Route extends BaseTimeEntity {
         this.activityType = activityType;
     }
 
+    public void updateThumbnailUrl(String thumbnailUrl) {
+        this.thumbnailUrl = thumbnailUrl;
+    }
+
     public void updateStatus(RouteStatus status) {
         this.status = status;
     }

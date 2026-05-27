@@ -17,10 +17,12 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/courses")
@@ -561,6 +563,70 @@ public class CourseController {
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
         return ResponseEntity.ok(courseService.updateMyCourse(userId, courseId, request));
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 내 루트 대표 이미지
+    // ──────────────────────────────────────────────────────────
+
+    @PatchMapping(value = "/my/{courseId}/thumbnail", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(
+            summary = "내 루트 대표 이미지 업로드",
+            description = """
+                    내 루트의 대표 이미지(썸네일)를 업로드합니다.
+
+                    - multipart part 이름은 `image`를 우선 사용합니다.
+                    - 기존 앱 폴백 호환을 위해 `file` part도 허용합니다.
+                    - 허용 형식: JPEG, PNG, WebP
+                    - 최대 용량: 10MB
+                    """,
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "대표 이미지 업로드 성공",
+                    content = @Content(schema = @Schema(implementation = CourseThumbnailResponse.class))),
+            @ApiResponse(responseCode = "400", description = "파일 누락/용량 초과/지원하지 않는 이미지 형식",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "본인 코스가 아님",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "코스를 찾을 수 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<CourseThumbnailResponse> updateMyCourseThumbnail(
+            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
+            @Parameter(description = "대표 이미지 파일", required = true)
+            @RequestPart(value = "image", required = false) MultipartFile image,
+            @Parameter(description = "대표 이미지 파일(image part 폴백)", hidden = true)
+            @RequestPart(value = "file", required = false) MultipartFile file,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        MultipartFile upload = image != null ? image : file;
+        return ResponseEntity.ok(courseService.updateMyCourseThumbnail(userId, courseId, upload));
+    }
+
+    @DeleteMapping("/my/{courseId}/thumbnail")
+    @Operation(
+            summary = "내 루트 대표 이미지 삭제",
+            description = "내 루트의 대표 이미지를 삭제하고 이후 조회 응답에서 `thumbnail: null`로 반환합니다.",
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "대표 이미지 삭제 성공",
+                    content = @Content(schema = @Schema(implementation = CourseThumbnailResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "본인 코스가 아님",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "코스를 찾을 수 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<CourseThumbnailResponse> deleteMyCourseThumbnail(
+            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.ok(courseService.deleteMyCourseThumbnail(userId, courseId));
     }
 
     // ──────────────────────────────────────────────────────────
