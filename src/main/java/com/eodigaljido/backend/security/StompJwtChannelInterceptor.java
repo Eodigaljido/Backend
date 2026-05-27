@@ -19,14 +19,22 @@ import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Date;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class StompJwtChannelInterceptor implements ChannelInterceptor {
 
+    private static final Duration FAILURE_LOG_INTERVAL = Duration.ofSeconds(60);
+
     private final JwtTokenProvider jwtTokenProvider;
+    private final ConcurrentMap<String, SuppressedFailure> suppressedFailures = new ConcurrentHashMap<>();
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -105,13 +113,22 @@ public class StompJwtChannelInterceptor implements ChannelInterceptor {
     }
 
     private void logAuthFailure(StompHeaderAccessor accessor, String reason, String token, String detail) {
+        String tokenHash = tokenHashPrefix(token);
+        String suppressionKey = reason + ":" + tokenHash;
+        SuppressedFailure suppressedFailure = suppressedFailures.computeIfAbsent(
+                suppressionKey, ignored -> new SuppressedFailure());
+        int suppressedCount = suppressedFailure.beforeLogIfDue();
+        if (suppressedCount < 0) {
+            return;
+        }
+
         log.warn("[STOMP] JWT 인증 실패 - 연결 거부 reason={} sessionId={} acceptVersion={} heartbeat={} tokenHash={} detail={}",
                 reason,
                 accessor.getSessionId(),
                 accessor.getAcceptVersion(),
                 accessor.getHeartbeat(),
-                tokenHashPrefix(token),
-                sanitizeDetail(detail));
+                tokenHash,
+                appendSuppressedCount(sanitizeDetail(detail), suppressedCount));
     }
 
     private String tokenHashPrefix(String token) {
@@ -134,6 +151,31 @@ public class StompJwtChannelInterceptor implements ChannelInterceptor {
         return sanitized.length() > 160 ? sanitized.substring(0, 160) + "..." : sanitized;
     }
 
+    private String appendSuppressedCount(String detail, int suppressedCount) {
+        if (suppressedCount <= 0) {
+            return detail;
+        }
+        String suffix = "suppressedSinceLast=" + suppressedCount;
+        return StringUtils.hasText(detail) ? detail + ", " + suffix : suffix;
+    }
+
     private record TokenResolution(String token, String reason) {
+    }
+
+    private static class SuppressedFailure {
+
+        private Instant lastLoggedAt = Instant.EPOCH;
+        private final AtomicInteger suppressedCount = new AtomicInteger();
+
+        synchronized int beforeLogIfDue() {
+            Instant now = Instant.now();
+            if (Duration.between(lastLoggedAt, now).compareTo(FAILURE_LOG_INTERVAL) < 0) {
+                suppressedCount.incrementAndGet();
+                return -1;
+            }
+
+            lastLoggedAt = now;
+            return suppressedCount.getAndSet(0);
+        }
     }
 }
