@@ -658,6 +658,7 @@ public class CourseService {
         int seq = 1;
         List<RouteWaypoint> result = new java.util.ArrayList<>();
         for (StopRequest s : stops) {
+            validateStop(s, seq);
             result.add(RouteWaypoint.builder()
                     .route(route)
                     .sequence(seq++)
@@ -669,6 +670,21 @@ public class CourseService {
                     .build());
         }
         return result;
+    }
+
+    private void validateStop(StopRequest stop, int sequence) {
+        if (stop == null) {
+            throw new RouteException("경유지 정보가 비어 있습니다. sequence=" + sequence, HttpStatus.BAD_REQUEST);
+        }
+        if (stop.lat() == null || stop.lng() == null) {
+            throw new RouteException("경유지 좌표는 필수입니다. sequence=" + sequence, HttpStatus.BAD_REQUEST);
+        }
+        if (stop.lat().compareTo(BigDecimal.valueOf(-90)) < 0 || stop.lat().compareTo(BigDecimal.valueOf(90)) > 0) {
+            throw new RouteException("경유지 위도 값이 올바르지 않습니다. sequence=" + sequence, HttpStatus.BAD_REQUEST);
+        }
+        if (stop.lng().compareTo(BigDecimal.valueOf(-180)) < 0 || stop.lng().compareTo(BigDecimal.valueOf(180)) > 0) {
+            throw new RouteException("경유지 경도 값이 올바르지 않습니다. sequence=" + sequence, HttpStatus.BAD_REQUEST);
+        }
     }
 
     private List<RouteLeg> buildLegs(Route route, List<LegRequest> legs) {
