@@ -13,7 +13,7 @@ public record ChatRoomResponse(
         @Schema(description = "채팅방 이름", example = "김철수의 채팅방")
         String name,
 
-        @Schema(description = "프로필 이미지 URL (그룹 채팅방은 채팅방 이미지, 1:1 채팅방은 상대방 프로필 이미지, 없으면 null)", example = "/images/chat/group-default-1.png")
+        @Schema(description = "프로필 이미지 URL (그룹/루트 채팅방은 채팅방 이미지, 1:1 채팅방은 상대방 프로필 이미지, 없으면 null)", example = "/images/chat/group-default-1.png")
         String profileImageUrl,
 
         @Schema(description = "현재 채팅방 멤버 수", example = "2")
@@ -35,5 +35,11 @@ public record ChatRoomResponse(
         LocalDateTime lastMessageAt,
 
         @Schema(description = "읽지 않은 메시지 수", example = "3")
-        long unreadCount
+        long unreadCount,
+
+        @Schema(description = "채팅방 타입 (DIRECT: 1:1, GROUP: 그룹, ROUTE: 루트 채팅)", example = "GROUP", allowableValues = {"DIRECT", "GROUP", "ROUTE"})
+        String roomType,
+
+        @Schema(description = "상위 루트 채팅방 UUID (루트 채팅방의 서브 채팅방인 경우에만 존재, 그 외 null)", example = "null")
+        String parentRoomUuid
 ) {}

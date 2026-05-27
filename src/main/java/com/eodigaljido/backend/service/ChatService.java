@@ -524,8 +524,8 @@ public class ChatService {
         if (membership.getRole() != ChatRoomMember.MemberRole.ADMIN) {
             throw new ChatException("프로필 이미지 변경 권한이 없습니다.", HttpStatus.FORBIDDEN);
         }
-        if (room.getType() != ChatRoom.RoomType.GROUP) {
-            throw new ChatException("그룹 채팅방에서만 프로필 이미지를 설정할 수 있습니다.", HttpStatus.BAD_REQUEST);
+        if (room.getType() == ChatRoom.RoomType.DIRECT) {
+            throw new ChatException("1:1 채팅방에서는 프로필 이미지를 설정할 수 없습니다.", HttpStatus.BAD_REQUEST);
         }
 
         String oldUrl = room.getProfileImageUrl();
@@ -552,8 +552,8 @@ public class ChatService {
         if (membership.getRole() != ChatRoomMember.MemberRole.ADMIN) {
             throw new ChatException("프로필 이미지 변경 권한이 없습니다.", HttpStatus.FORBIDDEN);
         }
-        if (room.getType() != ChatRoom.RoomType.GROUP) {
-            throw new ChatException("그룹 채팅방에서만 프로필 이미지를 설정할 수 있습니다.", HttpStatus.BAD_REQUEST);
+        if (room.getType() == ChatRoom.RoomType.DIRECT) {
+            throw new ChatException("1:1 채팅방에서는 프로필 이미지를 설정할 수 없습니다.", HttpStatus.BAD_REQUEST);
         }
 
         String oldUrl = room.getProfileImageUrl();
@@ -616,11 +616,15 @@ public class ChatService {
             profileImageUrl = room.getProfileImageUrl();
         }
 
+        String parentRoomUuid = room.getParentRoom() != null ? room.getParentRoom().getUuid() : null;
+
         return new ChatRoomResponse(
                 room.getUuid(), name, profileImageUrl, members.size(),
                 owner.getUuid(), owner.getUserId(),
                 memberSummaries,
-                lastContent, lastMsgAt, unreadCount
+                lastContent, lastMsgAt, unreadCount,
+                room.getType().name(),
+                parentRoomUuid
         );
     }
 

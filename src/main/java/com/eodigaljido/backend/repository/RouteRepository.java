@@ -93,4 +93,7 @@ public interface RouteRepository extends JpaRepository<Route, Long> {
     // 유저 프로필용: 공유 코스들의 평균 평점
     @Query("SELECT AVG(r.averageRating) FROM Route r WHERE r.user.id = :userId AND r.isShared = true AND r.status <> :status AND r.averageRating IS NOT NULL")
     java.math.BigDecimal findAverageRatingOfSharedRoutesByUserId(@Param("userId") Long userId, @Param("status") RouteStatus status);
+
+    // 루트 채팅방으로 연결된 Route 조회 (서브 루트 목록용)
+    Optional<Route> findByChatRoomIdAndStatusNot(Long chatRoomId, RouteStatus status);
 }

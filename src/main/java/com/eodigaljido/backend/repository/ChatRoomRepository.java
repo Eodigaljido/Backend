@@ -23,4 +23,7 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, Long> {
         ) DESC
     """)
     List<ChatRoom> findRoomsForUser(@Param("user") User user);
+
+    @Query("SELECT r FROM ChatRoom r JOIN FETCH r.createdBy WHERE r.parentRoom = :parentRoom AND r.deletedAt IS NULL ORDER BY r.createdAt ASC")
+    List<ChatRoom> findByParentRoomAndDeletedAtIsNull(@Param("parentRoom") ChatRoom parentRoom);
 }

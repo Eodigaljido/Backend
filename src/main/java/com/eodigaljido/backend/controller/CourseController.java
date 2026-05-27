@@ -25,13 +25,13 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/courses")
 @RequiredArgsConstructor
-@Tag(name = "Course", description = "코스(공유루트/내루트) API")
+@Tag(name = "Course", description = "코스(공유루트/내루트/공동루트/서브루트) API")
 public class CourseController {
 
     private final CourseService courseService;
 
     // ──────────────────────────────────────────────────────────
-    // 공유 코스 목록 (인증 불필요, friends 탭은 선택 인증)
+    // 공유 코스 목록
     // ──────────────────────────────────────────────────────────
 
     @GetMapping("/public")
@@ -46,43 +46,32 @@ public class CourseController {
             security = {}
     )
     @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "코스 목록 반환",
-                    content = @Content(schema = @Schema(implementation = CoursePageResponse.class))
-            )
+            @ApiResponse(responseCode = "200", description = "코스 목록 반환",
+                    content = @Content(schema = @Schema(implementation = CoursePageResponse.class)))
     })
     public ResponseEntity<CoursePageResponse> getPublicCourses(
             @Parameter(description = "탭 구분: all | popular | date | friends", example = "all")
             @RequestParam(required = false) String tab,
-
             @Parameter(description = "활동 유형 필터 (예: 관광)", example = "관광")
             @RequestParam(required = false) String category,
-
             @Parameter(description = "지역 필터 (예: 서울)", example = "서울")
             @RequestParam(required = false) String region,
-
             @Parameter(description = "정렬 기준: popular | rating | date", example = "date")
             @RequestParam(required = false) String sort,
-
             @Parameter(description = "제목/설명 검색어", example = "고궁")
             @RequestParam(required = false) String q,
-
             @Parameter(description = "페이지 번호 (0부터 시작)", example = "0")
             @RequestParam(defaultValue = "0") int page,
-
             @Parameter(description = "페이지 크기", example = "20")
             @RequestParam(defaultValue = "20") int size,
-
             @AuthenticationPrincipal UserDetails userDetails) {
-
         Long userId = userDetails != null ? Long.parseLong(userDetails.getUsername()) : null;
         return ResponseEntity.ok(
                 courseService.getPublicCourses(tab, category, region, sort, q, page, size, userId));
     }
 
     // ──────────────────────────────────────────────────────────
-    // 공유 코스 preview (비로그인 허용, share-web / OG 카드용)
+    // 공유 코스 preview
     // ──────────────────────────────────────────────────────────
 
     @GetMapping("/public/{courseId}/preview")
@@ -97,37 +86,26 @@ public class CourseController {
             security = {}
     )
     @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "코스 preview 반환",
-                    content = @Content(
-                            schema = @Schema(implementation = CoursePreviewResponse.class),
-                            examples = @ExampleObject(
-                                    name = "한강 데이트 코스 예시",
-                                    value = """
-                                            {
-                                              "courseId": "7ecc5401-1234-5678-abcd-000000000001",
-                                              "title": "한강 데이트 코스",
-                                              "region": "서울",
-                                              "category": "데이트",
-                                              "durationLabel": "약 3시간",
-                                              "thumbnailUrl": "https://cdn.example.com/thumb.jpg",
-                                              "departure": "여의도역",
-                                              "arrival": "뚝섬",
-                                              "tags": ["야경", "산책"],
-                                              "saveCount": 120,
-                                              "rating": 4.50,
-                                              "isPublic": true
-                                            }
-                                            """
-                            )
-                    )
-            ),
-            @ApiResponse(
-                    responseCode = "404",
-                    description = "없는 ID, 비공개, 삭제 코스",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            )
+            @ApiResponse(responseCode = "200", description = "코스 preview 반환",
+                    content = @Content(schema = @Schema(implementation = CoursePreviewResponse.class),
+                            examples = @ExampleObject(name = "한강 데이트 코스 예시", value = """
+                                    {
+                                      "courseId": "7ecc5401-1234-5678-abcd-000000000001",
+                                      "title": "한강 데이트 코스",
+                                      "region": "서울",
+                                      "category": "데이트",
+                                      "durationLabel": "약 3시간",
+                                      "thumbnailUrl": "https://cdn.example.com/thumb.jpg",
+                                      "departure": "여의도역",
+                                      "arrival": "뚝섬",
+                                      "tags": ["야경", "산책"],
+                                      "saveCount": 120,
+                                      "rating": 4.50,
+                                      "isPublic": true
+                                    }
+                                    """))),
+            @ApiResponse(responseCode = "404", description = "없는 ID, 비공개, 삭제 코스",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<CoursePreviewResponse> getCoursePreview(
             @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
@@ -138,30 +116,20 @@ public class CourseController {
     }
 
     // ──────────────────────────────────────────────────────────
-    // 공유 코스 상세 (인증 불필요)
+    // 공유 코스 상세
     // ──────────────────────────────────────────────────────────
 
     @GetMapping("/{courseId}")
     @Operation(
             summary = "공유 코스 상세 조회",
-            description = """
-                    코스 UUID로 상세 정보, 경유지(`routeSteps`), 리뷰(`reviews`)를 조회합니다.
-                    조회할 때마다 `views`(조회수)가 1 증가합니다. 인증 없이 접근 가능합니다.
-                    비공개 코스는 404를 반환합니다.
-                    """,
+            description = "코스 UUID로 상세 정보, 경유지(`routeSteps`), 리뷰(`reviews`)를 조회합니다. 조회할 때마다 `views`(조회수)가 1 증가합니다. 인증 없이 접근 가능합니다.",
             security = {}
     )
     @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "코스 상세 정보 반환",
-                    content = @Content(schema = @Schema(implementation = CourseDetailResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "404",
-                    description = "존재하지 않거나 공유되지 않은 코스",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            )
+            @ApiResponse(responseCode = "200", description = "코스 상세 반환",
+                    content = @Content(schema = @Schema(implementation = CourseDetailResponse.class))),
+            @ApiResponse(responseCode = "404", description = "없는 ID 또는 비공개 코스",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<CourseDetailResponse> getCourseDetail(
             @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
@@ -170,7 +138,7 @@ public class CourseController {
     }
 
     // ──────────────────────────────────────────────────────────
-    // 코스 내 루트에 저장 (인증 필요)
+    // 코스 즐겨찾기 저장
     // ──────────────────────────────────────────────────────────
 
     @PostMapping("/{courseId}/save")
@@ -181,24 +149,22 @@ public class CourseController {
     )
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "저장 성공"),
-            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "존재하지 않거나 공유되지 않은 코스",
+            @ApiResponse(responseCode = "404", description = "없는 ID 또는 비공개 코스",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "409", description = "이미 저장된 코스",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<Void> saveCourse(
-            @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
-            @PathVariable String courseId,
+            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
             @AuthenticationPrincipal UserDetails userDetails) {
-        Long userId = Long.parseLong(userDetails.getUsername());
-        courseService.saveCourse(courseId, userId);
+        courseService.saveCourse(courseId, Long.parseLong(userDetails.getUsername()));
         return ResponseEntity.noContent().build();
     }
 
     // ──────────────────────────────────────────────────────────
-    // 리뷰 작성 (인증 선택 — 비로그인도 userName으로 작성 가능)
+    // 리뷰 작성
     // ──────────────────────────────────────────────────────────
 
     @PostMapping("/{courseId}/reviews")
@@ -206,35 +172,29 @@ public class CourseController {
             summary = "코스 리뷰 작성",
             description = """
                     코스에 리뷰를 작성합니다.
-
                     - **인증 O**: 작성자 정보가 자동으로 설정됩니다. `userName` 무시.
                     - **인증 X**: `userName` 필드를 직접 제공해야 합니다. 미제공 시 '익명' 처리.
                     """,
             security = {}
     )
     @ApiResponses({
-            @ApiResponse(
-                    responseCode = "201",
-                    description = "리뷰 작성 성공",
-                    content = @Content(schema = @Schema(implementation = ReviewResponse.class))
-            ),
-            @ApiResponse(responseCode = "400", description = "요청 값이 올바르지 않음 (rating 범위 오류 등)",
+            @ApiResponse(responseCode = "201", description = "리뷰 작성 성공",
+                    content = @Content(schema = @Schema(implementation = ReviewResponse.class))),
+            @ApiResponse(responseCode = "400", description = "rating 범위 오류 등 잘못된 요청",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "존재하지 않거나 공유되지 않은 코스",
+            @ApiResponse(responseCode = "404", description = "없는 ID 또는 비공개 코스",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<ReviewResponse> writeReview(
-            @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
-            @PathVariable String courseId,
+            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
             @Valid @RequestBody WriteReviewRequest request,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = userDetails != null ? Long.parseLong(userDetails.getUsername()) : null;
-        ReviewResponse response = courseService.writeReview(courseId, request, userId);
-        return ResponseEntity.status(201).body(response);
+        return ResponseEntity.status(201).body(courseService.writeReview(courseId, request, userId));
     }
 
     // ──────────────────────────────────────────────────────────
-    // 내 루트 생성 (인증 필요)
+    // 내 루트 생성
     // ──────────────────────────────────────────────────────────
 
     @PostMapping("/my")
@@ -243,37 +203,35 @@ public class CourseController {
             description = """
                     새 루트를 생성합니다.
 
-                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
-
                     **Request Body:**
                     - `title` (필수): 루트 이름 (최대 100자)
-                    - `collaborative` (선택): 공유 여부, 기본 false
+                    - `collaborative` (선택, 기본 `false`): `true`로 설정하면 공동 루트로 생성되며, **루트 채팅방이 자동으로 생성**됩니다.
                     - `stops` (선택): 경유지 목록 — `kind`(start|via|end), `title`, `timeLine`, `lat`, `lng`
                     - `legs` (선택): 이동 구간 목록 — `mode`(walk|transit|car|bike), `minutes`, `transitType`, `directionsSummary`, `directionsDetail`, `distanceMeters`
-                    - `tags` (선택): 태그 목록 (최대 2개). 허용값: `산책 카페 맛집 데이트 관광 야경 쇼핑 역사 해변 가족 운동 반려동물`
+                    - `tags` (선택, 최대 2개): 허용값 `산책 카페 맛집 데이트 관광 야경 쇼핑 역사 해변 가족 운동 반려동물`
 
-                    **Response:** 생성된 루트 정보 (`uuid`, `tags` 포함) — 201 Created
+                    **공동 루트(collaborative=true) 응답:**
+                    - `chatRoomUuid` 필드에 자동 생성된 루트 채팅방 UUID가 포함됩니다.
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "루트 생성 성공",
                     content = @Content(schema = @Schema(implementation = MyCourseDetailResponse.class))),
-            @ApiResponse(responseCode = "400", description = "요청 값이 올바르지 않음",
+            @ApiResponse(responseCode = "400", description = "요청 값 오류",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<MyCourseDetailResponse> createMyCourse(
             @Valid @RequestBody CreateMyCourseRequest request,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
-        MyCourseDetailResponse response = courseService.createMyCourse(userId, request);
-        return ResponseEntity.status(201).body(response);
+        return ResponseEntity.status(201).body(courseService.createMyCourse(userId, request));
     }
 
     // ──────────────────────────────────────────────────────────
-    // 내 코스 목록 (인증 필요)
+    // 내 코스 목록
     // ──────────────────────────────────────────────────────────
 
     @GetMapping("/my")
@@ -283,41 +241,25 @@ public class CourseController {
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "내 코스 목록 반환",
-                    content = @Content(schema = @Schema(implementation = CoursePageResponse.class))
-            ),
-            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+            @ApiResponse(responseCode = "200", description = "내 코스 목록 반환",
+                    content = @Content(schema = @Schema(implementation = CoursePageResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<CoursePageResponse> getMyCourses(
-            @Parameter(description = "제목/설명 검색어", example = "고궁")
-            @RequestParam(required = false) String q,
-
-            @Parameter(description = "활동 유형 필터 (예: 관광)", example = "관광")
-            @RequestParam(required = false) String category,
-
-            @Parameter(description = "지역 필터 (예: 서울)", example = "서울")
-            @RequestParam(required = false) String region,
-
-            @Parameter(description = "정렬 기준: popular | rating | date", example = "date")
-            @RequestParam(required = false) String sort,
-
-            @Parameter(description = "페이지 번호 (0부터 시작)", example = "0")
-            @RequestParam(defaultValue = "0") int page,
-
-            @Parameter(description = "페이지 크기", example = "20")
-            @RequestParam(defaultValue = "20") int size,
-
+            @Parameter(description = "제목/설명 검색어") @RequestParam(required = false) String q,
+            @Parameter(description = "활동 유형 필터") @RequestParam(required = false) String category,
+            @Parameter(description = "지역 필터") @RequestParam(required = false) String region,
+            @Parameter(description = "정렬 기준: popular | rating | date") @RequestParam(required = false) String sort,
+            @Parameter(description = "페이지 번호 (0부터)") @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "페이지 크기") @RequestParam(defaultValue = "20") int size,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
-        return ResponseEntity.ok(
-                courseService.getMyCourses(userId, q, category, region, sort, page, size));
+        return ResponseEntity.ok(courseService.getMyCourses(userId, q, category, region, sort, page, size));
     }
 
     // ──────────────────────────────────────────────────────────
-    // 내 루트 상세 조회 (인증 필요)
+    // 내 루트 상세 조회
     // ──────────────────────────────────────────────────────────
 
     @GetMapping("/my/{courseId}")
@@ -326,22 +268,14 @@ public class CourseController {
             description = """
                     내 루트의 상세 정보를 조회합니다. stops/legs 포맷으로 반환합니다.
 
-                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
-
-                    **Response:**
-                    - `uuid`: 루트 UUID
-                    - `title`: 루트 이름
-                    - `collaborative`: 공유 여부
-                    - `stops`: 경유지 목록 (kind, title, timeLine, lat, lng)
-                    - `legs`: 이동 구간 목록 (mode, minutes, transitType 등)
-                    - `tags`: 태그 목록 (없으면 빈 배열 `[]`)
+                    **공동 루트인 경우** `chatRoomUuid` 필드에 연결된 루트 채팅방 UUID가 포함됩니다.
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "내 루트 상세 반환",
+            @ApiResponse(responseCode = "200", description = "루트 상세 반환",
                     content = @Content(schema = @Schema(implementation = MyCourseDetailResponse.class))),
-            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "403", description = "본인 코스가 아님",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
@@ -349,15 +283,14 @@ public class CourseController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<MyCourseDetailResponse> getMyCourseDetail(
-            @Parameter(description = "코스 UUID", required = true)
-            @PathVariable String courseId,
+            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
         return ResponseEntity.ok(courseService.getMyCourseDetail(userId, courseId));
     }
 
     // ──────────────────────────────────────────────────────────
-    // 공동 루트 링크 진입 (인증 필요)
+    // 공동 루트 링크 진입
     // ──────────────────────────────────────────────────────────
 
     @GetMapping("/collaborative/{courseId}")
@@ -366,16 +299,13 @@ public class CourseController {
             description = """
                     `/routes/collaborative/{courseId}` 딥링크로 앱에 들어온 사용자가
                     해당 루트를 편집할 수 있는지 확인하고 루트 메타·경유지·이동 구간을 반환합니다.
-
-                    현재 최소 정책은 `collaborative=true` 링크가 활성화된 루트이거나 소유자이면 편집 가능합니다.
-                    편집 요청은 `PATCH /api/courses/my/{courseId}`를 사용합니다.
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "공동 루트 정보 반환",
                     content = @Content(schema = @Schema(implementation = CollaborativeCourseResponse.class))),
-            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "403", description = "공동 편집 권한 없음",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
@@ -383,49 +313,161 @@ public class CourseController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<CollaborativeCourseResponse> getCollaborativeCourse(
-            @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
-            @PathVariable String courseId,
+            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
         return ResponseEntity.ok(courseService.getCollaborativeCourse(userId, courseId));
     }
 
+    // ──────────────────────────────────────────────────────────
+    // 공동 루트 초대 (직접 입장 or 승인 필요)
+    // ──────────────────────────────────────────────────────────
+
     @PostMapping("/my/{courseId}/invites")
     @Operation(
-            summary = "공동 루트 초대 링크 활성화/멤버 초대",
+            summary = "공동 루트 초대",
             description = """
-                    내 루트를 공동 편집 가능 상태로 전환하고 초대 링크 정보를 반환합니다.
-                    요청 본문에 `userId`를 넣으면 해당 친구를 연결 채팅방 멤버로 초대합니다.
+                    내 루트를 공동 편집 가능 상태로 전환하고 초대 정보를 반환합니다.
+                    요청 본문에 `userId`를 포함하면 해당 친구를 초대합니다.
 
-                    **Request Body:** 생략 가능
-                    - `userId` (선택): 초대할 유저 아이디. 친구 관계인 사용자만 초대할 수 있습니다.
+                    **초대 방식 (`requiresApproval`):**
+                    - `false` (기본값): 초대 즉시 상대방을 채팅방 멤버로 추가합니다 **(직접 입장)**.
+                    - `true`: 입장 요청 상태로 생성됩니다. 소유자가 `POST .../join-requests/{id}/approve`로 **승인해야** 입장됩니다.
 
-                    **초대 경로:** `/routes/collaborative/{courseId}`
+                    **Request Body:** 생략 가능 (생략 시 링크만 활성화)
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "초대 링크 활성화 또는 멤버 초대 성공",
+            @ApiResponse(responseCode = "200", description = "초대 성공 또는 입장 요청 생성",
                     content = @Content(schema = @Schema(implementation = CollaborativeInviteResponse.class))),
             @ApiResponse(responseCode = "400", description = "자기 자신 초대 등 잘못된 요청",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "403", description = "본인 코스가 아니거나 초대 대상이 친구가 아님",
+            @ApiResponse(responseCode = "403", description = "본인 코스가 아니거나 친구가 아님",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "코스 또는 초대 대상 사용자를 찾을 수 없음",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "409", description = "이미 참여 중인 유저",
+            @ApiResponse(responseCode = "409", description = "이미 참여 중이거나 처리 대기 중인 요청 있음",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<CollaborativeInviteResponse> createCollaborativeInvite(
-            @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
-            @PathVariable String courseId,
+            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
             @RequestBody(required = false) CollaborativeInviteRequest request,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
         return ResponseEntity.ok(courseService.createCollaborativeInvite(userId, courseId, request));
     }
+
+    // ──────────────────────────────────────────────────────────
+    // 입장 요청 목록 조회 (소유자 전용)
+    // ──────────────────────────────────────────────────────────
+
+    @GetMapping("/my/{courseId}/join-requests")
+    @Operation(
+            summary = "공동 루트 입장 요청 목록 조회",
+            description = """
+                    `requiresApproval=true`로 초대된 사용자들의 **PENDING(대기 중)** 입장 요청 목록을 반환합니다.
+                    루트 소유자(방장)만 조회할 수 있습니다.
+
+                    각 요청에는 `requestId`, 요청자 정보, 요청 시각이 포함됩니다.
+                    `requestId`를 사용해 승인(`/approve`) 또는 거절(`/reject`)할 수 있습니다.
+                    """,
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "대기 중인 입장 요청 목록 반환",
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = JoinRequestResponse.class)))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "소유자가 아님",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "코스를 찾을 수 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<List<JoinRequestResponse>> getJoinRequests(
+            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.ok(courseService.getJoinRequests(userId, courseId));
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 입장 요청 승인 (소유자 전용)
+    // ──────────────────────────────────────────────────────────
+
+    @PostMapping("/my/{courseId}/join-requests/{requestId}/approve")
+    @Operation(
+            summary = "공동 루트 입장 요청 승인",
+            description = """
+                    대기 중인 입장 요청을 승인합니다.
+                    승인 즉시 요청자가 공동 루트 채팅방 멤버로 추가되고, 요청자에게 승인 알림이 발송됩니다.
+                    루트 소유자(방장)만 처리할 수 있습니다.
+                    """,
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "승인 성공 — 요청자 멤버 추가 완료"),
+            @ApiResponse(responseCode = "400", description = "해당 루트의 요청이 아님",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "소유자가 아님",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "코스 또는 입장 요청을 찾을 수 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "이미 처리된 요청",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<Void> approveJoinRequest(
+            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
+            @Parameter(description = "입장 요청 ID", required = true) @PathVariable Long requestId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        courseService.approveJoinRequest(userId, courseId, requestId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 입장 요청 거절 (소유자 전용)
+    // ──────────────────────────────────────────────────────────
+
+    @PostMapping("/my/{courseId}/join-requests/{requestId}/reject")
+    @Operation(
+            summary = "공동 루트 입장 요청 거절",
+            description = """
+                    대기 중인 입장 요청을 거절합니다.
+                    요청자에게 거절 알림이 발송되며, 요청 상태는 `REJECTED`로 변경됩니다.
+                    루트 소유자(방장)만 처리할 수 있습니다.
+                    """,
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "거절 성공"),
+            @ApiResponse(responseCode = "400", description = "해당 루트의 요청이 아님",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "소유자가 아님",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "코스 또는 입장 요청을 찾을 수 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "이미 처리된 요청",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<Void> rejectJoinRequest(
+            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
+            @Parameter(description = "입장 요청 ID", required = true) @PathVariable Long requestId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        courseService.rejectJoinRequest(userId, courseId, requestId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 공동 루트 멤버 목록 조회
+    // ──────────────────────────────────────────────────────────
 
     @GetMapping("/my/{courseId}/members")
     @Operation(
@@ -441,7 +483,7 @@ public class CourseController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "멤버 목록 반환",
                     content = @Content(array = @ArraySchema(schema = @Schema(implementation = CollaborativeMemberResponse.class)))),
-            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "403", description = "멤버 조회 권한 없음",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
@@ -449,15 +491,14 @@ public class CourseController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<List<CollaborativeMemberResponse>> getCollaborativeMembers(
-            @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
-            @PathVariable String courseId,
+            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
         return ResponseEntity.ok(courseService.getCollaborativeMembers(userId, courseId));
     }
 
     // ──────────────────────────────────────────────────────────
-    // 공동 루트 채팅방 UUID 조회 (인증 필요)
+    // 공동 루트 채팅방 UUID 조회
     // ──────────────────────────────────────────────────────────
 
     @GetMapping("/my/{courseId}/chat-room")
@@ -465,17 +506,15 @@ public class CourseController {
             summary = "공동 루트 채팅방 UUID 조회",
             description = """
                     공동 루트에 연결된 채팅방 UUID를 반환합니다.
-                    `POST /api/chats/{roomUuid}/members`로 멤버를 추가할 때 사용합니다.
-
-                    공동 루트가 아니거나 아직 채팅방이 생성되지 않은 경우 `chatRoomUuid`는 `null`입니다.
-                    채팅방은 `POST /api/courses/my/{courseId}/invites` 호출 시 자동으로 생성됩니다.
+                    `collaborative=true`로 루트를 생성하면 채팅방이 자동 생성됩니다.
+                    채팅방이 없는 경우 `chatRoomUuid`는 `null`입니다.
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "채팅방 UUID 반환 (없으면 null)",
                     content = @Content(schema = @Schema(implementation = CourseChatRoomResponse.class))),
-            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "403", description = "본인 코스가 아니거나 멤버 아님",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
@@ -483,15 +522,14 @@ public class CourseController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<CourseChatRoomResponse> getMyCourseChatRoom(
-            @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
-            @PathVariable String courseId,
+            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
         return ResponseEntity.ok(courseService.getMyCourseChatRoom(userId, courseId));
     }
 
     // ──────────────────────────────────────────────────────────
-    // 내 코스 삭제 (인증 필요)
+    // 내 코스 삭제
     // ──────────────────────────────────────────────────────────
 
     @DeleteMapping("/my/{courseId}")
@@ -506,7 +544,7 @@ public class CourseController {
     )
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "삭제 성공"),
-            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "403", description = "본인 코스가 아님",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
@@ -514,16 +552,14 @@ public class CourseController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<Void> deleteMyCourse(
-            @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
-            @PathVariable String courseId,
+            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
             @AuthenticationPrincipal UserDetails userDetails) {
-        Long userId = Long.parseLong(userDetails.getUsername());
-        courseService.deleteMyCourse(courseId, userId);
+        courseService.deleteMyCourse(courseId, Long.parseLong(userDetails.getUsername()));
         return ResponseEntity.noContent().build();
     }
 
     // ──────────────────────────────────────────────────────────
-    // 내 코스 수정 (인증 필요)
+    // 내 코스 수정
     // ──────────────────────────────────────────────────────────
 
     @PatchMapping("/my/{courseId}")
@@ -532,23 +568,19 @@ public class CourseController {
             description = """
                     내 루트의 정보를 수정합니다. 제공하지 않은 필드는 기존 값을 유지합니다.
 
-                    **헤더:** `Authorization: Bearer {accessToken}` (필수)
-
                     **태그 수정 정책:**
                     - `tags` 필드 **생략** → 기존 태그 유지
                     - `tags: []` (빈 배열) → 태그 전체 삭제
                     - `tags: ["산책", "카페"]` → 해당 값으로 교체 (최대 2개)
 
                     **허용 태그:** `산책 카페 맛집 데이트 관광 야경 쇼핑 역사 해변 가족 운동 반려동물`
-
-                    **Response:** 수정된 루트 상세 정보 (stops/legs/tags 포함)
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "수정된 루트 상세 반환",
                     content = @Content(schema = @Schema(implementation = MyCourseDetailResponse.class))),
-            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "403", description = "본인 코스가 아님",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
@@ -556,8 +588,7 @@ public class CourseController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<MyCourseDetailResponse> updateMyCourse(
-            @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
-            @PathVariable String courseId,
+            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
             @Valid @RequestBody CreateMyCourseRequest request,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
@@ -565,7 +596,7 @@ public class CourseController {
     }
 
     // ──────────────────────────────────────────────────────────
-    // 내 루트 상태 변경 (인증 필요)
+    // 내 루트 상태 변경
     // ──────────────────────────────────────────────────────────
 
     @PatchMapping("/my/{courseId}/status")
@@ -579,7 +610,7 @@ public class CourseController {
                     content = @Content(schema = @Schema(implementation = MyCourseDetailResponse.class))),
             @ApiResponse(responseCode = "400", description = "DELETED로 변경 시도",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "403", description = "본인 코스가 아님",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
@@ -587,8 +618,7 @@ public class CourseController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<MyCourseDetailResponse> updateCourseStatus(
-            @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
-            @PathVariable String courseId,
+            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
             @Valid @RequestBody UpdateCourseStatusRequest request,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
@@ -596,7 +626,7 @@ public class CourseController {
     }
 
     // ──────────────────────────────────────────────────────────
-    // 내가 공유 중인 코스 목록 (인증 필요)
+    // 내가 공유 중인 코스 목록
     // ──────────────────────────────────────────────────────────
 
     @GetMapping("/my/sharing")
@@ -608,17 +638,16 @@ public class CourseController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "공유 중인 코스 목록 반환",
                     content = @Content(array = @ArraySchema(schema = @Schema(implementation = CourseItemResponse.class)))),
-            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<List<CourseItemResponse>> getSharingCourses(
             @AuthenticationPrincipal UserDetails userDetails) {
-        Long userId = Long.parseLong(userDetails.getUsername());
-        return ResponseEntity.ok(courseService.getSharingCourses(userId));
+        return ResponseEntity.ok(courseService.getSharingCourses(Long.parseLong(userDetails.getUsername())));
     }
 
     // ──────────────────────────────────────────────────────────
-    // 내 루트 공유 활성화 (인증 필요)
+    // 내 루트 공유 활성화
     // ──────────────────────────────────────────────────────────
 
     @PostMapping("/my/{courseId}/share")
@@ -629,7 +658,7 @@ public class CourseController {
     )
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "공유 활성화 성공"),
-            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "403", description = "본인 코스가 아님",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
@@ -637,16 +666,14 @@ public class CourseController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<Void> enableSharing(
-            @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
-            @PathVariable String courseId,
+            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
             @AuthenticationPrincipal UserDetails userDetails) {
-        Long userId = Long.parseLong(userDetails.getUsername());
-        courseService.enableSharing(userId, courseId);
+        courseService.enableSharing(Long.parseLong(userDetails.getUsername()), courseId);
         return ResponseEntity.noContent().build();
     }
 
     // ──────────────────────────────────────────────────────────
-    // 내 루트 공유 비활성화 (인증 필요)
+    // 내 루트 공유 비활성화
     // ──────────────────────────────────────────────────────────
 
     @DeleteMapping("/my/{courseId}/share")
@@ -657,7 +684,7 @@ public class CourseController {
     )
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "공유 비활성화 성공"),
-            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "403", description = "본인 코스가 아님",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
@@ -665,16 +692,14 @@ public class CourseController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<Void> disableSharing(
-            @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
-            @PathVariable String courseId,
+            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
             @AuthenticationPrincipal UserDetails userDetails) {
-        Long userId = Long.parseLong(userDetails.getUsername());
-        courseService.disableSharing(userId, courseId);
+        courseService.disableSharing(Long.parseLong(userDetails.getUsername()), courseId);
         return ResponseEntity.noContent().build();
     }
 
     // ──────────────────────────────────────────────────────────
-    // 저장된 코스 취소 (인증 필요)
+    // 저장 취소
     // ──────────────────────────────────────────────────────────
 
     @DeleteMapping("/{courseId}/save")
@@ -685,22 +710,20 @@ public class CourseController {
     )
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "저장 취소 성공"),
-            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "코스 또는 저장 기록을 찾을 수 없음",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<Void> unsaveCourse(
-            @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
-            @PathVariable String courseId,
+            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
             @AuthenticationPrincipal UserDetails userDetails) {
-        Long userId = Long.parseLong(userDetails.getUsername());
-        courseService.unsaveCourse(userId, courseId);
+        courseService.unsaveCourse(Long.parseLong(userDetails.getUsername()), courseId);
         return ResponseEntity.noContent().build();
     }
 
     // ──────────────────────────────────────────────────────────
-    // 코스 복사 (인증 필요)
+    // 코스 복사
     // ──────────────────────────────────────────────────────────
 
     @PostMapping("/{courseId}/copy")
@@ -712,7 +735,7 @@ public class CourseController {
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "복사된 루트 상세 반환",
                     content = @Content(schema = @Schema(implementation = MyCourseDetailResponse.class))),
-            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "403", description = "공유되지 않은 코스",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
@@ -720,10 +743,81 @@ public class CourseController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<MyCourseDetailResponse> copyCourse(
-            @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
-            @PathVariable String courseId,
+            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
         return ResponseEntity.status(201).body(courseService.copyCourse(userId, courseId));
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 루트 채팅방 내 서브 루트 생성
+    // ──────────────────────────────────────────────────────────
+
+    @PostMapping("/rooms/{chatRoomUuid}/sub-routes")
+    @Operation(
+            summary = "서브 루트 생성",
+            description = """
+                    루트 채팅방(버섯) 내에서 새 서브 루트(마산버섯 등)를 생성합니다.
+
+                    **동작:**
+                    - 요청자는 해당 루트 채팅방의 멤버여야 합니다.
+                    - 서브 루트용 자식 루트 채팅방이 자동으로 생성됩니다. 생성자만 초기 멤버로 추가됩니다.
+                    - 나머지 참여자는 초대(`POST /api/courses/my/{courseId}/invites`)로 직접 합류해야 합니다.
+                    - 생성된 서브 루트는 `collaborative=true` 상태이며 `chatRoomUuid`가 포함됩니다.
+
+                    **Request Body:** `CreateMyCourseRequest`와 동일 (title 필수, stops/legs/tags 선택)
+                    """,
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "서브 루트 생성 성공",
+                    content = @Content(schema = @Schema(implementation = SubCourseResponse.class))),
+            @ApiResponse(responseCode = "400", description = "루트 채팅방이 아님",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "채팅방 멤버가 아님",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "채팅방을 찾을 수 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<SubCourseResponse> createSubCourse(
+            @Parameter(description = "부모 루트 채팅방 UUID", required = true) @PathVariable String chatRoomUuid,
+            @Valid @RequestBody CreateMyCourseRequest request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.status(201).body(courseService.createSubCourse(userId, chatRoomUuid, request));
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 루트 채팅방 내 서브 루트 목록 조회
+    // ──────────────────────────────────────────────────────────
+
+    @GetMapping("/rooms/{chatRoomUuid}/sub-routes")
+    @Operation(
+            summary = "서브 루트 목록 조회",
+            description = """
+                    루트 채팅방(버섯)에 귀속된 서브 루트(마산버섯, 창원버섯 등) 목록을 조회합니다.
+
+                    각 항목에는 자식 채팅방 UUID, 연결된 루트 UUID, 마지막 메시지, 미읽음 수가 포함됩니다.
+                    요청자는 해당 루트 채팅방의 멤버여야 합니다.
+                    """,
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "서브 루트 목록 반환",
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = SubCourseResponse.class)))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "채팅방 멤버가 아님",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "채팅방을 찾을 수 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<List<SubCourseResponse>> getSubCourses(
+            @Parameter(description = "부모 루트 채팅방 UUID", required = true) @PathVariable String chatRoomUuid,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.ok(courseService.getSubCourses(userId, chatRoomUuid));
     }
 }

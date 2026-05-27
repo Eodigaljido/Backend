@@ -16,15 +16,27 @@ public record CollaborativeInviteResponse(
         @Schema(description = "초대된 유저 아이디. 링크만 활성화한 경우 null", example = "jane456")
         String invitedUserId,
 
+        @Schema(
+                description = """
+                        초대 방식.
+                        - `false`: 초대 즉시 멤버로 추가됨 (직접 입장).
+                        - `true`: 입장 요청 상태로 생성됨. 소유자 승인 후 입장 가능.
+                        """,
+                example = "false"
+        )
+        boolean requiresApproval,
+
         @Schema(description = "만료 시각. 현재 최소 구현은 만료 없음(null)")
         String expiresAt
 ) {
-    public static CollaborativeInviteResponse of(String courseId, String chatRoomUuid, String invitedUserId) {
+    public static CollaborativeInviteResponse of(String courseId, String chatRoomUuid,
+                                                  String invitedUserId, boolean requiresApproval) {
         return new CollaborativeInviteResponse(
                 courseId,
                 "/routes/collaborative/" + courseId,
                 chatRoomUuid,
                 invitedUserId,
+                requiresApproval,
                 null
         );
     }

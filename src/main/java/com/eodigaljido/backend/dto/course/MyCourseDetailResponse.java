@@ -16,6 +16,9 @@ public record MyCourseDetailResponse(
         @Schema(description = "공동 편집(공유) 여부", example = "false")
         boolean collaborative,
 
+        @Schema(description = "연결된 루트 채팅방 UUID (공동 루트인 경우에만 존재, 그 외 null)", example = "null")
+        String chatRoomUuid,
+
         @Schema(description = "경유지 목록")
         List<StopResponse> stops,
 

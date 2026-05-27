@@ -47,6 +47,10 @@ public class ChatRoom extends BaseTimeEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_room_id")
+    private ChatRoom parentRoom;
+
     public void updateName(String name) {
         this.name = name;
     }
@@ -59,7 +63,11 @@ public class ChatRoom extends BaseTimeEntity {
         this.deletedAt = LocalDateTime.now();
     }
 
+    public void assignParent(ChatRoom parentRoom) {
+        this.parentRoom = parentRoom;
+    }
+
     public enum RoomType {
-        DIRECT, GROUP
+        DIRECT, GROUP, ROUTE
     }
 }
