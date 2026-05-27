@@ -933,11 +933,12 @@ public class CourseService {
     }
 
     // ──────────────────────────────────────────────────────────
-    // 입장 요청 승인 (소유자 전용)
+    // 입장 요청 승인/거절 (소유자 전용)
     // ──────────────────────────────────────────────────────────
 
     @Transactional
-    public void approveJoinRequest(Long ownerId, String courseId, Long requestId) {
+    public void processJoinRequest(Long ownerId, String courseId, Long requestId,
+                                   ProcessJoinRequestRequest.Action action) {
         Route route = findMyOwnedRoute(ownerId, courseId);
         ChatRoom room = route.getChatRoom();
 
@@ -952,51 +953,29 @@ public class CourseService {
         }
 
         User admin = findUser(ownerId);
-        joinRequest.approve(admin);
-        addCollaborativeMember(room, joinRequest.getRequester());
-
         String adminNickname = profileRepository.findByUser(admin)
                 .map(p -> p.getNickname()).orElse(admin.getUserId());
-        eventPublisher.publishEvent(NotificationEvent.of(
-                joinRequest.getRequester().getId(), ownerId,
-                NotificationType.ROUTE_JOIN_APPROVED,
-                "입장 요청 승인",
-                adminNickname + "님이 '" + route.getTitle() + "' 루트 입장 요청을 승인했습니다.",
-                route.getUuid(), "ROUTE"
-        ));
-    }
 
-    // ──────────────────────────────────────────────────────────
-    // 입장 요청 거절 (소유자 전용)
-    // ──────────────────────────────────────────────────────────
-
-    @Transactional
-    public void rejectJoinRequest(Long ownerId, String courseId, Long requestId) {
-        Route route = findMyOwnedRoute(ownerId, courseId);
-        ChatRoom room = route.getChatRoom();
-
-        RouteJoinRequest joinRequest = joinRequestRepository.findById(requestId)
-                .orElseThrow(() -> new RouteException("입장 요청을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
-
-        if (room == null || !joinRequest.getChatRoom().getId().equals(room.getId())) {
-            throw new RouteException("해당 루트의 입장 요청이 아닙니다.", HttpStatus.BAD_REQUEST);
+        if (action == ProcessJoinRequestRequest.Action.APPROVE) {
+            joinRequest.approve(admin);
+            addCollaborativeMember(room, joinRequest.getRequester());
+            eventPublisher.publishEvent(NotificationEvent.of(
+                    joinRequest.getRequester().getId(), ownerId,
+                    NotificationType.ROUTE_JOIN_APPROVED,
+                    "입장 요청 승인",
+                    adminNickname + "님이 '" + route.getTitle() + "' 루트 입장 요청을 승인했습니다.",
+                    route.getUuid(), "ROUTE"
+            ));
+        } else {
+            joinRequest.reject(admin);
+            eventPublisher.publishEvent(NotificationEvent.of(
+                    joinRequest.getRequester().getId(), ownerId,
+                    NotificationType.ROUTE_JOIN_REJECTED,
+                    "입장 요청 거절",
+                    adminNickname + "님이 '" + route.getTitle() + "' 루트 입장 요청을 거절했습니다.",
+                    route.getUuid(), "ROUTE"
+            ));
         }
-        if (joinRequest.getStatus() != RouteJoinRequest.RequestStatus.PENDING) {
-            throw new RouteException("이미 처리된 요청입니다.", HttpStatus.CONFLICT);
-        }
-
-        User admin = findUser(ownerId);
-        joinRequest.reject(admin);
-
-        String adminNickname = profileRepository.findByUser(admin)
-                .map(p -> p.getNickname()).orElse(admin.getUserId());
-        eventPublisher.publishEvent(NotificationEvent.of(
-                joinRequest.getRequester().getId(), ownerId,
-                NotificationType.ROUTE_JOIN_REJECTED,
-                "입장 요청 거절",
-                adminNickname + "님이 '" + route.getTitle() + "' 루트 입장 요청을 거절했습니다.",
-                route.getUuid(), "ROUTE"
-        ));
     }
 
     private void createJoinRequest(ChatRoom room, User target, User invitedBy) {
