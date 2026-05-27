@@ -87,7 +87,8 @@ public class SwaggerConfig {
                                 .name("어디갈지도 팀")
                                 .email("russeldestiny1234@gmail.com")))
                 .servers(List.of(
-                        new Server().url("http://3.36.85.213:8080").description("Production"),
+                        new Server().url("/").description("Current origin"),
+                        new Server().url("https://api.eodigaljido.uk").description("Production"),
                         new Server().url("http://localhost:8080").description("Local")
                 ))
                 .addSecurityItem(new SecurityRequirement().addList("Bearer"))
