@@ -96,10 +96,13 @@ public class CourseService {
     // ──────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public List<CourseItemResponse> getHomeCourses(int limit) {
+    public List<CourseItemResponse> getHomeCourses(int limit, Long userId) {
         Pageable pageable = PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "views"));
         List<Route> routes = routeRepository.findSharedCoursesForHome(RouteStatus.DELETED, pageable);
-        return routes.stream().map(this::toCourseItem).toList();
+        Set<Long> savedIds = batchSavedIds(userId, routes);
+        return routes.stream()
+                .map(r -> toCourseItem(r, savedIds.contains(r.getId())))
+                .toList();
     }
 
     // ──────────────────────────────────────────────────────────
@@ -123,8 +126,10 @@ public class CourseService {
                     RouteStatus.DELETED, category, region, q, pageable);
         }
 
-        List<CourseItemResponse> items = result.getContent().stream()
-                .map(this::toCourseItem)
+        List<Route> routes = result.getContent();
+        Set<Long> savedIds = batchSavedIds(currentUserId, routes);
+        List<CourseItemResponse> items = routes.stream()
+                .map(r -> toCourseItem(r, savedIds.contains(r.getId())))
                 .toList();
 
         PageInfo pageInfo = new PageInfo(
@@ -142,15 +147,16 @@ public class CourseService {
     // ──────────────────────────────────────────────────────────
 
     @Transactional
-    public CourseDetailResponse getCourseDetail(String courseId) {
+    public CourseDetailResponse getCourseDetail(String courseId, Long userId) {
         Route route = findSharedRoute(courseId);
         route.incrementViews();
 
         List<CourseStepResponse> steps = loadSteps(route);
         List<ReviewResponse> reviews = reviewRepository.findByRouteOrderByCreatedAtDesc(route)
                 .stream().map(ReviewResponse::from).toList();
+        boolean savedByMe = userId != null && savedRouteRepository.existsByUserIdAndRouteId(userId, route.getId());
 
-        return CourseDetailResponse.of(route, steps, reviews);
+        return CourseDetailResponse.of(route, steps, reviews, savedByMe);
     }
 
     // ──────────────────────────────────────────────────────────
@@ -591,7 +597,7 @@ public class CourseService {
         return savedRouteRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
                 .map(sr -> sr.getRoute())
                 .filter(r -> r.getStatus() != RouteStatus.DELETED)
-                .map(this::toCourseItem)
+                .map(r -> toCourseItem(r, true))
                 .toList();
     }
 
@@ -605,6 +611,42 @@ public class CourseService {
                 .filter(r -> r.getStatus() != RouteStatus.DELETED)
                 .map(this::toCourseItem)
                 .toList();
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 저장한 코스 목록 (페이징, 본인 또는 타인)
+    // ──────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public CoursePageResponse getSavedCoursesPage(Long requesterId, String userUuid,
+                                                   String sort, int page, int size) {
+        Long targetUserId;
+        if (userUuid != null && !userUuid.isBlank()) {
+            User target = userRepository.findByUuid(userUuid)
+                    .filter(u -> u.getStatus() == User.UserStatus.ACTIVE)
+                    .orElseThrow(() -> new UserException("존재하지 않는 사용자입니다.", HttpStatus.NOT_FOUND));
+            targetUserId = target.getId();
+        } else {
+            targetUserId = requesterId;
+        }
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<SavedRoute> result = savedRouteRepository
+                .findByUserIdAndRouteStatusNotOrderByCreatedAtDesc(targetUserId, RouteStatus.DELETED, pageable);
+
+        List<Route> routes = result.getContent().stream().map(SavedRoute::getRoute).toList();
+        Set<Long> savedIds = batchSavedIds(requesterId, routes);
+        List<CourseItemResponse> items = routes.stream()
+                .map(r -> toCourseItem(r, savedIds.contains(r.getId())))
+                .toList();
+
+        PageInfo pageInfo = new PageInfo(
+                result.getNumber(),
+                result.getSize(),
+                result.getTotalElements(),
+                result.getTotalPages()
+        );
+        return new CoursePageResponse(items, pageInfo);
     }
 
     // ──────────────────────────────────────────────────────────
@@ -756,8 +798,18 @@ public class CourseService {
     }
 
     private CourseItemResponse toCourseItem(Route route) {
+        return toCourseItem(route, false);
+    }
+
+    private CourseItemResponse toCourseItem(Route route, boolean savedByMe) {
         List<CourseStepResponse> steps = loadSteps(route);
-        return CourseItemResponse.of(route, steps);
+        return CourseItemResponse.of(route, steps, savedByMe);
+    }
+
+    private Set<Long> batchSavedIds(Long userId, List<Route> routes) {
+        if (userId == null || routes.isEmpty()) return Set.of();
+        List<Long> routeIds = routes.stream().map(Route::getId).toList();
+        return savedRouteRepository.findSavedRouteIdsByUserId(userId, routeIds);
     }
 
     private void recalcRating(Route route) {

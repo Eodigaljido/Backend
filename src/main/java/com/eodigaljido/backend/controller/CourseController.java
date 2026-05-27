@@ -44,6 +44,9 @@ public class CourseController {
 
                     `friends` 탭은 인증 토큰이 있는 경우에만 친구 필터가 적용되며,
                     미인증 시에는 전체 목록과 동일하게 반환됩니다.
+
+                    로그인 상태이면 각 아이템에 **`savedByMe`** 필드가 포함됩니다.
+                    미로그인 시 `savedByMe`는 항상 `false`입니다.
                     """,
             security = {}
     )
@@ -124,7 +127,7 @@ public class CourseController {
     @GetMapping("/{courseId}")
     @Operation(
             summary = "공유 코스 상세 조회",
-            description = "코스 UUID로 상세 정보, 경유지(`routeSteps`), 리뷰(`reviews`)를 조회합니다. 조회할 때마다 `views`(조회수)가 1 증가합니다. 인증 없이 접근 가능합니다.",
+            description = "코스 UUID로 상세 정보, 경유지(`routeSteps`), 리뷰(`reviews`)를 조회합니다. 조회할 때마다 `views`(조회수)가 1 증가합니다. 인증 없이 접근 가능합니다. 로그인 시 `savedByMe` 필드가 정확하게 반환됩니다.",
             security = {}
     )
     @ApiResponses({
@@ -135,8 +138,10 @@ public class CourseController {
     })
     public ResponseEntity<CourseDetailResponse> getCourseDetail(
             @Parameter(description = "코스 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
-            @PathVariable String courseId) {
-        return ResponseEntity.ok(courseService.getCourseDetail(courseId));
+            @PathVariable String courseId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = userDetails != null ? Long.parseLong(userDetails.getUsername()) : null;
+        return ResponseEntity.ok(courseService.getCourseDetail(courseId, userId));
     }
 
     // ──────────────────────────────────────────────────────────
@@ -163,6 +168,46 @@ public class CourseController {
             @AuthenticationPrincipal UserDetails userDetails) {
         courseService.saveCourse(courseId, Long.parseLong(userDetails.getUsername()));
         return ResponseEntity.noContent().build();
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 저장한 코스 목록 (페이징)
+    // ──────────────────────────────────────────────────────────
+
+    @GetMapping("/saved")
+    @Operation(
+            summary = "저장한 코스 목록 조회",
+            description = """
+                    로그인 사용자가 저장(북마크)한 공유 코스 목록을 페이징하여 반환합니다.
+
+                    - `userUuid` 생략 시: **로그인 본인**의 저장 목록
+                    - `userUuid` 지정 시: **해당 사용자**의 저장 목록 (타인 프로필 조회)
+
+                    응답 아이템의 `savedByMe`는 **로그인 본인** 기준으로 표시됩니다.
+                    타인 목록을 조회할 때 내가 저장한 항목이면 `savedByMe: true`입니다.
+
+                    앱에서는 `items[].id` (UUID)를 `savedCourseIds`로 사용합니다.
+                    """,
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "저장한 코스 목록 반환",
+                    content = @Content(schema = @Schema(implementation = CoursePageResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "userUuid에 해당하는 사용자 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<CoursePageResponse> getSavedCourses(
+            @Parameter(description = "조회할 사용자 UUID (생략 시 본인)", example = "550e8400-e29b-41d4-a716-446655440000")
+            @RequestParam(required = false) String userUuid,
+            @Parameter(description = "정렬 기준 (현재 latest 고정)") @RequestParam(required = false) String sort,
+            @Parameter(description = "페이지 번호 (0부터)") @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "페이지 크기 (최대 200)") @RequestParam(defaultValue = "20") int size,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        int clampedSize = Math.min(size, 200);
+        return ResponseEntity.ok(courseService.getSavedCoursesPage(userId, userUuid, sort, page, clampedSize));
     }
 
     // ──────────────────────────────────────────────────────────

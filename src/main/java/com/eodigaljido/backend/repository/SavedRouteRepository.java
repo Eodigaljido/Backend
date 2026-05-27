@@ -1,10 +1,17 @@
 package com.eodigaljido.backend.repository;
 
+import com.eodigaljido.backend.domain.route.Route.RouteStatus;
 import com.eodigaljido.backend.domain.route.SavedRoute;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public interface SavedRouteRepository extends JpaRepository<SavedRoute, Long> {
 
@@ -14,7 +21,14 @@ public interface SavedRouteRepository extends JpaRepository<SavedRoute, Long> {
 
     List<SavedRoute> findByUserIdOrderByCreatedAtDesc(Long userId);
 
+    Page<SavedRoute> findByUserIdAndRouteStatusNotOrderByCreatedAtDesc(
+            Long userId, RouteStatus status, Pageable pageable);
+
     long countByRouteId(Long routeId);
 
     long countByUserId(Long userId);
+
+    @Query("SELECT s.route.id FROM SavedRoute s WHERE s.user.id = :userId AND s.route.id IN :routeIds")
+    Set<Long> findSavedRouteIdsByUserId(@Param("userId") Long userId,
+                                        @Param("routeIds") Collection<Long> routeIds);
 }

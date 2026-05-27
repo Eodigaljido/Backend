@@ -59,9 +59,16 @@ public record CourseItemResponse(
         String authorUuid,
 
         @Schema(description = "작성자 아이디")
-        String authorUserId
+        String authorUserId,
+
+        @Schema(description = "로그인 사용자가 이 코스를 저장했는지 여부. 비로그인 시 false.", example = "false")
+        boolean savedByMe
 ) {
     public static CourseItemResponse of(Route route, List<CourseStepResponse> steps) {
+        return of(route, steps, false);
+    }
+
+    public static CourseItemResponse of(Route route, List<CourseStepResponse> steps, boolean savedByMe) {
         String departure = steps.isEmpty() ? null : steps.get(0).name();
         String arrival = steps.size() < 2 ? departure : steps.get(steps.size() - 1).name();
         return new CourseItemResponse(
@@ -80,7 +87,8 @@ public record CourseItemResponse(
                 steps,
                 route.getTags() != null ? List.copyOf(route.getTags()) : List.of(),
                 route.getUser().getUuid(),
-                route.getUser().getUserId()
+                route.getUser().getUserId(),
+                savedByMe
         );
     }
 }
