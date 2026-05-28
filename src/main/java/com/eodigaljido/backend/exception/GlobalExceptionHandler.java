@@ -71,6 +71,13 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(e.getStatus().value(), e.getMessage(), LocalDateTime.now()));
     }
 
+    @ExceptionHandler(GroupException.class)
+    ResponseEntity<ErrorResponse> handleGroup(GroupException e) {
+        log.warn("[모임 오류] {} (status={})", e.getMessage(), e.getStatus().value());
+        return ResponseEntity.status(e.getStatus())
+                .body(new ErrorResponse(e.getStatus().value(), e.getMessage(), LocalDateTime.now()));
+    }
+
     @ExceptionHandler(NotificationException.class)
     ResponseEntity<ErrorResponse> handleNotification(NotificationException e) {
         log.warn("[알림 오류] {} (status={})", e.getMessage(), e.getStatus().value());

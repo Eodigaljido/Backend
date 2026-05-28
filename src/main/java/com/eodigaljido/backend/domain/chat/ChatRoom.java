@@ -1,6 +1,7 @@
 package com.eodigaljido.backend.domain.chat;
 
 import com.eodigaljido.backend.domain.common.BaseTimeEntity;
+import com.eodigaljido.backend.domain.group.Group;
 import com.eodigaljido.backend.domain.user.User;
 import jakarta.persistence.*;
 import lombok.*;
@@ -55,6 +56,10 @@ public class ChatRoom extends BaseTimeEntity {
     @JoinColumn(name = "parent_room_id")
     private ChatRoom parentRoom;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "group_id")
+    private Group group;
+
     public void updateName(String name) {
         this.name = name;
     }
@@ -69,6 +74,10 @@ public class ChatRoom extends BaseTimeEntity {
 
     public void assignParent(ChatRoom parentRoom) {
         this.parentRoom = parentRoom;
+    }
+
+    public void assignGroup(Group group) {
+        this.group = group;
     }
 
     public enum RoomType {

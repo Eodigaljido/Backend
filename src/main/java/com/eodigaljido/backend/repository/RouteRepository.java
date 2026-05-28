@@ -1,5 +1,6 @@
 package com.eodigaljido.backend.repository;
 
+import com.eodigaljido.backend.domain.group.Group;
 import com.eodigaljido.backend.domain.route.Route;
 import com.eodigaljido.backend.domain.route.Route.RouteStatus;
 import org.springframework.data.domain.Page;
@@ -94,6 +95,10 @@ public interface RouteRepository extends JpaRepository<Route, Long> {
     @Query("SELECT AVG(r.averageRating) FROM Route r WHERE r.user.id = :userId AND r.isShared = true AND r.status <> :status AND r.averageRating IS NOT NULL")
     java.math.BigDecimal findAverageRatingOfSharedRoutesByUserId(@Param("userId") Long userId, @Param("status") RouteStatus status);
 
-    // 루트 채팅방으로 연결된 Route 조회 (서브 루트 목록용)
+    // 루트 채팅방으로 연결된 Route 조회
     Optional<Route> findByChatRoomIdAndStatusNot(Long chatRoomId, RouteStatus status);
+
+    // 모임 내 루트 목록
+    @Query("SELECT r FROM Route r JOIN FETCH r.user WHERE r.group = :group AND r.status <> :status ORDER BY r.createdAt DESC")
+    List<Route> findByGroupAndStatusNot(@Param("group") Group group, @Param("status") RouteStatus status);
 }

@@ -1,6 +1,7 @@
 package com.eodigaljido.backend.repository;
 
 import com.eodigaljido.backend.domain.chat.ChatRoom;
+import com.eodigaljido.backend.domain.group.Group;
 import com.eodigaljido.backend.domain.user.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -26,4 +27,7 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, Long> {
 
     @Query("SELECT r FROM ChatRoom r JOIN FETCH r.createdBy WHERE r.parentRoom = :parentRoom AND r.deletedAt IS NULL ORDER BY r.createdAt ASC")
     List<ChatRoom> findByParentRoomAndDeletedAtIsNull(@Param("parentRoom") ChatRoom parentRoom);
+
+    @Query("SELECT r FROM ChatRoom r JOIN FETCH r.createdBy WHERE r.group = :group AND r.deletedAt IS NULL ORDER BY r.createdAt ASC")
+    List<ChatRoom> findByGroupAndDeletedAtIsNull(@Param("group") Group group);
 }

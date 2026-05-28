@@ -27,7 +27,7 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 @RequestMapping("/api/courses")
 @RequiredArgsConstructor
-@Tag(name = "Course", description = "코스(공유루트/내루트/공동루트/서브루트) API")
+@Tag(name = "Course", description = "코스(공유루트/내루트) API")
 public class CourseController {
 
     private final CourseService courseService;
@@ -185,8 +185,6 @@ public class CourseController {
 
                     응답 아이템의 `savedByMe`는 **로그인 본인** 기준으로 표시됩니다.
                     타인 목록을 조회할 때 내가 저장한 항목이면 `savedByMe: true`입니다.
-
-                    앱에서는 `items[].id` (UUID)를 `savedCourseIds`로 사용합니다.
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
@@ -252,15 +250,11 @@ public class CourseController {
 
                     **Request Body:**
                     - `title` (필수): 루트 이름 (최대 100자)
-                    - `collaborative` (선택, 기본 `false`): `true`로 설정하면 공동 루트로 생성됩니다.
-                    - `requiresApproval` (선택, 기본 `false`): `collaborative=true`일 때만 유효. `true`면 팀방 참여 시 소유자 승인이 필요합니다.
                     - `stops` (선택): 경유지 목록 — `kind`(start|via|end), `title`, `timeLine`, `lat`, `lng`
                     - `legs` (선택): 이동 구간 목록 — `mode`(walk|transit|car|bike), `minutes`, `transitType`, `directionsSummary`, `directionsDetail`, `distanceMeters`
                     - `tags` (선택, 최대 2개): 허용값 `산책 카페 맛집 데이트 관광 야경 쇼핑 역사 해변 가족 운동 반려동물`
 
-                    **공동 루트(`collaborative=true`) 생성 시 자동으로 2개의 채팅방이 생성됩니다:**
-                    - **팀방** (부모): 멤버를 모으고 소통하는 공간. `chatRoomUuid`로 반환됩니다.
-                    - **작업방** (자식): 해당 루트를 함께 편집하는 공간. 팀방 하위에 위치합니다.
+                    그룹 내에서 공동 루트를 만들려면 `POST /api/groups/{groupUuid}/routes`를 사용하세요.
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
@@ -314,11 +308,7 @@ public class CourseController {
     @GetMapping("/my/{courseId}")
     @Operation(
             summary = "내 루트 상세 조회",
-            description = """
-                    내 루트의 상세 정보를 조회합니다. stops/legs 포맷으로 반환합니다.
-
-                    **공동 루트인 경우** `chatRoomUuid` 필드에 연결된 루트 채팅방 UUID가 포함됩니다.
-                    """,
+            description = "내 루트의 상세 정보를 조회합니다. stops/legs 포맷으로 반환합니다.",
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
@@ -336,255 +326,6 @@ public class CourseController {
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
         return ResponseEntity.ok(courseService.getMyCourseDetail(userId, courseId));
-    }
-
-    // ──────────────────────────────────────────────────────────
-    // 공동 루트 링크 진입
-    // ──────────────────────────────────────────────────────────
-
-    @GetMapping("/collaborative/{courseId}")
-    @Operation(
-            summary = "공동 루트 링크 진입 조회",
-            description = """
-                    `/routes/collaborative/{courseId}` 딥링크로 앱에 들어온 사용자가
-                    해당 루트를 편집할 수 있는지 확인하고 루트 메타·경유지·이동 구간을 반환합니다.
-                    """,
-            security = @SecurityRequirement(name = "Bearer")
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "공동 루트 정보 반환",
-                    content = @Content(schema = @Schema(implementation = CollaborativeCourseResponse.class))),
-            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "403", description = "공동 편집 권한 없음",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "코스를 찾을 수 없음",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
-    public ResponseEntity<CollaborativeCourseResponse> getCollaborativeCourse(
-            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
-            @AuthenticationPrincipal UserDetails userDetails) {
-        Long userId = Long.parseLong(userDetails.getUsername());
-        return ResponseEntity.ok(courseService.getCollaborativeCourse(userId, courseId));
-    }
-
-    // ──────────────────────────────────────────────────────────
-    // 공동 루트 초대 (직접 입장 or 승인 필요)
-    // ──────────────────────────────────────────────────────────
-
-    @PostMapping("/my/{courseId}/invites")
-    @Operation(
-            summary = "공동 루트 초대",
-            description = """
-                    내 루트를 공동 편집 가능 상태로 전환하고 초대 알림을 발송합니다.
-                    요청 본문에 `userId`를 포함하면 해당 친구에게 초대 알림이 전송됩니다.
-
-                    **초대는 알림만 발송합니다.** 실제 채팅방 입장은 초대받은 친구가
-                    `POST /api/courses/{courseId}/join`을 호출해야 이루어집니다.
-
-                    **입장 방식은 루트 생성 시 설정한 `requiresApproval` 값을 따릅니다:**
-                    - `false`: 친구가 join 호출 시 즉시 멤버로 추가됩니다.
-                    - `true`: 친구가 join 호출 시 PENDING 요청 생성 → 소유자 승인 필요.
-
-                    **Request Body:** 생략 가능 (생략 시 링크만 활성화)
-                    """,
-            security = @SecurityRequirement(name = "Bearer")
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "초대 알림 발송 성공",
-                    content = @Content(schema = @Schema(implementation = CollaborativeInviteResponse.class))),
-            @ApiResponse(responseCode = "400", description = "자기 자신 초대 등 잘못된 요청",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "403", description = "본인 코스가 아니거나 친구가 아님",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "코스 또는 초대 대상 사용자를 찾을 수 없음",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "409", description = "이미 참여 중인 유저",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
-    public ResponseEntity<CollaborativeInviteResponse> createCollaborativeInvite(
-            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
-            @RequestBody(required = false) CollaborativeInviteRequest request,
-            @AuthenticationPrincipal UserDetails userDetails) {
-        Long userId = Long.parseLong(userDetails.getUsername());
-        return ResponseEntity.ok(courseService.createCollaborativeInvite(userId, courseId, request));
-    }
-
-    // ──────────────────────────────────────────────────────────
-    // 공동 루트 참여 요청 (초대받은 유저)
-    // ──────────────────────────────────────────────────────────
-
-    @PostMapping("/{courseId}/join")
-    @Operation(
-            summary = "공동 루트 팀방 참여 요청",
-            description = """
-                    초대받은 유저가 공동 루트 **팀방**에 참여를 요청합니다.
-                    소유자가 초대(`POST /api/courses/my/{courseId}/invites`) 후, 초대받은 본인이 이 API를 호출합니다.
-
-                    **루트 생성 시 설정한 `requiresApproval` 값에 따라 결과가 달라집니다:**
-                    - `false`: 팀방에 즉시 멤버로 추가됩니다. `status: "JOINED"`, `chatRoomUuid`(팀방 UUID) 포함.
-                    - `true`: 입장 요청(PENDING) 생성 후 소유자 알림 발송. `status: "PENDING"`, `chatRoomUuid: null`.
-
-                    팀방에 입장한 후, 팀방 내 작업 루트 목록(`GET /api/courses/rooms/{teamRoomUuid}/work-routes`)에서
-                    각 루트의 작업방으로 이동할 수 있습니다.
-                    """,
-            security = @SecurityRequirement(name = "Bearer")
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "참여 완료(JOINED) 또는 승인 대기(PENDING)",
-                    content = @Content(schema = @Schema(implementation = JoinRouteResponse.class))),
-            @ApiResponse(responseCode = "400", description = "공동 루트가 아님",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "코스 또는 채팅방을 찾을 수 없음",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "409", description = "이미 참여 중이거나 대기 중인 요청 있음",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
-    public ResponseEntity<JoinRouteResponse> joinCollaborativeRoute(
-            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
-            @AuthenticationPrincipal UserDetails userDetails) {
-        Long userId = Long.parseLong(userDetails.getUsername());
-        return ResponseEntity.ok(courseService.joinCollaborativeRoute(userId, courseId));
-    }
-
-    // ──────────────────────────────────────────────────────────
-    // 입장 요청 목록 조회 (소유자 전용)
-    // ──────────────────────────────────────────────────────────
-
-    @GetMapping("/my/{courseId}/join-requests")
-    @Operation(
-            summary = "공동 루트 입장 요청 목록 조회",
-            description = """
-                    `requiresApproval=true`로 초대된 사용자들의 **PENDING(대기 중)** 입장 요청 목록을 반환합니다.
-                    루트 소유자(방장)만 조회할 수 있습니다.
-
-                    각 요청에는 `requestId`, 요청자 정보, 요청 시각이 포함됩니다.
-                    `requestId`를 사용해 승인(`/approve`) 또는 거절(`/reject`)할 수 있습니다.
-                    """,
-            security = @SecurityRequirement(name = "Bearer")
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "대기 중인 입장 요청 목록 반환",
-                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = JoinRequestResponse.class)))),
-            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "403", description = "소유자가 아님",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "코스를 찾을 수 없음",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
-    public ResponseEntity<List<JoinRequestResponse>> getJoinRequests(
-            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
-            @AuthenticationPrincipal UserDetails userDetails) {
-        Long userId = Long.parseLong(userDetails.getUsername());
-        return ResponseEntity.ok(courseService.getJoinRequests(userId, courseId));
-    }
-
-    // ──────────────────────────────────────────────────────────
-    // 입장 요청 승인/거절 (소유자 전용)
-    // ──────────────────────────────────────────────────────────
-
-    @PostMapping("/join-requests/{requestId}")
-    @Operation(
-            summary = "공동 루트 입장 요청 승인 또는 거절",
-            description = """
-                    대기 중인 입장 요청을 승인하거나 거절합니다.
-                    `requestId`만으로 처리할 수 있으며, 해당 루트의 소유자(방장)만 처리할 수 있습니다.
-
-                    **action 값:**
-                    - `APPROVE`: 요청자를 채팅방 멤버로 추가하고 승인 알림을 발송합니다.
-                    - `REJECT`: 요청을 거절하고 거절 알림을 발송합니다.
-                    """,
-            security = @SecurityRequirement(name = "Bearer")
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "처리 성공 (승인 또는 거절)"),
-            @ApiResponse(responseCode = "400", description = "action 값 오류",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "403", description = "소유자가 아님",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "입장 요청을 찾을 수 없음",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "409", description = "이미 처리된 요청",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
-    public ResponseEntity<Void> processJoinRequest(
-            @Parameter(description = "입장 요청 ID", required = true) @PathVariable Long requestId,
-            @Valid @RequestBody ProcessJoinRequestRequest request,
-            @AuthenticationPrincipal UserDetails userDetails) {
-        Long userId = Long.parseLong(userDetails.getUsername());
-        courseService.processJoinRequest(userId, requestId, request.action());
-        return ResponseEntity.noContent().build();
-    }
-
-    // ──────────────────────────────────────────────────────────
-    // 공동 루트 멤버 목록 조회
-    // ──────────────────────────────────────────────────────────
-
-    @GetMapping("/my/{courseId}/members")
-    @Operation(
-            summary = "공동 루트 멤버 목록 조회",
-            description = """
-                    공동 루트에 연결된 멤버 목록을 조회합니다.
-                    소유자 또는 공동 루트 연결 채팅방 멤버만 조회할 수 있습니다.
-
-                    아직 초대 링크가 활성화되지 않은 루트는 소유자 1명만 반환합니다.
-                    """,
-            security = @SecurityRequirement(name = "Bearer")
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "멤버 목록 반환",
-                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = CollaborativeMemberResponse.class)))),
-            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "403", description = "멤버 조회 권한 없음",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "코스를 찾을 수 없음",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
-    public ResponseEntity<List<CollaborativeMemberResponse>> getCollaborativeMembers(
-            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
-            @AuthenticationPrincipal UserDetails userDetails) {
-        Long userId = Long.parseLong(userDetails.getUsername());
-        return ResponseEntity.ok(courseService.getCollaborativeMembers(userId, courseId));
-    }
-
-    // ──────────────────────────────────────────────────────────
-    // 공동 루트 채팅방 UUID 조회
-    // ──────────────────────────────────────────────────────────
-
-    @GetMapping("/my/{courseId}/chat-room")
-    @Operation(
-            summary = "공동 루트 팀방 UUID 조회",
-            description = """
-                    공동 루트의 **팀방(부모 채팅방)** UUID를 반환합니다.
-                    팀방은 멤버를 모으고 소통하는 공간입니다.
-                    `collaborative=true`로 루트를 생성하면 팀방과 작업방이 자동 생성됩니다.
-                    팀방이 없는 경우 `chatRoomUuid`는 `null`입니다.
-                    """,
-            security = @SecurityRequirement(name = "Bearer")
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "채팅방 UUID 반환 (없으면 null)",
-                    content = @Content(schema = @Schema(implementation = CourseChatRoomResponse.class))),
-            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "403", description = "본인 코스가 아니거나 멤버 아님",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "코스를 찾을 수 없음",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
-    public ResponseEntity<CourseChatRoomResponse> getMyCourseChatRoom(
-            @Parameter(description = "코스 UUID", required = true) @PathVariable String courseId,
-            @AuthenticationPrincipal UserDetails userDetails) {
-        Long userId = Long.parseLong(userDetails.getUsername());
-        return ResponseEntity.ok(courseService.getMyCourseChatRoom(userId, courseId));
     }
 
     // ──────────────────────────────────────────────────────────
@@ -870,80 +611,5 @@ public class CourseController {
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
         return ResponseEntity.status(201).body(courseService.copyCourse(userId, courseId));
-    }
-
-    // ──────────────────────────────────────────────────────────
-    // 루트 채팅방 내 서브 루트 생성
-    // ──────────────────────────────────────────────────────────
-
-    @PostMapping("/rooms/{chatRoomUuid}/work-routes")
-    @Operation(
-            summary = "팀방 내 작업 루트 생성",
-            description = """
-                    공동 루트 **팀방** 안에서 새 작업 루트를 생성합니다.
-
-                    **구조:**
-                    - 팀방은 멤버를 모으는 공간이고, 작업 루트는 팀방 안에서 실제 루트 편집이 이루어지는 단위입니다.
-                    - 하나의 팀방에 여러 개의 독립적인 작업 루트를 만들 수 있습니다.
-
-                    **동작:**
-                    - 요청자는 해당 팀방의 멤버여야 합니다.
-                    - 작업 루트용 **작업방(자식 채팅방)** 이 자동으로 생성됩니다. 생성자만 초기 ADMIN으로 추가됩니다.
-                    - 나머지 팀원은 초대(`POST /api/courses/my/{courseId}/invites`)로 직접 작업방에 합류해야 합니다.
-
-                    **Request Body:** `CreateMyCourseRequest`와 동일 (title 필수, stops/legs/tags 선택)
-                    """,
-            security = @SecurityRequirement(name = "Bearer")
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "서브 루트 생성 성공",
-                    content = @Content(schema = @Schema(implementation = SubCourseResponse.class))),
-            @ApiResponse(responseCode = "400", description = "루트 채팅방이 아님",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "403", description = "채팅방 멤버가 아님",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "채팅방을 찾을 수 없음",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
-    public ResponseEntity<SubCourseResponse> createSubCourse(
-            @Parameter(description = "부모 루트 채팅방 UUID", required = true) @PathVariable String chatRoomUuid,
-            @Valid @RequestBody CreateMyCourseRequest request,
-            @AuthenticationPrincipal UserDetails userDetails) {
-        Long userId = Long.parseLong(userDetails.getUsername());
-        return ResponseEntity.status(201).body(courseService.createSubCourse(userId, chatRoomUuid, request));
-    }
-
-    // ──────────────────────────────────────────────────────────
-    // 루트 채팅방 내 서브 루트 목록 조회
-    // ──────────────────────────────────────────────────────────
-
-    @GetMapping("/rooms/{chatRoomUuid}/work-routes")
-    @Operation(
-            summary = "팀방 내 작업 루트 목록 조회",
-            description = """
-                    공동 루트 **팀방** 안에 생성된 작업 루트 목록을 조회합니다.
-
-                    각 항목에는 작업방 UUID, 연결된 루트 UUID, 마지막 메시지, 미읽음 수가 포함됩니다.
-                    요청자는 해당 팀방의 멤버여야 합니다.
-                    """,
-            security = @SecurityRequirement(name = "Bearer")
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "서브 루트 목록 반환",
-                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = SubCourseResponse.class)))),
-            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "403", description = "채팅방 멤버가 아님",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "채팅방을 찾을 수 없음",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
-    public ResponseEntity<List<SubCourseResponse>> getSubCourses(
-            @Parameter(description = "부모 루트 채팅방 UUID", required = true) @PathVariable String chatRoomUuid,
-            @AuthenticationPrincipal UserDetails userDetails) {
-        Long userId = Long.parseLong(userDetails.getUsername());
-        return ResponseEntity.ok(courseService.getSubCourses(userId, chatRoomUuid));
     }
 }

@@ -13,9 +13,11 @@ public enum NotificationType {
     ROUTE_FAVORITED,        // 내 코스가 즐겨찾기됨
     ROUTE_USED,             // 내 코스가 복사·사용됨
 
-    // 공동 루트
-    ROUTE_INVITED,          // 공동 루트 초대 알림 (초대받은 사람에게)
-    ROUTE_JOIN_REQUESTED,   // 입장 요청이 들어옴 (관리자에게)
-    ROUTE_JOIN_APPROVED,    // 입장 요청이 승인됨 (요청자에게)
-    ROUTE_JOIN_REJECTED     // 입장 요청이 거절됨 (요청자에게)
+    // 모임
+    GROUP_INVITED,          // 모임 초대 알림 (초대받은 사람에게)
+    GROUP_JOIN_REQUESTED,   // 모임 가입 요청 (관리자에게)
+    GROUP_JOIN_APPROVED,    // 모임 가입 승인됨 (요청자에게)
+    GROUP_JOIN_REJECTED,    // 모임 가입 거절됨 (요청자에게)
+    GROUP_POST_CREATED,     // 모임에 게시물 등록됨 (멤버들에게)
+    GROUP_ROUTE_CREATED     // 모임에 루트 등록됨 (멤버들에게)
 }

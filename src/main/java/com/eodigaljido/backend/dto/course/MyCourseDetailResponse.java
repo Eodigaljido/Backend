@@ -19,19 +19,8 @@ public record MyCourseDetailResponse(
         @Schema(description = "공동 편집(공유) 여부", example = "false")
         boolean collaborative,
 
-        @Schema(description = "연결된 루트 채팅방 UUID (공동 루트인 경우에만 존재, 그 외 null)", example = "null")
+        @Schema(description = "연결된 루트 채팅방 UUID (그룹 내 루트인 경우에만 존재, 그 외 null)", example = "null")
         String chatRoomUuid,
-
-        @Schema(
-                description = """
-                        공동 루트 입장 승인 방식.
-                        - `false`: 초대 즉시 멤버로 추가됩니다.
-                        - `true`: 소유자가 승인해야 입장됩니다.
-                        공동 루트가 아닌 경우 항상 `false`입니다.
-                        """,
-                example = "false"
-        )
-        boolean requiresApproval,
 
         @Schema(description = "경유지 목록")
         List<StopResponse> stops,

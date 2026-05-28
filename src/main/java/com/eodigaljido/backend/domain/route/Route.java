@@ -2,6 +2,7 @@ package com.eodigaljido.backend.domain.route;
 
 import com.eodigaljido.backend.domain.chat.ChatRoom;
 import com.eodigaljido.backend.domain.common.BaseTimeEntity;
+import com.eodigaljido.backend.domain.group.Group;
 import com.eodigaljido.backend.domain.user.User;
 import jakarta.persistence.*;
 import lombok.*;
@@ -67,8 +68,8 @@ public class Route extends BaseTimeEntity {
     private String thumbnailUrl;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "team_room_id")
-    private ChatRoom teamRoom;
+    @JoinColumn(name = "group_id")
+    private Group group;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "chat_room_id")
@@ -148,8 +149,8 @@ public class Route extends BaseTimeEntity {
         this.isCollaborative = false;
     }
 
-    public void assignTeamRoom(ChatRoom teamRoom) {
-        this.teamRoom = teamRoom;
+    public void assignGroup(Group group) {
+        this.group = group;
     }
 
     public void assignChatRoom(ChatRoom chatRoom) {
