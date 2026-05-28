@@ -2,8 +2,6 @@ package com.eodigaljido.backend.controller;
 
 import com.eodigaljido.backend.dto.common.ErrorResponse;
 import com.eodigaljido.backend.dto.course.CourseItemResponse;
-import com.eodigaljido.backend.dto.course.CreateMyCourseRequest;
-import com.eodigaljido.backend.dto.course.MyCourseDetailResponse;
 import com.eodigaljido.backend.dto.group.*;
 import com.eodigaljido.backend.service.GroupService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -434,35 +432,6 @@ public class GroupController {
         Long userId = Long.parseLong(userDetails.getUsername());
         groupService.deletePost(userId, groupUuid, postUuid);
         return ResponseEntity.noContent().build();
-    }
-
-    // ──────────────────────────────────────────────────────────
-    // 모임 내 루트 생성
-    // ──────────────────────────────────────────────────────────
-
-    @PostMapping("/{groupUuid}/routes")
-    @Operation(
-            summary = "모임 내 루트 생성",
-            description = """
-                    모임 내에 공동 루트를 생성합니다. 모임 멤버만 생성할 수 있습니다.
-
-                    루트 전용 채팅방이 자동으로 생성됩니다.
-                    멤버들은 해당 루트를 자유롭게 수정할 수 있으며 수정 이력이 기록됩니다.
-                    """,
-            security = @SecurityRequirement(name = "Bearer")
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "루트 생성 성공",
-                    content = @Content(schema = @Schema(implementation = MyCourseDetailResponse.class))),
-            @ApiResponse(responseCode = "403", description = "모임 멤버가 아님",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
-    public ResponseEntity<MyCourseDetailResponse> createGroupRoute(
-            @Parameter(description = "모임 UUID", required = true) @PathVariable String groupUuid,
-            @Valid @RequestBody CreateMyCourseRequest request,
-            @AuthenticationPrincipal UserDetails userDetails) {
-        Long userId = Long.parseLong(userDetails.getUsername());
-        return ResponseEntity.status(201).body(groupService.createGroupRoute(userId, groupUuid, request));
     }
 
     // ──────────────────────────────────────────────────────────

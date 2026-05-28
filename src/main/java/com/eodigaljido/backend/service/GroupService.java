@@ -9,7 +9,8 @@ import com.eodigaljido.backend.domain.group.GroupPost;
 import com.eodigaljido.backend.domain.notification.NotificationType;
 import com.eodigaljido.backend.domain.route.Route;
 import com.eodigaljido.backend.domain.user.User;
-import com.eodigaljido.backend.dto.course.*;
+import com.eodigaljido.backend.dto.course.CourseItemResponse;
+import com.eodigaljido.backend.dto.course.CourseStepResponse;
 import com.eodigaljido.backend.dto.group.*;
 import com.eodigaljido.backend.event.NotificationEvent;
 import com.eodigaljido.backend.exception.GroupException;
@@ -36,11 +37,10 @@ public class GroupService {
     private final GroupPostRepository groupPostRepository;
     private final RouteRepository routeRepository;
     private final RouteWaypointRepository waypointRepository;
-    private final RouteLegRepository legRepository;
-    private final ChatRoomRepository chatRoomRepository;
-    private final ChatRoomMemberRepository chatRoomMemberRepository;
     private final UserRepository userRepository;
     private final ProfileRepository profileRepository;
+    private final ChatRoomRepository chatRoomRepository;
+    private final ChatRoomMemberRepository chatRoomMemberRepository;
     private final ApplicationEventPublisher eventPublisher;
 
     // ──────────────────────────────────────────────────────────
@@ -362,83 +362,6 @@ public class GroupService {
     }
 
     // ──────────────────────────────────────────────────────────
-    // 모임 내 루트 생성
-    // ──────────────────────────────────────────────────────────
-
-    @Transactional
-    public MyCourseDetailResponse createGroupRoute(Long userId, String groupUuid, CreateMyCourseRequest req) {
-        Group group = findActiveGroup(groupUuid);
-        requireMember(group, userId);
-        User creator = findUser(userId);
-
-        int totalMinutes = req.legs() == null ? 0 :
-                req.legs().stream().mapToInt(l -> l.minutes() != null ? l.minutes() : 0).sum();
-        int totalMeters = req.legs() == null ? 0 :
-                req.legs().stream().mapToInt(l -> l.distanceMeters() != null ? l.distanceMeters() : 0).sum();
-        java.math.BigDecimal totalDistance = totalMeters > 0
-                ? java.math.BigDecimal.valueOf(totalMeters)
-                        .divide(java.math.BigDecimal.valueOf(1000), 2, java.math.RoundingMode.HALF_UP)
-                : null;
-
-        Route route = Route.builder()
-                .uuid(UUID.randomUUID().toString())
-                .user(creator)
-                .title(req.title())
-                .status(Route.RouteStatus.DRAFT)
-                .isCollaborative(true)
-                .estimatedTime(totalMinutes > 0 ? totalMinutes : null)
-                .totalDistance(totalDistance)
-                .build();
-        routeRepository.save(route);
-        route.assignGroup(group);
-
-        if (req.tags() != null) {
-            route.updateTags(req.tags().stream()
-                    .filter(java.util.Objects::nonNull)
-                    .limit(2)
-                    .map(Enum::name)
-                    .toList());
-        }
-
-        // 루트 전용 채팅방 생성
-        ChatRoom routeRoom = ChatRoom.builder()
-                .uuid(UUID.randomUUID().toString())
-                .name(req.title())
-                .type(ChatRoom.RoomType.ROUTE)
-                .createdBy(creator)
-                .build();
-        routeRoom.assignGroup(group);
-        chatRoomRepository.save(routeRoom);
-        chatRoomMemberRepository.save(ChatRoomMember.builder()
-                .room(routeRoom)
-                .user(creator)
-                .role(ChatRoomMember.MemberRole.ADMIN)
-                .build());
-        route.assignChatRoom(routeRoom);
-
-        List<com.eodigaljido.backend.domain.route.RouteWaypoint> waypoints =
-                buildWaypoints(route, req.stops());
-        waypointRepository.saveAll(waypoints);
-
-        List<com.eodigaljido.backend.domain.route.RouteLeg> legs =
-                buildLegs(route, req.legs());
-        legRepository.saveAll(legs);
-
-        notifyGroupMembers(group, userId, NotificationType.GROUP_ROUTE_CREATED,
-                "모임 루트 등록",
-                creator.getUserId() + "님이 '" + group.getName() + "' 모임에 루트를 등록했습니다: " + req.title(),
-                group.getUuid());
-
-        List<StopResponse> stops = waypoints.stream().map(StopResponse::from).toList();
-        List<LegResponse> legResponses = legs.stream().map(LegResponse::from).toList();
-        List<String> tags = route.getTags() != null ? List.copyOf(route.getTags()) : List.of();
-        return new MyCourseDetailResponse(
-                route.getUuid(), route.getTitle(), route.getThumbnailUrl(),
-                true, routeRoom.getUuid(), stops, legResponses, tags
-        );
-    }
-
-    // ──────────────────────────────────────────────────────────
     // 모임 내 루트 목록
     // ──────────────────────────────────────────────────────────
 
@@ -507,55 +430,4 @@ public class GroupService {
         ));
     }
 
-    private void notifyGroupMembers(Group group, Long actorId, NotificationType type,
-                                     String title, String body, String targetUuid) {
-        groupMemberRepository.findActiveMembers(group, PageRequest.of(0, 1000))
-                .forEach(member -> {
-                    if (!member.getUser().getId().equals(actorId)) {
-                        eventPublisher.publishEvent(NotificationEvent.of(
-                                member.getUser().getId(), actorId,
-                                type, title, body, targetUuid, "GROUP"
-                        ));
-                    }
-                });
-    }
-
-    private List<com.eodigaljido.backend.domain.route.RouteWaypoint> buildWaypoints(
-            Route route, List<StopRequest> stops) {
-        if (stops == null || stops.isEmpty()) return List.of();
-        int seq = 1;
-        var result = new java.util.ArrayList<com.eodigaljido.backend.domain.route.RouteWaypoint>();
-        for (StopRequest s : stops) {
-            result.add(com.eodigaljido.backend.domain.route.RouteWaypoint.builder()
-                    .route(route)
-                    .sequence(seq++)
-                    .name(s.title())
-                    .latitude(s.lat())
-                    .longitude(s.lng())
-                    .kind(s.kind())
-                    .timeLine(s.timeLine())
-                    .build());
-        }
-        return result;
-    }
-
-    private List<com.eodigaljido.backend.domain.route.RouteLeg> buildLegs(
-            Route route, List<LegRequest> legs) {
-        if (legs == null || legs.isEmpty()) return List.of();
-        int seq = 1;
-        var result = new java.util.ArrayList<com.eodigaljido.backend.domain.route.RouteLeg>();
-        for (LegRequest l : legs) {
-            result.add(com.eodigaljido.backend.domain.route.RouteLeg.builder()
-                    .route(route)
-                    .sequence(seq++)
-                    .mode(l.mode())
-                    .minutes(l.minutes())
-                    .transitType(l.transitType())
-                    .directionsSummary(l.directionsSummary())
-                    .directionsDetail(l.directionsDetail())
-                    .distanceMeters(l.distanceMeters())
-                    .build());
-        }
-        return result;
-    }
 }

@@ -16,19 +16,8 @@ public record CreateMyCourseRequest(
         @Schema(description = "루트 이름 (최대 100자)", example = "서울 고궁 투어", requiredMode = Schema.RequiredMode.REQUIRED)
         String title,
 
-        @Schema(description = "공동 편집 여부 (true면 isShared = true)", example = "false")
-        Boolean collaborative,
-
-        @Schema(
-                description = """
-                        공동 루트일 때 입장 승인 방식.
-                        - `false` (기본값): 초대 즉시 멤버로 추가됩니다.
-                        - `true`: 소유자가 승인해야 입장됩니다.
-                        `collaborative`가 `false`이면 무시됩니다.
-                        """,
-                example = "false"
-        )
-        Boolean requiresApproval,
+        @Schema(description = "소속 모임 UUID (모임 내 루트로 생성할 때만 포함, 개인 루트면 생략)", example = "null")
+        String groupUuid,
 
         @Schema(description = "경유지 목록 (start → via → end 순서)")
         List<@Valid StopRequest> stops,

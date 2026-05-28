@@ -1,5 +1,8 @@
 package com.eodigaljido.backend.service;
 
+import com.eodigaljido.backend.domain.chat.ChatRoom;
+import com.eodigaljido.backend.domain.chat.ChatRoomMember;
+import com.eodigaljido.backend.domain.group.Group;
 import com.eodigaljido.backend.domain.notification.NotificationType;
 import com.eodigaljido.backend.domain.route.Route;
 import com.eodigaljido.backend.domain.route.Route.RouteStatus;
@@ -16,6 +19,7 @@ import com.eodigaljido.backend.repository.RouteLegRepository;
 import com.eodigaljido.backend.exception.RouteException;
 import com.eodigaljido.backend.exception.UserException;
 import com.eodigaljido.backend.repository.*;
+import com.eodigaljido.backend.exception.GroupException;
 import org.springframework.context.ApplicationEventPublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -52,6 +56,10 @@ public class CourseService {
     private final UserRepository userRepository;
     private final ProfileRepository profileRepository;
     private final OnboardingAnswerRepository onboardingAnswerRepository;
+    private final GroupRepository groupRepository;
+    private final GroupMemberRepository groupMemberRepository;
+    private final ChatRoomRepository chatRoomRepository;
+    private final ChatRoomMemberRepository chatRoomMemberRepository;
     private final FollowingNewsService followingNewsService;
     private final ApplicationEventPublisher eventPublisher;
     private final FileStorageService fileStorageService;
@@ -260,6 +268,31 @@ public class CourseService {
         routeRepository.save(route);
         route.updateTags(processTags(req.tags()));
 
+        if (req.groupUuid() != null && !req.groupUuid().isBlank()) {
+            Group group = groupRepository.findByUuidAndStatusNot(req.groupUuid(), Group.GroupStatus.DELETED)
+                    .orElseThrow(() -> new RouteException("모임을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+            if (!groupMemberRepository.existsByGroupAndUserAndLeftAtIsNull(group, user)) {
+                throw new RouteException("모임 멤버가 아닙니다.", HttpStatus.FORBIDDEN);
+            }
+            route.assignGroup(group);
+            route.enableCollaboration();
+
+            ChatRoom routeRoom = ChatRoom.builder()
+                    .uuid(java.util.UUID.randomUUID().toString())
+                    .name(req.title())
+                    .type(ChatRoom.RoomType.ROUTE)
+                    .createdBy(user)
+                    .build();
+            routeRoom.assignGroup(group);
+            chatRoomRepository.save(routeRoom);
+            chatRoomMemberRepository.save(ChatRoomMember.builder()
+                    .room(routeRoom)
+                    .user(user)
+                    .role(ChatRoomMember.MemberRole.ADMIN)
+                    .build());
+            route.assignChatRoom(routeRoom);
+        }
+
         List<RouteWaypoint> waypoints = buildWaypoints(route, req.stops());
         waypointRepository.saveAll(waypoints);
 
@@ -334,7 +367,19 @@ public class CourseService {
     public void deleteMyCourse(String courseId, Long userId) {
         Route route = routeRepository.findByUuidAndStatusNot(courseId, RouteStatus.DELETED)
                 .orElseThrow(() -> new RouteException("코스를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
-        if (!route.getUser().getId().equals(userId)) {
+
+        boolean isOwner = route.getUser().getId().equals(userId);
+
+        if (!isOwner) {
+            // 그룹 루트: 방장만 삭제 가능
+            if (route.getGroup() != null) {
+                if (!route.getGroup().getCreatedBy().getId().equals(userId)) {
+                    throw new RouteException("그룹 루트는 소유자 또는 방장만 삭제할 수 있습니다.", HttpStatus.FORBIDDEN);
+                }
+                route.markDeleted();
+                return;
+            }
+            // 개인 루트: 저장 취소로 처리
             Optional<SavedRoute> saved = savedRouteRepository.findByUserIdAndRouteId(userId, route.getId());
             if (saved.isPresent()) {
                 savedRouteRepository.delete(saved.get());
@@ -353,7 +398,7 @@ public class CourseService {
     public MyCourseDetailResponse updateMyCourse(Long userId, String courseId, CreateMyCourseRequest req) {
         Route route = routeRepository.findByUuidAndStatusNot(courseId, RouteStatus.DELETED)
                 .orElseThrow(() -> new RouteException("코스를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
-        if (!route.getUser().getId().equals(userId)) {
+        if (!canEditRoute(route, userId)) {
             throw new RouteException("해당 코스에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN);
         }
 
@@ -722,11 +767,12 @@ public class CourseService {
         List<LegResponse> legResponses = legs.stream().map(LegResponse::from).toList();
         List<String> tags = route.getTags() != null ? List.copyOf(route.getTags()) : List.of();
         String chatRoomUuid = route.getChatRoom() != null ? route.getChatRoom().getUuid() : null;
+        boolean collaborative = route.getGroup() != null;
         return new MyCourseDetailResponse(
                 route.getUuid(),
                 route.getTitle(),
                 route.getThumbnailUrl(),
-                route.isCollaborative(),
+                collaborative,
                 chatRoomUuid,
                 stops,
                 legResponses,
@@ -760,5 +806,13 @@ public class CourseService {
             throw new RouteException("해당 코스에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN);
         }
         return route;
+    }
+
+    private boolean canEditRoute(Route route, Long userId) {
+        if (route.getUser().getId().equals(userId)) return true;
+        if (route.getGroup() == null) return false;
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null) return false;
+        return groupMemberRepository.existsByGroupAndUserAndLeftAtIsNull(route.getGroup(), user);
     }
 }
