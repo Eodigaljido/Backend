@@ -41,6 +41,16 @@ public class SwaggerConfig {
                                 | `GET /api/home/courses` | 홈 인기 코스 |
                                 | `POST /api/courses/{courseId}/reviews` | 코스 리뷰 (비로그인 가능) |
 
+                                ### 코스 약속 API (`/course-schedules`)
+                                | 메서드 | 경로 | 설명 |
+                                |--------|------|------|
+                                | `POST` | `/course-schedules` | 약속 생성 |
+                                | `GET` | `/course-schedules` | 약속 목록 조회 (`from`, `to`, `page`, `size`) |
+                                | `GET` | `/course-schedules/nearest` | 가장 가까운 약속 1건 (홈 카드용) |
+                                | `GET` | `/course-schedules/{scheduleId}` | 약속 상세 조회 |
+                                | `PATCH` | `/course-schedules/{scheduleId}` | 약속 수정 |
+                                | `DELETE` | `/course-schedules/{scheduleId}` | 약속 삭제 |
+
                                 ### 에러 응답 형식
                                 ```json
                                 {
@@ -102,7 +112,9 @@ public class SwaggerConfig {
                         new Tag().name("Auth").description("로그인 / 인증 / OAuth"),
                         new Tag().name("User").description("회원 / 프로필 / 즐겨찾기 코스"),
                         new Tag().name("Course").description("코스 (공유루트 / 내루트 / 공동루트 / preview)"),
+                        new Tag().name("CourseSchedule").description("코스 약속 (일정 생성·조회·수정·삭제)"),
                         new Tag().name("Friend").description("친구 / 친구 코드 / 초대 preview"),
+                        new Tag().name("Group").description("모임 (생성·가입·게시판·채팅방)"),
                         new Tag().name("Chat").description("채팅방 / 메시지 (REST + WebSocket)"),
                         new Tag().name("Notification").description("알림"),
                         new Tag().name("Following News").description("팔로잉 소식"),

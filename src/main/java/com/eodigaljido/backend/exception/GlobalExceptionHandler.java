@@ -92,6 +92,13 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(e.getStatus().value(), e.getMessage(), LocalDateTime.now()));
     }
 
+    @ExceptionHandler(CourseScheduleException.class)
+    ResponseEntity<ErrorResponse> handleCourseSchedule(CourseScheduleException e) {
+        log.warn("[코스 약속 오류] {} (status={})", e.getMessage(), e.getStatus().value());
+        return ResponseEntity.status(e.getStatus())
+                .body(new ErrorResponse(e.getStatus().value(), e.getMessage(), LocalDateTime.now()));
+    }
+
     @ExceptionHandler(NumberFormatException.class)
     ResponseEntity<ErrorResponse> handleNumberFormat(NumberFormatException e) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
