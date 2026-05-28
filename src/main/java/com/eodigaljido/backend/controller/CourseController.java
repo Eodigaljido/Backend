@@ -250,11 +250,11 @@ public class CourseController {
 
                     **Request Body:**
                     - `title` (필수): 루트 이름 (최대 100자)
+                    - `groupUuid` (선택): 모임 UUID — 포함 시 해당 모임의 공동 루트로 생성됩니다.
+                      모임 멤버만 사용 가능하며, 자동으로 루트 전용 채팅방이 생성되고 `collaborative: true`로 반환됩니다.
                     - `stops` (선택): 경유지 목록 — `kind`(start|via|end), `title`, `timeLine`, `lat`, `lng`
                     - `legs` (선택): 이동 구간 목록 — `mode`(walk|transit|car|bike), `minutes`, `transitType`, `directionsSummary`, `directionsDetail`, `distanceMeters`
                     - `tags` (선택, 최대 2개): 허용값 `산책 카페 맛집 데이트 관광 야경 쇼핑 역사 해변 가족 운동 반려동물`
-
-                    그룹 내에서 공동 루트를 만들려면 `POST /api/groups/{groupUuid}/routes`를 사용하세요.
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
@@ -264,6 +264,10 @@ public class CourseController {
             @ApiResponse(responseCode = "400", description = "요청 값 오류",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "모임 멤버가 아님 (groupUuid 포함 시)",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "모임을 찾을 수 없음 (groupUuid 포함 시)",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<MyCourseDetailResponse> createMyCourse(
@@ -308,7 +312,11 @@ public class CourseController {
     @GetMapping("/my/{courseId}")
     @Operation(
             summary = "내 루트 상세 조회",
-            description = "내 루트의 상세 정보를 조회합니다. stops/legs 포맷으로 반환합니다.",
+            description = """
+                    루트의 상세 정보를 stops/legs 포맷으로 반환합니다.
+                    - 개인 루트: 본인만 조회 가능합니다.
+                    - 모임 루트(`collaborative: true`): 소유자 또는 해당 모임 멤버가 조회 가능합니다.
+                    """,
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
@@ -316,7 +324,7 @@ public class CourseController {
                     content = @Content(schema = @Schema(implementation = MyCourseDetailResponse.class))),
             @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "403", description = "본인 코스가 아님",
+            @ApiResponse(responseCode = "403", description = "조회 권한 없음 (본인 코스가 아니거나 모임 멤버가 아님)",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "코스를 찾을 수 없음",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -336,9 +344,10 @@ public class CourseController {
     @Operation(
             summary = "내 코스 삭제",
             description = """
-                    내 코스를 삭제합니다.
-                    - **직접 만든 코스**: 소프트 삭제 (status → DELETED)
-                    - **저장한 코스**: 즐겨찾기 취소
+                    코스를 삭제합니다.
+                    - **직접 만든 개인 루트**: 소프트 삭제 (status → DELETED)
+                    - **모임 루트**: 소유자 또는 모임 방장(ADMIN)만 소프트 삭제 가능
+                    - **저장한 코스**: 즐겨찾기 취소 (원본 코스는 삭제되지 않음)
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
@@ -346,7 +355,7 @@ public class CourseController {
             @ApiResponse(responseCode = "204", description = "삭제 성공"),
             @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "403", description = "본인 코스가 아님",
+            @ApiResponse(responseCode = "403", description = "삭제 권한 없음 (모임 루트는 소유자 또는 방장만 삭제 가능)",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "코스를 찾을 수 없음",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -366,7 +375,9 @@ public class CourseController {
     @Operation(
             summary = "내 루트 수정",
             description = """
-                    내 루트의 정보를 수정합니다. 제공하지 않은 필드는 기존 값을 유지합니다.
+                    루트의 정보를 수정합니다. 제공하지 않은 필드는 기존 값을 유지합니다.
+                    - **개인 루트**: 소유자만 수정 가능합니다.
+                    - **모임 루트**: 소유자 또는 해당 모임 멤버가 수정 가능합니다.
 
                     **태그 수정 정책:**
                     - `tags` 필드 **생략** → 기존 태그 유지
@@ -382,7 +393,7 @@ public class CourseController {
                     content = @Content(schema = @Schema(implementation = MyCourseDetailResponse.class))),
             @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "403", description = "본인 코스가 아님",
+            @ApiResponse(responseCode = "403", description = "수정 권한 없음 (모임 루트는 소유자 또는 모임 멤버만 수정 가능)",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "코스를 찾을 수 없음",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))

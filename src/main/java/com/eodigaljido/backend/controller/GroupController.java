@@ -224,7 +224,8 @@ public class GroupController {
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "요청 목록 반환"),
+            @ApiResponse(responseCode = "200", description = "요청 목록 반환",
+                    content = @Content(schema = @Schema(implementation = GroupJoinRequestResponse.class))),
             @ApiResponse(responseCode = "403", description = "방장이 아님",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
@@ -276,7 +277,8 @@ public class GroupController {
             security = {}
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "멤버 목록 반환"),
+            @ApiResponse(responseCode = "200", description = "멤버 목록 반환",
+                    content = @Content(schema = @Schema(implementation = GroupMemberResponse.class))),
             @ApiResponse(responseCode = "404", description = "모임을 찾을 수 없음",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
@@ -369,7 +371,8 @@ public class GroupController {
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "게시물 목록 반환"),
+            @ApiResponse(responseCode = "200", description = "게시물 목록 반환",
+                    content = @Content(schema = @Schema(implementation = GroupPostResponse.class))),
             @ApiResponse(responseCode = "403", description = "모임 멤버가 아님",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
