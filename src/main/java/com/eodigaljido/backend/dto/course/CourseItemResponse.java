@@ -61,6 +61,27 @@ public record CourseItemResponse(
         @Schema(description = "작성자 아이디")
         String authorUserId,
 
+        @Schema(description = "직전에 복사한 공개 코스 UUID. 직접 제작한 코스면 null")
+        String forkSourceCourseId,
+
+        @Schema(description = "포크 체인의 최초 원본 공개 코스 UUID. 직접 제작한 코스면 null")
+        String rootForkSourceCourseId,
+
+        @Schema(description = "최초 제작자 UUID")
+        String originalAuthorUuid,
+
+        @Schema(description = "최초 제작자 아이디")
+        String originalAuthorUserId,
+
+        @Schema(description = "마지막 수정/재공유자 UUID. 직접 제작 코스거나 원작자와 동일하면 null일 수 있음")
+        String modifierUuid,
+
+        @Schema(description = "마지막 수정/재공유자 아이디. 직접 제작 코스거나 원작자와 동일하면 null일 수 있음")
+        String modifierUserId,
+
+        @Schema(description = "원작자 프로필 공개 여부. 현재 별도 비공개 설정이 없으면 true")
+        boolean originalAuthorProfilePublic,
+
         @Schema(description = "로그인 사용자가 이 코스를 저장했는지 여부. 비로그인 시 false.", example = "false")
         boolean savedByMe
 ) {
@@ -88,6 +109,13 @@ public record CourseItemResponse(
                 route.getTags() != null ? List.copyOf(route.getTags()) : List.of(),
                 route.getUser().getUuid(),
                 route.getUser().getUserId(),
+                route.getForkSourceCourseId(),
+                route.getRootForkSourceCourseId(),
+                route.getOriginalAuthorUuid() != null ? route.getOriginalAuthorUuid() : route.getUser().getUuid(),
+                route.getOriginalAuthorUserId() != null ? route.getOriginalAuthorUserId() : route.getUser().getUserId(),
+                route.getModifierUuid(),
+                route.getModifierUserId(),
+                true,
                 savedByMe
         );
     }

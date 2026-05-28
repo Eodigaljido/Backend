@@ -480,6 +480,9 @@ public class CourseService {
         }
         Route route = findMyOwnedRoute(userId, courseId);
         route.updateStatus(status);
+        if (status == RouteStatus.PUBLISHED) {
+            route.markPublishedBy(route.getUser());
+        }
         List<RouteWaypoint> waypoints = waypointRepository.findByRouteOrderBySequenceAsc(route);
         List<RouteLeg> legs = legRepository.findByRouteOrderBySequenceAsc(route);
         return toMyCourseDetail(route, waypoints, legs);
@@ -566,7 +569,7 @@ public class CourseService {
     public void enableSharing(Long userId, String courseId) {
         Route route = findMyOwnedRoute(userId, courseId);
         boolean wasShared = route.isShared();
-        route.enableSharing();
+        route.enableSharing(route.getUser());
 
         if (!wasShared) {
             followingNewsService.createNews(
@@ -639,6 +642,7 @@ public class CourseService {
                 .activityType(original.getActivityType())
                 .build();
         routeRepository.save(copied);
+        copied.inheritForkMetadataFrom(original);
         copied.updateTags(new java.util.ArrayList<>(original.getTags()));
 
         List<RouteWaypoint> waypoints = waypointRepository.findByRouteOrderBySequenceAsc(original)
@@ -810,7 +814,14 @@ public class CourseService {
                 chatRoomUuid,
                 stops,
                 legResponses,
-                tags
+                tags,
+                route.getForkSourceCourseId(),
+                route.getRootForkSourceCourseId(),
+                route.getOriginalAuthorUuid() != null ? route.getOriginalAuthorUuid() : route.getUser().getUuid(),
+                route.getOriginalAuthorUserId() != null ? route.getOriginalAuthorUserId() : route.getUser().getUserId(),
+                route.getModifierUuid(),
+                route.getModifierUserId(),
+                true
         );
     }
 

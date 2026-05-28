@@ -19,7 +19,8 @@ import java.util.List;
         @Index(name = "idx_routes_uuid", columnList = "uuid"),
         @Index(name = "idx_routes_user_id", columnList = "user_id"),
         @Index(name = "idx_routes_status", columnList = "status"),
-        @Index(name = "idx_routes_is_shared", columnList = "is_shared")
+        @Index(name = "idx_routes_is_shared", columnList = "is_shared"),
+        @Index(name = "idx_routes_root_fork_source_course_id", columnList = "root_fork_source_course_id")
     }
 )
 @Getter
@@ -92,6 +93,24 @@ public class Route extends BaseTimeEntity {
     @Column(name = "average_rating", precision = 3, scale = 2)
     private java.math.BigDecimal averageRating;
 
+    @Column(name = "fork_source_course_id", length = 36)
+    private String forkSourceCourseId;
+
+    @Column(name = "root_fork_source_course_id", length = 36)
+    private String rootForkSourceCourseId;
+
+    @Column(name = "original_author_uuid", length = 36)
+    private String originalAuthorUuid;
+
+    @Column(name = "original_author_user_id", length = 8)
+    private String originalAuthorUserId;
+
+    @Column(name = "modifier_uuid", length = 36)
+    private String modifierUuid;
+
+    @Column(name = "modifier_user_id", length = 8)
+    private String modifierUserId;
+
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
@@ -133,12 +152,43 @@ public class Route extends BaseTimeEntity {
         this.status = status;
     }
 
+    public void enableSharing(User modifier) {
+        this.isShared = true;
+        markPublishedBy(modifier);
+    }
+
     public void enableSharing() {
         this.isShared = true;
     }
 
     public void disableSharing() {
         this.isShared = false;
+    }
+
+    public void inheritForkMetadataFrom(Route source) {
+        this.forkSourceCourseId = source.getUuid();
+        this.rootForkSourceCourseId = source.getRootForkSourceCourseId() != null
+                ? source.getRootForkSourceCourseId()
+                : source.getUuid();
+        this.originalAuthorUuid = source.getOriginalAuthorUuid() != null
+                ? source.getOriginalAuthorUuid()
+                : source.getUser().getUuid();
+        this.originalAuthorUserId = source.getOriginalAuthorUserId() != null
+                ? source.getOriginalAuthorUserId()
+                : source.getUser().getUserId();
+    }
+
+    public void markPublishedBy(User modifier) {
+        if (this.originalAuthorUuid == null) {
+            this.originalAuthorUuid = this.user.getUuid();
+        }
+        if (this.originalAuthorUserId == null) {
+            this.originalAuthorUserId = this.user.getUserId();
+        }
+        if (this.forkSourceCourseId != null && modifier != null) {
+            this.modifierUuid = modifier.getUuid();
+            this.modifierUserId = modifier.getUserId();
+        }
     }
 
     public void enableCollaboration() {
