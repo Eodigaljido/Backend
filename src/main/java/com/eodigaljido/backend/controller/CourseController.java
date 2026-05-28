@@ -244,17 +244,16 @@ public class CourseController {
 
     @PostMapping("/my")
     @Operation(
-            summary = "내 루트 생성",
+            summary = "개인 루트 생성",
             description = """
-                    새 루트를 생성합니다.
+                    나만의 개인 루트를 생성합니다. 모임과 무관한 루트입니다.
 
-                    **Request Body:**
                     - `title` (필수): 루트 이름 (최대 100자)
-                    - `groupUuid` (선택): 모임 UUID — 포함 시 해당 모임의 공동 루트로 생성됩니다.
-                      모임 멤버만 사용 가능하며, 자동으로 루트 전용 채팅방이 생성되고 `collaborative: true`로 반환됩니다.
                     - `stops` (선택): 경유지 목록 — `kind`(start|via|end), `title`, `timeLine`, `lat`, `lng`
                     - `legs` (선택): 이동 구간 목록 — `mode`(walk|transit|car|bike), `minutes`, `transitType`, `directionsSummary`, `directionsDetail`, `distanceMeters`
                     - `tags` (선택, 최대 2개): 허용값 `산책 카페 맛집 데이트 관광 야경 쇼핑 역사 해변 가족 운동 반려동물`
+
+                    모임 내 공동 루트 생성은 `POST /api/courses/group`을 사용하세요.
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
@@ -264,10 +263,6 @@ public class CourseController {
             @ApiResponse(responseCode = "400", description = "요청 값 오류",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "403", description = "모임 멤버가 아님 (groupUuid 포함 시)",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "모임을 찾을 수 없음 (groupUuid 포함 시)",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<MyCourseDetailResponse> createMyCourse(
@@ -275,6 +270,48 @@ public class CourseController {
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
         return ResponseEntity.status(201).body(courseService.createMyCourse(userId, request));
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 모임 루트 생성
+    // ──────────────────────────────────────────────────────────
+
+    @PostMapping("/group")
+    @Operation(
+            summary = "모임 루트 생성",
+            description = """
+                    모임에 속한 공동 루트를 생성합니다. 모임 멤버만 사용할 수 있습니다.
+
+                    - `title` (필수): 루트 이름 (최대 100자)
+                    - `groupUuid` (필수): 소속 모임 UUID
+                    - `stops` (선택): 경유지 목록 — `kind`(start|via|end), `title`, `timeLine`, `lat`, `lng`
+                    - `legs` (선택): 이동 구간 목록 — `mode`(walk|transit|car|bike), `minutes`, `transitType`, `directionsSummary`, `directionsDetail`, `distanceMeters`
+                    - `tags` (선택, 최대 2개): 허용값 `산책 카페 맛집 데이트 관광 야경 쇼핑 역사 해변 가족 운동 반려동물`
+
+                    **생성 시 자동 처리:**
+                    - 루트 전용 채팅방이 생성되며 응답의 `chatRoomUuid`로 확인할 수 있습니다.
+                    - 응답의 `collaborative`가 `true`로 반환됩니다.
+                    - 모임 멤버 전원이 이 루트를 수정할 수 있습니다. 삭제는 소유자 또는 방장만 가능합니다.
+                    """,
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "모임 루트 생성 성공",
+                    content = @Content(schema = @Schema(implementation = MyCourseDetailResponse.class))),
+            @ApiResponse(responseCode = "400", description = "요청 값 오류",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "모임 멤버가 아님",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "모임을 찾을 수 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<MyCourseDetailResponse> createGroupCourse(
+            @Valid @RequestBody CreateGroupCourseRequest request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.status(201).body(courseService.createGroupCourse(userId, request));
     }
 
     // ──────────────────────────────────────────────────────────

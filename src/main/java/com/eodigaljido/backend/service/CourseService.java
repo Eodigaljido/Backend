@@ -242,7 +242,7 @@ public class CourseService {
     }
 
     // ──────────────────────────────────────────────────────────
-    // 내 루트 생성 (프론트 stops/legs 포맷)
+    // 개인 루트 생성 (stops/legs 포맷)
     // ──────────────────────────────────────────────────────────
 
     @Transactional
@@ -268,30 +268,64 @@ public class CourseService {
         routeRepository.save(route);
         route.updateTags(processTags(req.tags()));
 
-        if (req.groupUuid() != null && !req.groupUuid().isBlank()) {
-            Group group = groupRepository.findByUuidAndStatusNot(req.groupUuid(), Group.GroupStatus.DELETED)
-                    .orElseThrow(() -> new RouteException("모임을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
-            if (!groupMemberRepository.existsByGroupAndUserAndLeftAtIsNull(group, user)) {
-                throw new RouteException("모임 멤버가 아닙니다.", HttpStatus.FORBIDDEN);
-            }
-            route.assignGroup(group);
-            route.enableCollaboration();
+        List<RouteWaypoint> waypoints = buildWaypoints(route, req.stops());
+        waypointRepository.saveAll(waypoints);
 
-            ChatRoom routeRoom = ChatRoom.builder()
-                    .uuid(java.util.UUID.randomUUID().toString())
-                    .name(req.title())
-                    .type(ChatRoom.RoomType.ROUTE)
-                    .createdBy(user)
-                    .build();
-            routeRoom.assignGroup(group);
-            chatRoomRepository.save(routeRoom);
-            chatRoomMemberRepository.save(ChatRoomMember.builder()
-                    .room(routeRoom)
-                    .user(user)
-                    .role(ChatRoomMember.MemberRole.ADMIN)
-                    .build());
-            route.assignChatRoom(routeRoom);
+        List<RouteLeg> legs = buildLegs(route, req.legs());
+        legRepository.saveAll(legs);
+
+        return toMyCourseDetail(route, waypoints, legs);
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 모임 루트 생성 (stops/legs 포맷, 채팅방 자동 생성)
+    // ──────────────────────────────────────────────────────────
+
+    @Transactional
+    public MyCourseDetailResponse createGroupCourse(Long userId, CreateGroupCourseRequest req) {
+        User user = findUser(userId);
+
+        Group group = groupRepository.findByUuidAndStatusNot(req.groupUuid(), Group.GroupStatus.DELETED)
+                .orElseThrow(() -> new RouteException("모임을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        if (!groupMemberRepository.existsByGroupAndUserAndLeftAtIsNull(group, user)) {
+            throw new RouteException("모임 멤버가 아닙니다.", HttpStatus.FORBIDDEN);
         }
+
+        int totalMinutes = req.legs() == null ? 0 :
+                req.legs().stream().mapToInt(l -> l.minutes() != null ? l.minutes() : 0).sum();
+        int totalMeters = req.legs() == null ? 0 :
+                req.legs().stream().mapToInt(l -> l.distanceMeters() != null ? l.distanceMeters() : 0).sum();
+        java.math.BigDecimal totalDistance = totalMeters > 0
+                ? java.math.BigDecimal.valueOf(totalMeters).divide(java.math.BigDecimal.valueOf(1000), 2, java.math.RoundingMode.HALF_UP)
+                : null;
+
+        Route route = Route.builder()
+                .uuid(java.util.UUID.randomUUID().toString())
+                .user(user)
+                .title(req.title())
+                .status(RouteStatus.DRAFT)
+                .estimatedTime(totalMinutes > 0 ? totalMinutes : null)
+                .totalDistance(totalDistance)
+                .build();
+        routeRepository.save(route);
+        route.updateTags(processTags(req.tags()));
+        route.assignGroup(group);
+        route.enableCollaboration();
+
+        ChatRoom routeRoom = ChatRoom.builder()
+                .uuid(java.util.UUID.randomUUID().toString())
+                .name(req.title())
+                .type(ChatRoom.RoomType.ROUTE)
+                .createdBy(user)
+                .build();
+        routeRoom.assignGroup(group);
+        chatRoomRepository.save(routeRoom);
+        chatRoomMemberRepository.save(ChatRoomMember.builder()
+                .room(routeRoom)
+                .user(user)
+                .role(ChatRoomMember.MemberRole.ADMIN)
+                .build());
+        route.assignChatRoom(routeRoom);
 
         List<RouteWaypoint> waypoints = buildWaypoints(route, req.stops());
         waypointRepository.saveAll(waypoints);
@@ -310,7 +344,7 @@ public class CourseService {
     public MyCourseDetailResponse getMyCourseDetail(Long userId, String courseId) {
         Route route = routeRepository.findByUuidAndStatusNot(courseId, RouteStatus.DELETED)
                 .orElseThrow(() -> new RouteException("코스를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
-        if (!route.getUser().getId().equals(userId)) {
+        if (!canEditRoute(route, userId)) {
             throw new RouteException("해당 코스에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN);
         }
         List<RouteWaypoint> waypoints = waypointRepository.findByRouteOrderBySequenceAsc(route);
