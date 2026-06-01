@@ -9,12 +9,12 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(
-    name = "groups",
+    name = "user_groups",
     indexes = {
-        @Index(name = "idx_groups_uuid", columnList = "uuid"),
-        @Index(name = "idx_groups_created_by", columnList = "created_by"),
-        @Index(name = "idx_groups_type", columnList = "type"),
-        @Index(name = "idx_groups_status", columnList = "status")
+        @Index(name = "idx_user_groups_uuid", columnList = "uuid"),
+        @Index(name = "idx_user_groups_created_by", columnList = "created_by"),
+        @Index(name = "idx_user_groups_type", columnList = "type"),
+        @Index(name = "idx_user_groups_status", columnList = "status")
     }
 )
 @Getter

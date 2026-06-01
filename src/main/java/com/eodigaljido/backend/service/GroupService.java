@@ -415,11 +415,15 @@ public class GroupService {
     }
 
     private void addMember(Group group, User user) {
-        groupMemberRepository.save(GroupMember.builder()
-                .group(group)
-                .user(user)
-                .role(GroupMember.MemberRole.MEMBER)
-                .build());
+        groupMemberRepository.findByGroupAndUser(group, user)
+                .ifPresentOrElse(
+                        GroupMember::rejoin,
+                        () -> groupMemberRepository.save(GroupMember.builder()
+                                .group(group)
+                                .user(user)
+                                .role(GroupMember.MemberRole.MEMBER)
+                                .build())
+                );
     }
 
     private void notifyAdmin(Group group, User actor, NotificationType type,

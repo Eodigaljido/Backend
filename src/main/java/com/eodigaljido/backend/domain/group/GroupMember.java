@@ -52,6 +52,11 @@ public class GroupMember {
         this.leftAt = LocalDateTime.now();
     }
 
+    public void rejoin() {
+        this.leftAt = null;
+        this.role = MemberRole.MEMBER;
+    }
+
     public void promoteToAdmin() {
         this.role = MemberRole.ADMIN;
     }

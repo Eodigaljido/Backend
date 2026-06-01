@@ -15,6 +15,8 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
 
     Optional<GroupMember> findByGroupAndUserAndLeftAtIsNull(Group group, User user);
 
+    Optional<GroupMember> findByGroupAndUser(Group group, User user);
+
     boolean existsByGroupAndUserAndLeftAtIsNull(Group group, User user);
 
     @Query("SELECT gm FROM GroupMember gm JOIN FETCH gm.user WHERE gm.group = :group AND gm.leftAt IS NULL")
