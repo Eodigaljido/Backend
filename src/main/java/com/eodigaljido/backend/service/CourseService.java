@@ -405,12 +405,12 @@ public class CourseService {
         boolean isOwner = route.getUser().getId().equals(userId);
 
         if (!isOwner) {
-            // 그룹 루트: 방장만 삭제 가능
+            // 그룹 루트: 소유자 또는 방장만 삭제 가능
             if (route.getGroup() != null) {
                 if (!route.getGroup().getCreatedBy().getId().equals(userId)) {
                     throw new RouteException("그룹 루트는 소유자 또는 방장만 삭제할 수 있습니다.", HttpStatus.FORBIDDEN);
                 }
-                route.markDeleted();
+                deleteRouteWithChatRoom(route);
                 return;
             }
             // 개인 루트: 저장 취소로 처리
@@ -421,7 +421,14 @@ public class CourseService {
             }
             throw new RouteException("해당 코스에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN);
         }
+        deleteRouteWithChatRoom(route);
+    }
+
+    private void deleteRouteWithChatRoom(Route route) {
         route.markDeleted();
+        if (route.getChatRoom() != null) {
+            route.getChatRoom().delete();
+        }
     }
 
     // ──────────────────────────────────────────────────────────
