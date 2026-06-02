@@ -16,10 +16,12 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -35,7 +37,7 @@ public class GroupController {
     // 모임 생성
     // ──────────────────────────────────────────────────────────
 
-    @PostMapping
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(
             summary = "모임 생성",
             description = """
@@ -44,6 +46,7 @@ public class GroupController {
                     - `type`: `PUBLIC` (기본) 또는 `PRIVATE`
                     - `requiresApproval`: `PUBLIC` 모임에서 가입 시 승인이 필요한지 여부 (기본 `false`)
                     - `PRIVATE` 모임은 초대 링크를 통해서만 가입 가능합니다.
+                    - `image`: 모임 프로필 이미지 파일 (선택, JPEG/PNG/GIF/WebP, 최대 10MB)
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
@@ -56,10 +59,11 @@ public class GroupController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<GroupResponse> createGroup(
-            @Valid @RequestBody CreateGroupRequest request,
+            @RequestPart("request") @Valid CreateGroupRequest request,
+            @RequestPart(value = "image", required = false) MultipartFile image,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
-        return ResponseEntity.status(201).body(groupService.createGroup(userId, request));
+        return ResponseEntity.status(201).body(groupService.createGroup(userId, request, image));
     }
 
     // ──────────────────────────────────────────────────────────
@@ -81,6 +85,29 @@ public class GroupController {
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = userDetails != null ? Long.parseLong(userDetails.getUsername()) : null;
         return ResponseEntity.ok(groupService.getPublicGroups(userId, page, size));
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 내가 속한 모임 목록
+    // ──────────────────────────────────────────────────────────
+
+    @GetMapping("/me")
+    @Operation(
+            summary = "내 모임 목록 조회",
+            description = "내가 현재 가입되어 있는 모임 목록을 최근 가입순으로 반환합니다.",
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "모임 목록 반환"),
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<Page<MyGroupResponse>> getMyGroups(
+            @Parameter(description = "페이지 번호 (0부터)") @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "페이지 크기") @RequestParam(defaultValue = "20") int size,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.ok(groupService.getMyGroups(userId, page, size));
     }
 
     // ──────────────────────────────────────────────────────────
