@@ -287,9 +287,11 @@ public class CourseController {
                     - `stops` (선택): 경유지 목록 — `kind`(start|via|end), `title`, `timeLine`, `lat`, `lng`
                     - `legs` (선택): 이동 구간 목록 — `mode`(walk|transit|car|bike), `minutes`, `transitType`, `directionsSummary`, `directionsDetail`, `distanceMeters`
                     - `tags` (선택, 최대 2개): 허용값 `산책 카페 맛집 데이트 관광 야경 쇼핑 역사 해변 가족 운동 반려동물`
+                    - `createChatRoom` (선택, 기본값 `true`): 루트 전용 채팅방 생성 여부. `false`로 설정하면 채팅방 없이 루트만 생성됩니다.
 
                     **생성 시 자동 처리:**
-                    - 루트 전용 채팅방이 생성되며 응답의 `chatRoomUuid`로 확인할 수 있습니다.
+                    - `createChatRoom`이 `true`(기본)이면 루트 전용 채팅방이 생성되며 응답의 `chatRoomUuid`로 확인할 수 있습니다.
+                    - `createChatRoom`이 `false`이면 채팅방이 생성되지 않으며 응답의 `chatRoomUuid`는 `null`입니다.
                     - 응답의 `collaborative`가 `true`로 반환됩니다.
                     - 모임 멤버 전원이 이 루트를 수정할 수 있습니다. 삭제는 소유자 또는 방장만 가능합니다.
                     """,

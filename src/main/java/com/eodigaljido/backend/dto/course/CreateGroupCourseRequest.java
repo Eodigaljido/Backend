@@ -34,5 +34,8 @@ public record CreateGroupCourseRequest(
                 ),
                 schema = @Schema(implementation = RouteTag.class)
         )
-        List<RouteTag> tags
+        List<RouteTag> tags,
+
+        @Schema(description = "루트 전용 채팅방 자동 생성 여부 (기본값: true)", example = "true", defaultValue = "true")
+        Boolean createChatRoom
 ) {}

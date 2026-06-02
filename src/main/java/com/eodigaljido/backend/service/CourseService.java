@@ -312,20 +312,22 @@ public class CourseService {
         route.assignGroup(group);
         route.enableCollaboration();
 
-        ChatRoom routeRoom = ChatRoom.builder()
-                .uuid(java.util.UUID.randomUUID().toString())
-                .name(req.title())
-                .type(ChatRoom.RoomType.ROUTE)
-                .createdBy(user)
-                .build();
-        routeRoom.assignGroup(group);
-        chatRoomRepository.save(routeRoom);
-        chatRoomMemberRepository.save(ChatRoomMember.builder()
-                .room(routeRoom)
-                .user(user)
-                .role(ChatRoomMember.MemberRole.ADMIN)
-                .build());
-        route.assignChatRoom(routeRoom);
+        if (!Boolean.FALSE.equals(req.createChatRoom())) {
+            ChatRoom routeRoom = ChatRoom.builder()
+                    .uuid(java.util.UUID.randomUUID().toString())
+                    .name(req.title())
+                    .type(ChatRoom.RoomType.ROUTE)
+                    .createdBy(user)
+                    .build();
+            routeRoom.assignGroup(group);
+            chatRoomRepository.save(routeRoom);
+            chatRoomMemberRepository.save(ChatRoomMember.builder()
+                    .room(routeRoom)
+                    .user(user)
+                    .role(ChatRoomMember.MemberRole.ADMIN)
+                    .build());
+            route.assignChatRoom(routeRoom);
+        }
 
         List<RouteWaypoint> waypoints = buildWaypoints(route, req.stops());
         waypointRepository.saveAll(waypoints);
