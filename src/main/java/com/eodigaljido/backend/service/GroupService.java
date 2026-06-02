@@ -101,12 +101,16 @@ public class GroupService {
     // ──────────────────────────────────────────────────────────
 
     @Transactional
-    public GroupResponse getGroup(String groupUuid, Long userId) {
+    public GroupDetailResponse getGroup(String groupUuid, Long userId) {
         Group group = findActiveGroup(groupUuid);
         group.incrementViewCount();
         long memberCount = groupMemberRepository.countByGroupAndLeftAtIsNull(group);
         boolean joinedByMe = userId != null && isMember(group, userId);
-        return GroupResponse.of(group, memberCount, joinedByMe);
+        List<GroupMemberResponse> members = groupMemberRepository.findAllActiveMembers(group)
+                .stream()
+                .map(m -> GroupMemberResponse.of(m, profileRepository.findByUser(m.getUser()).orElse(null)))
+                .toList();
+        return GroupDetailResponse.of(group, memberCount, joinedByMe, members);
     }
 
     // ──────────────────────────────────────────────────────────
@@ -258,11 +262,7 @@ public class GroupService {
                 .map(gm -> {
                     Group g = gm.getGroup();
                     long memberCount = groupMemberRepository.countByGroupAndLeftAtIsNull(g);
-                    List<GroupMemberResponse> members = groupMemberRepository.findAllActiveMembers(g)
-                            .stream()
-                            .map(m -> GroupMemberResponse.of(m, profileRepository.findByUser(m.getUser()).orElse(null)))
-                            .toList();
-                    return MyGroupResponse.of(g, memberCount, members);
+                    return MyGroupResponse.of(g, memberCount);
                 });
     }
 

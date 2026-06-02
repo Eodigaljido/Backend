@@ -117,16 +117,16 @@ public class GroupController {
     @GetMapping("/{groupUuid}")
     @Operation(
             summary = "모임 상세 조회",
-            description = "모임 UUID로 상세 정보를 조회합니다. 조회할 때마다 `viewCount`가 1 증가합니다.",
+            description = "모임 UUID로 상세 정보를 조회합니다. 조회할 때마다 `viewCount`가 1 증가합니다. 멤버 목록이 함께 반환됩니다.",
             security = {}
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "모임 상세 반환",
-                    content = @Content(schema = @Schema(implementation = GroupResponse.class))),
+                    content = @Content(schema = @Schema(implementation = GroupDetailResponse.class))),
             @ApiResponse(responseCode = "404", description = "모임을 찾을 수 없음",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    public ResponseEntity<GroupResponse> getGroup(
+    public ResponseEntity<GroupDetailResponse> getGroup(
             @Parameter(description = "모임 UUID", required = true) @PathVariable String groupUuid,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = userDetails != null ? Long.parseLong(userDetails.getUsername()) : null;
