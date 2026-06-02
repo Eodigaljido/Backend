@@ -24,6 +24,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
 
@@ -42,23 +45,27 @@ public class GroupService {
     private final ChatRoomRepository chatRoomRepository;
     private final ChatRoomMemberRepository chatRoomMemberRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final FileStorageService fileStorageService;
 
     // ──────────────────────────────────────────────────────────
     // 모임 생성
     // ──────────────────────────────────────────────────────────
 
     @Transactional
-    public GroupResponse createGroup(Long userId, CreateGroupRequest req) {
+    public GroupResponse createGroup(Long userId, CreateGroupRequest req, MultipartFile image) {
         User creator = findUser(userId);
+
+        String groupUuid = UUID.randomUUID().toString();
+        String profileImageUrl = uploadGroupImage(image, groupUuid);
 
         Group.GroupType type = req.type() != null ? req.type() : Group.GroupType.PUBLIC;
         boolean requiresApproval = Boolean.TRUE.equals(req.requiresApproval());
 
         Group group = Group.builder()
-                .uuid(UUID.randomUUID().toString())
+                .uuid(groupUuid)
                 .name(req.name())
                 .description(req.description())
-                .profileImageUrl(req.profileImageUrl())
+                .profileImageUrl(profileImageUrl)
                 .type(type)
                 .requiresApproval(requiresApproval)
                 .createdBy(creator)
@@ -113,7 +120,7 @@ public class GroupService {
 
         Group.GroupType type = req.type() != null ? req.type() : group.getType();
         boolean requiresApproval = req.requiresApproval() != null ? req.requiresApproval() : group.isRequiresApproval();
-        group.update(req.name(), req.description(), req.profileImageUrl(), type, requiresApproval);
+        group.update(req.name(), req.description(), group.getProfileImageUrl(), type, requiresApproval);
 
         long memberCount = groupMemberRepository.countByGroupAndLeftAtIsNull(group);
         return GroupResponse.of(group, memberCount, true);
@@ -237,6 +244,26 @@ public class GroupService {
                     group.getUuid(), "GROUP"
             ));
         }
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 내가 속한 모임 목록
+    // ──────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public Page<MyGroupResponse> getMyGroups(Long userId, int page, int size) {
+        User user = findUser(userId);
+        Pageable pageable = PageRequest.of(page, size);
+        return groupMemberRepository.findActiveGroupsByUser(user, pageable)
+                .map(gm -> {
+                    Group g = gm.getGroup();
+                    long memberCount = groupMemberRepository.countByGroupAndLeftAtIsNull(g);
+                    List<GroupMemberResponse> members = groupMemberRepository.findAllActiveMembers(g)
+                            .stream()
+                            .map(m -> GroupMemberResponse.of(m, profileRepository.findByUser(m.getUser()).orElse(null)))
+                            .toList();
+                    return MyGroupResponse.of(g, memberCount, members);
+                });
     }
 
     // ──────────────────────────────────────────────────────────
@@ -424,6 +451,19 @@ public class GroupService {
                                 .role(GroupMember.MemberRole.MEMBER)
                                 .build())
                 );
+    }
+
+    private String uploadGroupImage(MultipartFile image, String groupUuid) {
+        if (image == null || image.isEmpty()) return null;
+        try {
+            return fileStorageService.store(image, "groups", groupUuid);
+        } catch (IllegalStateException e) {
+            throw new GroupException("파일 저장소 설정이 누락되었습니다. " + e.getMessage(), HttpStatus.SERVICE_UNAVAILABLE);
+        } catch (IllegalArgumentException e) {
+            throw new GroupException(e.getMessage(), HttpStatus.BAD_REQUEST);
+        } catch (IOException e) {
+            throw new GroupException("이미지 업로드 중 오류가 발생했습니다.", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 
     private void notifyAdmin(Group group, User actor, NotificationType type,

@@ -14,9 +14,6 @@ public record CreateGroupRequest(
         @Schema(description = "모임 소개", example = "서울 곳곳을 함께 걷는 모임")
         String description,
 
-        @Schema(description = "모임 프로필 이미지 URL")
-        String profileImageUrl,
-
         @Schema(description = "공개 여부: PUBLIC | PRIVATE", example = "PUBLIC")
         GroupType type,
 

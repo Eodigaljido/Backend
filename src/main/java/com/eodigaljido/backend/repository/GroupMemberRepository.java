@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> {
@@ -23,4 +24,10 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
     Page<GroupMember> findActiveMembers(@Param("group") Group group, Pageable pageable);
 
     long countByGroupAndLeftAtIsNull(Group group);
+
+    @Query("SELECT gm FROM GroupMember gm JOIN FETCH gm.group g WHERE gm.user = :user AND gm.leftAt IS NULL AND g.status = 'ACTIVE' ORDER BY gm.joinedAt DESC")
+    Page<GroupMember> findActiveGroupsByUser(@Param("user") User user, Pageable pageable);
+
+    @Query("SELECT gm FROM GroupMember gm JOIN FETCH gm.user WHERE gm.group = :group AND gm.leftAt IS NULL")
+    List<GroupMember> findAllActiveMembers(@Param("group") Group group);
 }
