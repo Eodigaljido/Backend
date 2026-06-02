@@ -28,28 +28,36 @@ public class SwaggerConfig {
                                 - 대부분의 API는 **JWT Bearer 토큰**이 필요합니다.
                                 - `POST /auth/login` 또는 OAuth 로그인으로 `accessToken`을 발급받아 요청 헤더에 포함하세요.
                                 - 헤더 형식: `Authorization: Bearer {accessToken}`
-                                - 토큰 만료(401) 시 `POST /auth/token/refresh`로 재발급하세요.
+                                - 토큰 만료(401) 시 `POST /auth/token/refresh`로 재발급할 수 있습니다.
 
-                                ### 비로그인 허용 API (🔓)
+                                ### 비로그인 허용 API
                                 | 경로 | 설명 |
                                 |------|------|
-                                | `GET /api/courses/public` | 공유 코스 목록 |
+                                | `GET /api/courses/public` | 공개 코스 목록 |
                                 | `GET /api/courses/{courseId}` | 공개 코스 상세 |
-                                | `GET /api/courses/public/{courseId}/preview` | 코스 공유 링크 preview (share-web / OG 카드) |
-                                | `GET /api/friends/code/{friendCode}/preview` | 친구 초대 링크 preview (share-web) |
+                                | `GET /api/courses/public/{courseId}/preview` | 코스 공유 링크 preview |
+                                | `GET /api/friends/code/{friendCode}/preview` | 친구 초대 링크 preview |
                                 | `GET /api/weather` | 날씨 |
-                                | `GET /api/home/courses` | 홈 인기 코스 |
-                                | `POST /api/courses/{courseId}/reviews` | 코스 리뷰 (비로그인 가능) |
+                                | `GET /api/home/courses` | 인기 코스 |
+                                | `POST /api/courses/{courseId}/reviews` | 코스 리뷰 작성 |
 
-                                ### 코스 약속 API (`/course-schedules`)
+                                ### 코스 약속 API
                                 | 메서드 | 경로 | 설명 |
                                 |--------|------|------|
-                                | `POST` | `/course-schedules` | 약속 생성 |
-                                | `GET` | `/course-schedules` | 약속 목록 조회 (`from`, `to`, `page`, `size`) |
-                                | `GET` | `/course-schedules/nearest` | 가장 가까운 약속 1건 (홈 카드용) |
-                                | `GET` | `/course-schedules/{scheduleId}` | 약속 상세 조회 |
-                                | `PATCH` | `/course-schedules/{scheduleId}` | 약속 수정 |
-                                | `DELETE` | `/course-schedules/{scheduleId}` | 약속 삭제 |
+                                | `GET` | `/api/course-schedules` | 코스 약속 목록 조회 (`from`, `to`, `chatRoomUuid`, `upcomingOnly`) |
+                                | `GET` | `/api/course-schedules/nearest` | 가장 가까운 미래 약속 1건 조회 |
+                                | `GET` | `/api/course-schedules/{scheduleUuid}` | 코스 약속 상세 조회 |
+                                | `POST` | `/api/course-schedules` | 코스 약속 생성 |
+                                | `PATCH` | `/api/course-schedules/{scheduleUuid}` | 코스 약속 수정 |
+                                | `DELETE` | `/api/course-schedules/{scheduleUuid}` | 코스 약속 삭제 |
+
+                                ### 코스 약속 사용 규칙
+                                - `scheduledAt`은 ISO-8601 형식입니다. 예: `2026-06-08T19:00:00+09:00`
+                                - 생성 시 `title`, `scheduledAt`, `chatRoomUuid`가 필수입니다.
+                                - 생성자는 선택한 채팅방의 현재 멤버여야 합니다.
+                                - 목록/상세 조회는 생성자 또는 연결된 채팅방 멤버에게 허용됩니다.
+                                - 수정/삭제는 생성자 또는 연결된 채팅방의 ADMIN 멤버에게 허용됩니다.
+                                - `notifyChat: true`이면 약속 생성 시 채팅방에 시스템 메시지를 남깁니다.
 
                                 ### 에러 응답 형식
                                 ```json
@@ -60,33 +68,33 @@ public class SwaggerConfig {
                                 }
                                 ```
 
-                                ### 프로필 응답 필드 (`GET /users/me`, `GET /users/{uuid}`)
+                                ### 프로필 응답 주요 필드 (`GET /users/me`, `GET /users/{uuid}`)
                                 | 필드 | 설명 |
                                 |------|------|
                                 | `sharedCourseCount` | 공유 중인 코스 수 |
-                                | `averageRating` | 공유 코스들의 평균 평점 (리뷰 없으면 null) |
+                                | `averageRating` | 공유 코스들의 평균 평점. 리뷰가 없으면 null |
                                 | `savedCourseCount` | 즐겨찾기한 코스 수 |
-                                | `email` | 이메일 (`GET /users/{uuid}` 전용) |
+                                | `email` | 이메일. `GET /users/{uuid}`에서는 null |
 
                                 ### 즐겨찾기 코스 목록 API
                                 | 경로 | 설명 |
                                 |------|------|
                                 | `GET /users/me/saved-courses` | 내가 즐겨찾기한 코스 목록 |
-                                | `GET /users/{uuid}/saved-courses` | 다른 유저가 즐겨찾기한 코스 목록 |
+                                | `GET /users/{uuid}/saved-courses` | 다른 사용자가 즐겨찾기한 코스 목록 |
 
-                                ### 공유 링크 도메인
-                                | 유형 | 링크 패턴 | 앱 화면 |
+                                ### 공유 링크 프론트
+                                | 유형 | 링크 패턴 | 대상 화면 |
                                 |------|-----------|---------|
                                 | 코스 공유 | `https://share.eodigaljido.rjsgud.com/courses/public/{courseId}` | SharedRoute |
                                 | 친구 초대 | `https://share.eodigaljido.rjsgud.com/friends/add/{friendCode}` | 친구 추가 |
-                                | 공동 루트 | `https://share.eodigaljido.rjsgud.com/routes/collaborative/{courseId}` | RouteCreate (편집) |
+                                | 공동 루트 | `https://share.eodigaljido.rjsgud.com/routes/collaborative/{courseId}` | RouteCreate |
 
                                 ### 공동 루트 채팅방 연결 흐름
-                                1. `POST /api/courses/my/{courseId}/invites` → 공동 편집 활성화 + 채팅방 자동 생성
-                                2. `GET /api/courses/my/{courseId}/chat-room` → `chatRoomUuid` 조회
-                                3. `POST /chats/{roomUuid}/members` (`userId` 사용) → 멤버 초대
+                                1. `POST /api/courses/my/{courseId}/invites`로 공동 편집 활성화 및 채팅방 자동 생성
+                                2. `GET /api/courses/my/{courseId}/chat-room`로 `chatRoomUuid` 조회
+                                3. `POST /chats/{roomUuid}/members`에서 `userId`로 멤버 초대
 
-                                ### WebSocket (실시간 채팅)
+                                ### WebSocket 실시간 채팅
                                 - 연결 엔드포인트: `ws://{host}/ws/chat` (SockJS 지원)
                                 - CONNECT 헤더: `Authorization: Bearer {accessToken}`
                                 - 메시지 수신 구독: `/topic/chat/{roomUuid}`
@@ -97,9 +105,9 @@ public class SwaggerConfig {
                                 .name("어디갈지도 팀")
                                 .email("russeldestiny1234@gmail.com")))
                 .servers(List.of(
-                        new Server().url("/").description("Current origin"),
-                        new Server().url("https://api.eodigaljido.uk").description("Production"),
-                        new Server().url("http://localhost:8080").description("Local")
+                        new Server().url("/").description("현재 접속 주소"),
+                        new Server().url("https://api.eodigaljido.uk").description("운영 서버"),
+                        new Server().url("http://localhost:8080").description("로컬 개발 서버")
                 ))
                 .addSecurityItem(new SecurityRequirement().addList("Bearer"))
                 .components(new Components()
@@ -111,11 +119,11 @@ public class SwaggerConfig {
                 .tags(List.of(
                         new Tag().name("Auth").description("로그인 / 인증 / OAuth"),
                         new Tag().name("User").description("회원 / 프로필 / 즐겨찾기 코스"),
-                        new Tag().name("Course").description("코스 (공유루트 / 내루트 / 공동루트 / preview)"),
-                        new Tag().name("CourseSchedule").description("코스 약속 (일정 생성·조회·수정·삭제)"),
+                        new Tag().name("Course").description("코스 / 공개 루트 / 내 루트 / 공동 루트 / preview"),
+                        new Tag().name("CourseSchedule").description("코스 약속 일정 생성, 조회, 수정, 삭제"),
                         new Tag().name("Friend").description("친구 / 친구 코드 / 초대 preview"),
-                        new Tag().name("Group").description("모임 (생성·가입·게시판·채팅방)"),
-                        new Tag().name("Chat").description("채팅방 / 메시지 (REST + WebSocket)"),
+                        new Tag().name("Group").description("모임 / 게시판 / 모임 채팅방"),
+                        new Tag().name("Chat").description("채팅방 / 메시지 / REST + WebSocket"),
                         new Tag().name("Notification").description("알림"),
                         new Tag().name("Following News").description("팔로잉 소식"),
                         new Tag().name("Onboarding").description("온보딩 설문"),

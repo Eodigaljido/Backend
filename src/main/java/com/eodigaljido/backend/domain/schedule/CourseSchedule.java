@@ -2,6 +2,7 @@ package com.eodigaljido.backend.domain.schedule;
 
 import com.eodigaljido.backend.domain.chat.ChatRoom;
 import com.eodigaljido.backend.domain.common.BaseTimeEntity;
+import com.eodigaljido.backend.domain.route.Route;
 import com.eodigaljido.backend.domain.user.User;
 import jakarta.persistence.*;
 import lombok.*;
@@ -14,6 +15,8 @@ import java.time.LocalDateTime;
     indexes = {
         @Index(name = "idx_course_schedules_uuid", columnList = "uuid"),
         @Index(name = "idx_course_schedules_owner_scheduled_at", columnList = "owner_id, scheduled_at"),
+        @Index(name = "idx_course_schedules_chat_room_scheduled_at", columnList = "chat_room_id, scheduled_at"),
+        @Index(name = "idx_course_schedules_scheduled_at", columnList = "scheduled_at"),
         @Index(name = "idx_course_schedules_deleted_at", columnList = "deleted_at")
     }
 )
@@ -34,7 +37,7 @@ public class CourseSchedule extends BaseTimeEntity {
     @JoinColumn(name = "owner_id", nullable = false)
     private User owner;
 
-    @Column(length = 80, nullable = false)
+    @Column(length = 100, nullable = false)
     private String title;
 
     @Column(name = "scheduled_at", nullable = false)
@@ -44,8 +47,9 @@ public class CourseSchedule extends BaseTimeEntity {
     @JoinColumn(name = "chat_room_id")
     private ChatRoom chatRoom;
 
-    @Column(length = 300)
-    private String memo;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "course_id")
+    private Route course;
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
@@ -62,8 +66,8 @@ public class CourseSchedule extends BaseTimeEntity {
         this.chatRoom = chatRoom;
     }
 
-    public void updateMemo(String memo) {
-        this.memo = memo;
+    public void updateCourse(Route course) {
+        this.course = course;
     }
 
     public void delete() {

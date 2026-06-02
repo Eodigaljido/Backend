@@ -53,6 +53,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(UserException.class)
     ResponseEntity<ErrorResponse> handleUser(UserException e) {
+        if (e.getStatus() == HttpStatus.NOT_FOUND || e.getStatus() == HttpStatus.GONE) {
+            log.debug("[User error] {} (status={})", e.getMessage(), e.getStatus().value());
+            return ResponseEntity.status(e.getStatus())
+                    .body(new ErrorResponse(e.getStatus().value(), e.getMessage(), LocalDateTime.now()));
+        }
         log.warn("[유저 오류] {} (status={})", e.getMessage(), e.getStatus().value());
         return ResponseEntity.status(e.getStatus())
                 .body(new ErrorResponse(e.getStatus().value(), e.getMessage(), LocalDateTime.now()));

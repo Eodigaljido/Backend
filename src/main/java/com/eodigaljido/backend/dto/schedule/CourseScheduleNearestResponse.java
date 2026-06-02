@@ -1,12 +1,9 @@
 package com.eodigaljido.backend.dto.schedule;
 
-import java.time.LocalDateTime;
+import io.swagger.v3.oas.annotations.media.Schema;
 
+@Schema(description = "가장 가까운 코스 약속 응답")
 public record CourseScheduleNearestResponse(
-    String id,
-    String title,
-    LocalDateTime scheduledAt,
-    String chatRoomUuid,
-    String chatRoomName,
-    long participantsCount
+        @Schema(description = "가장 가까운 미래 약속. 없으면 null입니다.", nullable = true)
+        CourseScheduleResponse item
 ) {}

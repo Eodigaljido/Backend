@@ -1,7 +1,9 @@
 package com.eodigaljido.backend.service;
 
 import com.eodigaljido.backend.domain.chat.ChatRoom;
+import com.eodigaljido.backend.domain.chat.ChatMessage;
 import com.eodigaljido.backend.domain.chat.ChatRoomMember;
+import com.eodigaljido.backend.domain.route.Route;
 import com.eodigaljido.backend.domain.schedule.CourseSchedule;
 import com.eodigaljido.backend.domain.schedule.CourseScheduleParticipant;
 import com.eodigaljido.backend.domain.user.Profile;
@@ -14,13 +16,14 @@ import com.eodigaljido.backend.dto.schedule.ParticipantSummary;
 import com.eodigaljido.backend.dto.schedule.UpdateCourseScheduleRequest;
 import com.eodigaljido.backend.exception.CourseScheduleException;
 import com.eodigaljido.backend.repository.ChatRoomMemberRepository;
+import com.eodigaljido.backend.repository.ChatMessageRepository;
 import com.eodigaljido.backend.repository.ChatRoomRepository;
 import com.eodigaljido.backend.repository.CourseScheduleParticipantRepository;
 import com.eodigaljido.backend.repository.CourseScheduleRepository;
 import com.eodigaljido.backend.repository.ProfileRepository;
+import com.eodigaljido.backend.repository.RouteRepository;
 import com.eodigaljido.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -29,257 +32,314 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+
+import static com.eodigaljido.backend.domain.chat.ChatRoomMember.MemberRole.ADMIN;
+import static com.eodigaljido.backend.domain.route.Route.RouteStatus.DELETED;
 
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class CourseScheduleService {
 
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+
     private final UserRepository userRepository;
     private final ProfileRepository profileRepository;
     private final ChatRoomRepository chatRoomRepository;
     private final ChatRoomMemberRepository chatRoomMemberRepository;
+    private final ChatMessageRepository chatMessageRepository;
     private final CourseScheduleRepository courseScheduleRepository;
     private final CourseScheduleParticipantRepository participantRepository;
+    private final RouteRepository routeRepository;
 
     @Transactional
     public CourseScheduleResponse createSchedule(Long userId, CreateCourseScheduleRequest req) {
-        User owner = findUser(userId);
-        LocalDateTime scheduledAt = parseScheduledAt(req.date(), req.time());
-
-        ChatRoom chatRoom = resolveChatRoom(req.chatRoomUuid(), owner);
+        User creator = findActiveUser(userId);
+        ChatRoom chatRoom = resolveChatRoomForMember(req.chatRoomUuid(), creator);
+        Route course = resolveCourse(req.courseUuid(), creator);
 
         CourseSchedule schedule = CourseSchedule.builder()
                 .uuid(UUID.randomUUID().toString())
-                .owner(owner)
-                .title(req.title())
-                .scheduledAt(scheduledAt)
+                .owner(creator)
+                .title(normalizeTitle(req.title()))
+                .scheduledAt(toUtcLocalDateTime(req.scheduledAt()))
                 .chatRoom(chatRoom)
-                .memo(req.memo())
+                .course(course)
                 .build();
         courseScheduleRepository.save(schedule);
+        snapshotParticipants(schedule, chatRoom);
+        if (Boolean.TRUE.equals(req.notifyChat())) {
+            createChatNotification(schedule, creator);
+        }
 
-        snapshotParticipants(schedule, owner, chatRoom);
-
-        List<CourseScheduleParticipant> participants = participantRepository.findByScheduleWithUser(schedule);
-        Map<Long, Profile> profileMap = buildProfileMap(participants.stream().map(CourseScheduleParticipant::getUser).toList());
-
-        return toResponse(schedule, participants, profileMap);
+        return toResponse(schedule);
     }
 
-    public CourseScheduleListResponse getSchedules(Long userId, String from, String to, int page, int size) {
-        User owner = findUser(userId);
-        LocalDateTime fromDt = from != null ? LocalDate.parse(from).atStartOfDay() : null;
-        LocalDateTime toDt = to != null ? LocalDate.parse(to).atTime(LocalTime.MAX) : null;
+    public CourseScheduleListResponse getSchedules(Long userId, String from, String to,
+                                                   String chatRoomUuid, boolean upcomingOnly) {
+        User user = findActiveUser(userId);
+        if (chatRoomUuid != null && !chatRoomUuid.isBlank()) {
+            resolveChatRoomForMember(chatRoomUuid, user);
+        }
 
-        Page<CourseSchedule> schedulePage = courseScheduleRepository.findByOwnerAndDateRange(
-                owner, fromDt, toDt, PageRequest.of(page, size));
+        List<CourseSchedule> schedules = courseScheduleRepository.findAccessibleSchedules(
+                user,
+                toUtcStartOfDay(from),
+                toUtcEndOfDay(to),
+                blankToNull(chatRoomUuid),
+                upcomingOnly,
+                LocalDateTime.now(ZoneOffset.UTC)
+        );
 
-        List<CourseSchedule> schedules = schedulePage.getContent();
-        List<CourseScheduleParticipant> allParticipants = schedules.isEmpty()
-                ? List.of()
-                : participantRepository.findByScheduleInWithUser(schedules);
-
-        Map<Long, Profile> profileMap = buildProfileMap(
-                allParticipants.stream().map(CourseScheduleParticipant::getUser).toList());
-
-        Map<Long, List<CourseScheduleParticipant>> bySchedule = allParticipants.stream()
-                .collect(Collectors.groupingBy(p -> p.getSchedule().getId()));
-
-        List<CourseScheduleListResponse.CourseScheduleItem> items = schedules.stream()
-                .map(s -> toListItem(s, bySchedule.getOrDefault(s.getId(), List.of()), profileMap))
-                .toList();
-
-        return new CourseScheduleListResponse(items, page, size, schedulePage.getTotalElements());
+        return new CourseScheduleListResponse(schedules.stream()
+                .map(this::toResponse)
+                .toList());
     }
 
     public CourseScheduleNearestResponse getNearestSchedule(Long userId) {
-        User owner = findUser(userId);
-        Page<CourseSchedule> result = courseScheduleRepository.findNearestByOwner(
-                owner, LocalDateTime.now(), PageRequest.of(0, 1));
-
-        if (result.isEmpty()) {
-            return null;
-        }
-
-        CourseSchedule schedule = result.getContent().get(0);
-        long count = participantRepository.countBySchedule(schedule);
-
-        return new CourseScheduleNearestResponse(
-                schedule.getUuid(),
-                schedule.getTitle(),
-                schedule.getScheduledAt(),
-                schedule.getChatRoom() != null ? schedule.getChatRoom().getUuid() : null,
-                schedule.getChatRoom() != null ? schedule.getChatRoom().getName() : null,
-                count
-        );
+        User user = findActiveUser(userId);
+        List<CourseSchedule> result = courseScheduleRepository.findNearestAccessibleSchedule(
+                user, LocalDateTime.now(ZoneOffset.UTC), PageRequest.of(0, 1));
+        return new CourseScheduleNearestResponse(result.isEmpty() ? null : toResponse(result.get(0)));
     }
 
     public CourseScheduleResponse getSchedule(Long userId, String scheduleUuid) {
-        User owner = findUser(userId);
+        User user = findActiveUser(userId);
         CourseSchedule schedule = findScheduleByUuid(scheduleUuid);
-        validateOwner(schedule, owner);
-
-        List<CourseScheduleParticipant> participants = participantRepository.findByScheduleWithUser(schedule);
-        Map<Long, Profile> profileMap = buildProfileMap(participants.stream().map(CourseScheduleParticipant::getUser).toList());
-
-        return toResponse(schedule, participants, profileMap);
+        validateCanView(schedule, user);
+        return toResponse(schedule);
     }
 
     @Transactional
     public CourseScheduleResponse updateSchedule(Long userId, String scheduleUuid, UpdateCourseScheduleRequest req) {
-        User owner = findUser(userId);
+        User user = findActiveUser(userId);
         CourseSchedule schedule = findScheduleByUuid(scheduleUuid);
-        validateOwner(schedule, owner);
+        validateCanManage(schedule, user);
 
         if (req.title() != null) {
-            schedule.updateTitle(req.title());
+            schedule.updateTitle(normalizeTitle(req.title()));
         }
-
-        if (req.date() != null || req.time() != null) {
-            String date = req.date() != null ? req.date()
-                    : schedule.getScheduledAt().toLocalDate().format(DateTimeFormatter.ISO_LOCAL_DATE);
-            String time = req.time() != null ? req.time()
-                    : schedule.getScheduledAt().toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"));
-            schedule.updateScheduledAt(parseScheduledAt(date, time));
+        if (req.scheduledAt() != null) {
+            schedule.updateScheduledAt(toUtcLocalDateTime(req.scheduledAt()));
         }
-
-        if (req.memo() != null) {
-            schedule.updateMemo(req.memo());
+        if (req.courseUuid() != null) {
+            schedule.updateCourse(resolveCourse(req.courseUuid(), user));
         }
-
-        boolean chatRoomChanged = req.chatRoomUuid() != null;
-        if (chatRoomChanged) {
-            ChatRoom newChatRoom = resolveChatRoom(req.chatRoomUuid().isBlank() ? null : req.chatRoomUuid(), owner);
-            schedule.updateChatRoom(newChatRoom);
+        if (req.chatRoomUuid() != null) {
+            ChatRoom chatRoom = resolveChatRoomForMember(req.chatRoomUuid(), user);
+            schedule.updateChatRoom(chatRoom);
             participantRepository.deleteBySchedule(schedule);
-            snapshotParticipants(schedule, owner, newChatRoom);
+            snapshotParticipants(schedule, chatRoom);
         }
 
-        List<CourseScheduleParticipant> participants = participantRepository.findByScheduleWithUser(schedule);
-        Map<Long, Profile> profileMap = buildProfileMap(participants.stream().map(CourseScheduleParticipant::getUser).toList());
-
-        return toResponse(schedule, participants, profileMap);
+        return toResponse(schedule);
     }
 
     @Transactional
     public void deleteSchedule(Long userId, String scheduleUuid) {
-        User owner = findUser(userId);
+        User user = findActiveUser(userId);
         CourseSchedule schedule = findScheduleByUuid(scheduleUuid);
-        validateOwner(schedule, owner);
+        validateCanManage(schedule, user);
         schedule.delete();
     }
 
-    // --- 내부 헬퍼 ---
-
-    private User findUser(Long userId) {
+    private User findActiveUser(Long userId) {
         return userRepository.findById(userId)
-                .orElseThrow(() -> new CourseScheduleException("사용자를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+                .filter(u -> u.getStatus() == User.UserStatus.ACTIVE)
+                .orElseThrow(() -> new CourseScheduleException("User not found.", HttpStatus.NOT_FOUND));
     }
 
     private CourseSchedule findScheduleByUuid(String uuid) {
         return courseScheduleRepository.findByUuidAndDeletedAtIsNull(uuid)
-                .orElseThrow(() -> new CourseScheduleException("약속을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+                .orElseThrow(() -> new CourseScheduleException("Course schedule not found.", HttpStatus.NOT_FOUND));
     }
 
-    private void validateOwner(CourseSchedule schedule, User user) {
-        if (!schedule.getOwner().getId().equals(user.getId())) {
-            throw new CourseScheduleException("해당 약속에 대한 권한이 없습니다.", HttpStatus.FORBIDDEN);
-        }
-    }
-
-    private ChatRoom resolveChatRoom(String chatRoomUuid, User owner) {
+    private ChatRoom resolveChatRoomForMember(String chatRoomUuid, User user) {
         if (chatRoomUuid == null || chatRoomUuid.isBlank()) {
-            return null;
+            throw new CourseScheduleException("chatRoomUuid is required.", HttpStatus.BAD_REQUEST);
         }
-        ChatRoom chatRoom = chatRoomRepository.findByUuidAndDeletedAtIsNull(chatRoomUuid)
-                .orElseThrow(() -> new CourseScheduleException("채팅방을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
 
-        boolean isMember = chatRoomMemberRepository
-                .findByRoomAndUserAndLeftAtIsNull(chatRoom, owner)
-                .isPresent();
-        if (!isMember) {
-            throw new CourseScheduleException("해당 채팅방에 접근할 수 없습니다.", HttpStatus.UNPROCESSABLE_ENTITY);
+        ChatRoom chatRoom = chatRoomRepository.findByUuidAndDeletedAtIsNull(chatRoomUuid)
+                .orElseThrow(() -> new CourseScheduleException("Chat room not found.", HttpStatus.NOT_FOUND));
+        if (chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(chatRoom, user).isEmpty()) {
+            throw new CourseScheduleException("You are not a member of this chat room.", HttpStatus.FORBIDDEN);
         }
         return chatRoom;
     }
 
-    private void snapshotParticipants(CourseSchedule schedule, User owner, ChatRoom chatRoom) {
-        if (chatRoom != null) {
-            List<ChatRoomMember> members = chatRoomMemberRepository.findByRoomAndLeftAtIsNull(chatRoom);
-            for (ChatRoomMember member : members) {
+    private Route resolveCourse(String courseUuid, User user) {
+        if (courseUuid == null || courseUuid.isBlank()) {
+            return null;
+        }
+
+        Route route = routeRepository.findByUuidAndStatusNot(courseUuid, DELETED)
+                .orElseThrow(() -> new CourseScheduleException("Course not found.", HttpStatus.NOT_FOUND));
+        boolean ownedByUser = route.getUser().getId().equals(user.getId());
+        if (!route.isShared() && !ownedByUser) {
+            throw new CourseScheduleException("You cannot access this course.", HttpStatus.FORBIDDEN);
+        }
+        return route;
+    }
+
+    private void validateCanView(CourseSchedule schedule, User user) {
+        if (schedule.getOwner().getId().equals(user.getId())) {
+            return;
+        }
+        if (schedule.getChatRoom() == null) {
+            throw new CourseScheduleException("You cannot access this schedule.", HttpStatus.FORBIDDEN);
+        }
+        if (chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(schedule.getChatRoom(), user).isPresent()) {
+            return;
+        }
+        throw new CourseScheduleException("You cannot access this schedule.", HttpStatus.FORBIDDEN);
+    }
+
+    private void validateCanManage(CourseSchedule schedule, User user) {
+        if (schedule.getOwner().getId().equals(user.getId())) {
+            return;
+        }
+        if (schedule.getChatRoom() == null) {
+            throw new CourseScheduleException("You cannot modify this schedule.", HttpStatus.FORBIDDEN);
+        }
+        chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(schedule.getChatRoom(), user)
+                .filter(member -> member.getRole() == ADMIN)
+                .orElseThrow(() -> new CourseScheduleException("You cannot modify this schedule.", HttpStatus.FORBIDDEN));
+    }
+
+    private void snapshotParticipants(CourseSchedule schedule, ChatRoom chatRoom) {
+        chatRoomMemberRepository.findByRoomAndLeftAtIsNull(chatRoom).forEach(member ->
                 participantRepository.save(CourseScheduleParticipant.builder()
                         .schedule(schedule)
                         .user(member.getUser())
                         .source(CourseScheduleParticipant.ParticipantSource.CHAT_ROOM)
-                        .build());
-            }
-        } else {
-            participantRepository.save(CourseScheduleParticipant.builder()
-                    .schedule(schedule)
-                    .user(owner)
-                    .source(CourseScheduleParticipant.ParticipantSource.MANUAL)
-                    .build());
-        }
+                        .build()));
     }
 
-    private LocalDateTime parseScheduledAt(String date, String time) {
-        try {
-            LocalDate localDate = LocalDate.parse(date, DateTimeFormatter.ISO_LOCAL_DATE);
-            LocalTime localTime = LocalTime.parse(time, DateTimeFormatter.ofPattern("HH:mm"));
-            return LocalDateTime.of(localDate, localTime);
-        } catch (DateTimeParseException e) {
-            throw new CourseScheduleException("날짜 또는 시간 형식이 올바르지 않습니다. (date: yyyy-MM-dd, time: HH:mm)", HttpStatus.BAD_REQUEST);
+    private void createChatNotification(CourseSchedule schedule, User sender) {
+        String scheduledAt = schedule.getScheduledAt()
+                .atOffset(ZoneOffset.UTC)
+                .atZoneSameInstant(KST)
+                .format(DateTimeFormatter.ofPattern("M월 d일 HH:mm"));
+        String content = "코스 약속이 만들어졌어요\n"
+                + schedule.getTitle() + "\n"
+                + scheduledAt;
+
+        chatMessageRepository.save(ChatMessage.builder()
+                .uuid(UUID.randomUUID().toString())
+                .room(schedule.getChatRoom())
+                .sender(sender)
+                .type(ChatMessage.MessageType.SYSTEM)
+                .content(content)
+                .build());
+    }
+
+    private CourseScheduleResponse toResponse(CourseSchedule schedule) {
+        List<ChatRoomMember> members = schedule.getChatRoom() != null
+                ? chatRoomMemberRepository.findByRoomAndLeftAtIsNull(schedule.getChatRoom())
+                : List.of();
+        List<User> users = members.isEmpty()
+                ? List.of(schedule.getOwner())
+                : members.stream().map(ChatRoomMember::getUser).toList();
+        Map<Long, Profile> profileMap = buildProfileMap(users);
+        Profile creatorProfile = profileMap.get(schedule.getOwner().getId());
+
+        return new CourseScheduleResponse(
+                schedule.getUuid(),
+                schedule.getTitle(),
+                toOffsetDateTime(schedule.getScheduledAt()),
+                schedule.getChatRoom() != null ? schedule.getChatRoom().getUuid() : null,
+                schedule.getChatRoom() != null ? schedule.getChatRoom().getName() : null,
+                schedule.getCourse() != null ? schedule.getCourse().getUuid() : null,
+                schedule.getCourse() != null ? schedule.getCourse().getTitle() : null,
+                schedule.getOwner().getUuid(),
+                nicknameOf(schedule.getOwner(), creatorProfile),
+                toParticipantSummaries(members, schedule.getOwner(), profileMap),
+                toOffsetDateTime(schedule.getCreatedAt()),
+                toOffsetDateTime(schedule.getUpdatedAt())
+        );
+    }
+
+    private List<ParticipantSummary> toParticipantSummaries(List<ChatRoomMember> members, User owner, Map<Long, Profile> profileMap) {
+        if (members.isEmpty()) {
+            return List.of(new ParticipantSummary(
+                    owner.getUuid(),
+                    nicknameOf(owner, profileMap.get(owner.getId())),
+                    owner.getUserId()
+            ));
         }
+        return members.stream()
+                .map(member -> {
+                    User user = member.getUser();
+                    return new ParticipantSummary(
+                            user.getUuid(),
+                            nicknameOf(user, profileMap.get(user.getId())),
+                            user.getUserId()
+                    );
+                })
+                .toList();
     }
 
     private Map<Long, Profile> buildProfileMap(List<User> users) {
-        if (users.isEmpty()) return Map.of();
-        List<Profile> profiles = profileRepository.findByUserIn(users);
-        return profiles.stream().collect(Collectors.toMap(p -> p.getUser().getId(), p -> p));
+        if (users.isEmpty()) {
+            return Map.of();
+        }
+        return profileRepository.findByUserIn(users).stream()
+                .collect(Collectors.toMap(p -> p.getUser().getId(), p -> p, (first, second) -> first));
     }
 
-    private String nicknameOf(User user, Map<Long, Profile> profileMap) {
-        Profile profile = profileMap.get(user.getId());
-        return profile != null ? profile.getNickname() : user.getUserId();
+    private String normalizeTitle(String title) {
+        String normalized = title != null ? title.trim() : "";
+        if (normalized.isBlank()) {
+            throw new CourseScheduleException("title is required.", HttpStatus.BAD_REQUEST);
+        }
+        if (normalized.length() > 100) {
+            throw new CourseScheduleException("title must be 100 characters or less.", HttpStatus.BAD_REQUEST);
+        }
+        return normalized;
     }
 
-    private CourseScheduleResponse toResponse(CourseSchedule s, List<CourseScheduleParticipant> participants, Map<Long, Profile> profileMap) {
-        List<ParticipantSummary> summaries = participants.stream()
-                .map(p -> new ParticipantSummary(p.getUser().getUuid(), nicknameOf(p.getUser(), profileMap)))
-                .toList();
-
-        return new CourseScheduleResponse(
-                s.getUuid(),
-                s.getTitle(),
-                s.getScheduledAt(),
-                s.getChatRoom() != null ? s.getChatRoom().getUuid() : null,
-                s.getChatRoom() != null ? s.getChatRoom().getName() : null,
-                s.getMemo(),
-                summaries,
-                s.getCreatedAt(),
-                s.getUpdatedAt()
-        );
+    private String nicknameOf(User user, Profile profile) {
+        if (profile != null && profile.getNickname() != null && !profile.getNickname().isBlank()) {
+            return profile.getNickname();
+        }
+        return user.getUserId();
     }
 
-    private CourseScheduleListResponse.CourseScheduleItem toListItem(CourseSchedule s, List<CourseScheduleParticipant> participants, Map<Long, Profile> profileMap) {
-        List<ParticipantSummary> summaries = participants.stream()
-                .map(p -> new ParticipantSummary(p.getUser().getUuid(), nicknameOf(p.getUser(), profileMap)))
-                .toList();
+    private LocalDateTime toUtcLocalDateTime(OffsetDateTime scheduledAt) {
+        return scheduledAt.withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime();
+    }
 
-        return new CourseScheduleListResponse.CourseScheduleItem(
-                s.getUuid(),
-                s.getTitle(),
-                s.getScheduledAt(),
-                s.getChatRoom() != null ? s.getChatRoom().getUuid() : null,
-                s.getChatRoom() != null ? s.getChatRoom().getName() : null,
-                summaries
-        );
+    private OffsetDateTime toOffsetDateTime(LocalDateTime dateTime) {
+        return dateTime != null ? dateTime.atOffset(ZoneOffset.UTC) : null;
+    }
+
+    private LocalDateTime toUtcStartOfDay(String date) {
+        if (date == null || date.isBlank()) {
+            return null;
+        }
+        return LocalDate.parse(date).atStartOfDay(KST)
+                .withZoneSameInstant(ZoneOffset.UTC)
+                .toLocalDateTime();
+    }
+
+    private LocalDateTime toUtcEndOfDay(String date) {
+        if (date == null || date.isBlank()) {
+            return null;
+        }
+        return LocalDate.parse(date).atTime(LocalTime.MAX).atZone(KST)
+                .withZoneSameInstant(ZoneOffset.UTC)
+                .toLocalDateTime();
+    }
+
+    private String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value;
     }
 }
