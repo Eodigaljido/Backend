@@ -1,6 +1,7 @@
 package com.eodigaljido.backend.service;
 
 import com.eodigaljido.backend.domain.chat.ChatRoom;
+import com.eodigaljido.backend.domain.chat.ChatMessage;
 import com.eodigaljido.backend.domain.chat.ChatRoomMember;
 import com.eodigaljido.backend.domain.route.Route;
 import com.eodigaljido.backend.domain.schedule.CourseSchedule;
@@ -15,6 +16,7 @@ import com.eodigaljido.backend.dto.schedule.ParticipantSummary;
 import com.eodigaljido.backend.dto.schedule.UpdateCourseScheduleRequest;
 import com.eodigaljido.backend.exception.CourseScheduleException;
 import com.eodigaljido.backend.repository.ChatRoomMemberRepository;
+import com.eodigaljido.backend.repository.ChatMessageRepository;
 import com.eodigaljido.backend.repository.ChatRoomRepository;
 import com.eodigaljido.backend.repository.CourseScheduleParticipantRepository;
 import com.eodigaljido.backend.repository.CourseScheduleRepository;
@@ -33,6 +35,7 @@ import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -52,6 +55,7 @@ public class CourseScheduleService {
     private final ProfileRepository profileRepository;
     private final ChatRoomRepository chatRoomRepository;
     private final ChatRoomMemberRepository chatRoomMemberRepository;
+    private final ChatMessageRepository chatMessageRepository;
     private final CourseScheduleRepository courseScheduleRepository;
     private final CourseScheduleParticipantRepository participantRepository;
     private final RouteRepository routeRepository;
@@ -72,6 +76,9 @@ public class CourseScheduleService {
                 .build();
         courseScheduleRepository.save(schedule);
         snapshotParticipants(schedule, chatRoom);
+        if (Boolean.TRUE.equals(req.notifyChat())) {
+            createChatNotification(schedule, creator);
+        }
 
         return toResponse(schedule);
     }
@@ -214,6 +221,24 @@ public class CourseScheduleService {
                         .user(member.getUser())
                         .source(CourseScheduleParticipant.ParticipantSource.CHAT_ROOM)
                         .build()));
+    }
+
+    private void createChatNotification(CourseSchedule schedule, User sender) {
+        String scheduledAt = schedule.getScheduledAt()
+                .atOffset(ZoneOffset.UTC)
+                .atZoneSameInstant(KST)
+                .format(DateTimeFormatter.ofPattern("M월 d일 HH:mm"));
+        String content = "코스 약속이 만들어졌어요\n"
+                + schedule.getTitle() + "\n"
+                + scheduledAt;
+
+        chatMessageRepository.save(ChatMessage.builder()
+                .uuid(UUID.randomUUID().toString())
+                .room(schedule.getChatRoom())
+                .sender(sender)
+                .type(ChatMessage.MessageType.SYSTEM)
+                .content(content)
+                .build());
     }
 
     private CourseScheduleResponse toResponse(CourseSchedule schedule) {
