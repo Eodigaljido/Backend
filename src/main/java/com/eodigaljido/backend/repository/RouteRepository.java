@@ -68,7 +68,7 @@ public interface RouteRepository extends JpaRepository<Route, Long> {
                                            @Param("q") String q,
                                            Pageable pageable);
 
-    // 내 코스 목록 (직접 만들거나 저장한 코스)
+    // 내 코스 목록 (직접 만들거나 저장한 코스, 또는 공동작업 모임 루트)
     @Query("""
             SELECT DISTINCT r FROM Route r JOIN FETCH r.user
             WHERE r.status <> :status
@@ -76,7 +76,15 @@ public interface RouteRepository extends JpaRepository<Route, Long> {
                 OR EXISTS (
                      SELECT s FROM SavedRoute s
                      WHERE s.route = r AND s.user.id = :userId
-                   ))
+                   )
+                OR (r.isCollaborative = true
+                    AND r.group IS NOT NULL
+                    AND EXISTS (
+                          SELECT gm FROM GroupMember gm
+                          WHERE gm.group = r.group
+                            AND gm.user.id = :userId
+                            AND gm.leftAt IS NULL
+                        )))
               AND (:category IS NULL OR r.activityType = :category)
               AND (:region IS NULL OR r.region = :region)
               AND (:q IS NULL OR r.title LIKE %:q% OR r.description LIKE %:q%)
