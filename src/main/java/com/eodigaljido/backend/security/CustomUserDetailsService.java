@@ -19,8 +19,16 @@ public class CustomUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String userId) throws UsernameNotFoundException {
-        User user = userRepository.findById(Long.parseLong(userId))
-                .orElseThrow(() -> new UsernameNotFoundException("사용자를 찾을 수 없습니다."));
+        Long id;
+        try {
+            id = Long.parseLong(userId);
+        } catch (NumberFormatException e) {
+            throw new UsernameNotFoundException("Invalid user id.", e);
+        }
+
+        User user = userRepository.findById(id)
+                .filter(u -> u.getStatus() == User.UserStatus.ACTIVE)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found."));
 
         return new org.springframework.security.core.userdetails.User(
                 String.valueOf(user.getId()),

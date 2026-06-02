@@ -19,6 +19,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
+import org.springframework.security.web.util.matcher.RegexRequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -62,6 +63,15 @@ public class SecurityConfig {
             "/actuator/health", "/actuator/info"
     };
 
+    private static final String COURSE_UUID_PATH_PATTERN =
+            "/api/courses/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
+
+    static final RegexRequestMatcher PUBLIC_COURSE_DETAIL_MATCHER =
+            RegexRequestMatcher.regexMatcher(HttpMethod.GET, "^" + COURSE_UUID_PATH_PATTERN + "$");
+
+    static final RegexRequestMatcher PUBLIC_COURSE_REVIEW_MATCHER =
+            RegexRequestMatcher.regexMatcher(HttpMethod.POST, "^" + COURSE_UUID_PATH_PATTERN + "/reviews$");
+
     private static final String[] WEBSOCKET_ALLOWED_ORIGINS= {
             "http://localhost:3000", "http://localhost:5173", "exp://172.28.22.99:8081", "http://localhost:8081", "*"
     };
@@ -94,8 +104,8 @@ public class SecurityConfig {
                     auth.requestMatchers(ACTUATOR_ENDPOINTS).permitAll();
                     auth.requestMatchers(SWAGGER_ENDPOINTS).permitAll();
                     // 코스 상세 조회 및 리뷰 작성은 GET/POST 모두 공개 (인증 선택)
-                    auth.requestMatchers(HttpMethod.GET, "/api/courses/*").permitAll();
-                    auth.requestMatchers(HttpMethod.POST, "/api/courses/*/reviews").permitAll();
+                    auth.requestMatchers(PUBLIC_COURSE_DETAIL_MATCHER).permitAll();
+                    auth.requestMatchers(PUBLIC_COURSE_REVIEW_MATCHER).permitAll();
                     // 공유 링크 preview — 비로그인 허용 (share-web, 카톡 인앱 브라우저)
                     auth.requestMatchers(HttpMethod.GET, "/api/courses/public/*/preview").permitAll();
                     auth.requestMatchers(HttpMethod.GET, "/api/friends/code/*/preview").permitAll();
