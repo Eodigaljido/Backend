@@ -1,6 +1,7 @@
 package com.eodigaljido.backend.exception;
 
 import com.eodigaljido.backend.dto.common.ErrorResponse;
+import com.eodigaljido.backend.dto.course.CourseVersionConflictResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -74,6 +75,18 @@ public class GlobalExceptionHandler {
     ResponseEntity<ErrorResponse> handleRoute(RouteException e) {
         return ResponseEntity.status(e.getStatus())
                 .body(new ErrorResponse(e.getStatus().value(), e.getMessage(), LocalDateTime.now()));
+    }
+
+    @ExceptionHandler(CourseVersionConflictException.class)
+    ResponseEntity<CourseVersionConflictResponse> handleCourseVersionConflict(CourseVersionConflictException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new CourseVersionConflictResponse(
+                        HttpStatus.CONFLICT.value(),
+                        e.getMessage(),
+                        e.getCurrentVersion(),
+                        e.getCourse(),
+                        LocalDateTime.now()
+                ));
     }
 
     @ExceptionHandler(GroupException.class)

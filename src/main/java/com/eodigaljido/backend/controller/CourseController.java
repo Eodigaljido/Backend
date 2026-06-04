@@ -442,12 +442,80 @@ public class CourseController {
             @Valid @RequestBody CreateMyCourseRequest request,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
-        return ResponseEntity.ok(courseService.updateMyCourse(userId, courseId, request));
+        return ResponseEntity.ok(courseService.updateMyCourseCollaborative(userId, courseId, request));
     }
 
     // ──────────────────────────────────────────────────────────
     // 내 루트 대표 이미지
     // ──────────────────────────────────────────────────────────
+
+    @GetMapping("/collaborative/{courseId}")
+    @Operation(summary = "공동 루트 진입 정보 조회", description = "공동 루트 멤버만 조회할 수 있습니다.", security = @SecurityRequirement(name = "Bearer"))
+    public ResponseEntity<CollaborativeCourseResponse> getCollaborativeCourse(
+            @PathVariable String courseId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.ok(courseService.getCollaborativeCourse(userId, courseId));
+    }
+
+    @GetMapping("/my/{courseId}/members")
+    @Operation(summary = "공동 루트 멤버 목록 조회", security = @SecurityRequirement(name = "Bearer"))
+    public ResponseEntity<CourseMemberListResponse> getCourseMembers(
+            @PathVariable String courseId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.ok(courseService.getCourseMembers(userId, courseId));
+    }
+
+    @PostMapping("/my/{courseId}/members")
+    @Operation(summary = "공동 루트 멤버 추가", description = "OWNER 또는 EDITOR만 멤버를 추가할 수 있습니다.", security = @SecurityRequirement(name = "Bearer"))
+    public ResponseEntity<CollaborativeMemberResponse> addCourseMember(
+            @PathVariable String courseId,
+            @Valid @RequestBody AddCourseMemberRequest request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.status(201).body(courseService.addCourseMember(userId, courseId, request));
+    }
+
+    @DeleteMapping("/my/{courseId}/members/{userUuid}")
+    @Operation(summary = "공동 루트 멤버 제거", security = @SecurityRequirement(name = "Bearer"))
+    public ResponseEntity<Void> removeCourseMember(
+            @PathVariable String courseId,
+            @PathVariable String userUuid,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        courseService.removeCourseMember(userId, courseId, userUuid);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/my/{courseId}/members/me")
+    @Operation(summary = "공동 루트 나가기", security = @SecurityRequirement(name = "Bearer"))
+    public ResponseEntity<Void> leaveCourse(
+            @PathVariable String courseId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        courseService.leaveCourse(userId, courseId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/my/{courseId}/chat-room")
+    @Operation(summary = "공동 루트 채팅방 연결", security = @SecurityRequirement(name = "Bearer"))
+    public ResponseEntity<CourseChatRoomResponse> linkCourseChatRoom(
+            @PathVariable String courseId,
+            @Valid @RequestBody LinkCourseChatRoomRequest request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.ok(courseService.linkCourseChatRoom(userId, courseId, request));
+    }
+
+    @GetMapping("/my/{courseId}/chat-room")
+    @Operation(summary = "공동 루트 채팅방 조회", security = @SecurityRequirement(name = "Bearer"))
+    public ResponseEntity<CourseChatRoomResponse> getCourseChatRoom(
+            @PathVariable String courseId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.ok(courseService.getCourseChatRoom(userId, courseId));
+    }
 
     @PatchMapping(value = "/my/{courseId}/thumbnail", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(
