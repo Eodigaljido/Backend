@@ -524,7 +524,7 @@ public class ChatService {
         if (membership.getRole() != ChatRoomMember.MemberRole.ADMIN) {
             throw new ChatException("프로필 이미지 변경 권한이 없습니다.", HttpStatus.FORBIDDEN);
         }
-        if (room.getType() == ChatRoom.RoomType.DIRECT) {
+        if (room.getType() == ChatRoom.RoomType.DIRECT && !isCollaborativeRouteChatRoom(room)) {
             throw new ChatException("1:1 채팅방에서는 프로필 이미지를 설정할 수 없습니다.", HttpStatus.BAD_REQUEST);
         }
 
@@ -552,7 +552,7 @@ public class ChatService {
         if (membership.getRole() != ChatRoomMember.MemberRole.ADMIN) {
             throw new ChatException("프로필 이미지 변경 권한이 없습니다.", HttpStatus.FORBIDDEN);
         }
-        if (room.getType() == ChatRoom.RoomType.DIRECT) {
+        if (room.getType() == ChatRoom.RoomType.DIRECT && !isCollaborativeRouteChatRoom(room)) {
             throw new ChatException("1:1 채팅방에서는 프로필 이미지를 설정할 수 없습니다.", HttpStatus.BAD_REQUEST);
         }
 
@@ -605,7 +605,7 @@ public class ChatService {
                 .orElse(0L);
 
         String profileImageUrl;
-        if (room.getType() == ChatRoom.RoomType.DIRECT) {
+        if (room.getType() == ChatRoom.RoomType.DIRECT && !isCollaborativeRouteChatRoom(room)) {
             profileImageUrl = members.stream()
                     .filter(m -> !m.getUser().getId().equals(currentUserId))
                     .findFirst()
@@ -688,5 +688,9 @@ public class ChatService {
 
     private String randomDefaultImage() {
         return DEFAULT_GROUP_IMAGES.get(RANDOM.nextInt(DEFAULT_GROUP_IMAGES.size()));
+    }
+
+    private boolean isCollaborativeRouteChatRoom(ChatRoom room) {
+        return routeRepository.findByChatRoomIdAndStatusNot(room.getId(), Route.RouteStatus.DELETED).isPresent();
     }
 }
