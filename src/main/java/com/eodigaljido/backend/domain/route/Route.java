@@ -59,6 +59,10 @@ public class Route extends BaseTimeEntity {
     @Builder.Default
     private boolean isCollaborative = false;
 
+    @Column(name = "version", nullable = false)
+    @Builder.Default
+    private long version = 0L;
+
     @Column(name = "total_distance", precision = 10, scale = 2)
     private BigDecimal totalDistance;
 
@@ -197,6 +201,10 @@ public class Route extends BaseTimeEntity {
 
     public void disableCollaboration() {
         this.isCollaborative = false;
+    }
+
+    public void incrementVersion() {
+        this.version++;
     }
 
     public void assignGroup(Group group) {

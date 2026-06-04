@@ -78,13 +78,19 @@ public interface RouteRepository extends JpaRepository<Route, Long> {
                      WHERE s.route = r AND s.user.id = :userId
                    )
                 OR (r.isCollaborative = true
-                    AND r.group IS NOT NULL
-                    AND EXISTS (
-                          SELECT gm FROM GroupMember gm
-                          WHERE gm.group = r.group
-                            AND gm.user.id = :userId
-                            AND gm.leftAt IS NULL
-                        )))
+                    AND (EXISTS (
+                          SELECT cm FROM CourseMember cm
+                          WHERE cm.route = r
+                            AND cm.user.id = :userId
+                            AND cm.leftAt IS NULL
+                        )
+                        OR (r.group IS NOT NULL
+                            AND EXISTS (
+                                  SELECT gm FROM GroupMember gm
+                                  WHERE gm.group = r.group
+                                    AND gm.user.id = :userId
+                                    AND gm.leftAt IS NULL
+                                )))))
               AND (:category IS NULL OR r.activityType = :category)
               AND (:region IS NULL OR r.region = :region)
               AND (:q IS NULL OR r.title LIKE %:q% OR r.description LIKE %:q%)

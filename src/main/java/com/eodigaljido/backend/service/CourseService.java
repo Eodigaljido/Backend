@@ -4,6 +4,7 @@ import com.eodigaljido.backend.domain.chat.ChatRoom;
 import com.eodigaljido.backend.domain.chat.ChatRoomMember;
 import com.eodigaljido.backend.domain.group.Group;
 import com.eodigaljido.backend.domain.notification.NotificationType;
+import com.eodigaljido.backend.domain.route.CourseMember;
 import com.eodigaljido.backend.domain.route.Route;
 import com.eodigaljido.backend.domain.route.Route.RouteStatus;
 import com.eodigaljido.backend.domain.route.RouteLeg;
@@ -12,10 +13,12 @@ import com.eodigaljido.backend.domain.route.RouteWaypoint;
 import com.eodigaljido.backend.domain.route.RouteTag;
 import com.eodigaljido.backend.domain.route.SavedRoute;
 import com.eodigaljido.backend.domain.following.FollowingNewsActionType;
+import com.eodigaljido.backend.domain.user.Profile;
 import com.eodigaljido.backend.domain.user.User;
 import com.eodigaljido.backend.dto.course.*;
 import com.eodigaljido.backend.event.NotificationEvent;
 import com.eodigaljido.backend.repository.RouteLegRepository;
+import com.eodigaljido.backend.exception.CourseVersionConflictException;
 import com.eodigaljido.backend.exception.RouteException;
 import com.eodigaljido.backend.exception.UserException;
 import com.eodigaljido.backend.repository.*;
@@ -27,6 +30,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -35,9 +39,12 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -60,9 +67,11 @@ public class CourseService {
     private final GroupMemberRepository groupMemberRepository;
     private final ChatRoomRepository chatRoomRepository;
     private final ChatRoomMemberRepository chatRoomMemberRepository;
+    private final CourseMemberRepository courseMemberRepository;
     private final FollowingNewsService followingNewsService;
     private final ApplicationEventPublisher eventPublisher;
     private final FileStorageService fileStorageService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     // ──────────────────────────────────────────────────────────
     // 코스 공유 링크 preview (비로그인 허용, 조회수 증가 없음)
@@ -266,6 +275,10 @@ public class CourseService {
                 .totalDistance(totalDistance)
                 .build();
         routeRepository.save(route);
+        if (Boolean.TRUE.equals(req.collaborative())) {
+            route.enableCollaboration();
+            ensureCourseMember(route, user, CourseMember.Role.OWNER);
+        }
         route.updateTags(processTags(req.tags()));
 
         List<RouteWaypoint> waypoints = buildWaypoints(route, req.stops());
@@ -311,6 +324,7 @@ public class CourseService {
         route.updateTags(processTags(req.tags()));
         route.assignGroup(group);
         route.enableCollaboration();
+        ensureCourseMember(route, user, CourseMember.Role.OWNER);
 
         if (!Boolean.FALSE.equals(req.createChatRoom())) {
             ChatRoom routeRoom = ChatRoom.builder()
@@ -346,7 +360,8 @@ public class CourseService {
     public MyCourseDetailResponse getMyCourseDetail(Long userId, String courseId) {
         Route route = routeRepository.findByUuidAndStatusNot(courseId, RouteStatus.DELETED)
                 .orElseThrow(() -> new RouteException("코스를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
-        if (!canEditRoute(route, userId)) {
+        User editor = findUser(userId);
+        if (!canEditRoute(route, editor)) {
             throw new RouteException("해당 코스에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN);
         }
         List<RouteWaypoint> waypoints = waypointRepository.findByRouteOrderBySequenceAsc(route);
@@ -441,7 +456,8 @@ public class CourseService {
     public MyCourseDetailResponse updateMyCourse(Long userId, String courseId, CreateMyCourseRequest req) {
         Route route = routeRepository.findByUuidAndStatusNot(courseId, RouteStatus.DELETED)
                 .orElseThrow(() -> new RouteException("코스를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
-        if (!canEditRoute(route, userId)) {
+        User editor = findUser(userId);
+        if (!canEditRoute(route, editor)) {
             throw new RouteException("해당 코스에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN);
         }
 
@@ -481,6 +497,69 @@ public class CourseService {
     // ──────────────────────────────────────────────────────────
     // 상태 변경 (DRAFT / PUBLISHED)
     // ──────────────────────────────────────────────────────────
+
+    @Transactional
+    public MyCourseDetailResponse updateMyCourseCollaborative(Long userId, String courseId, CreateMyCourseRequest req) {
+        Route route = routeRepository.findByUuidAndStatusNot(courseId, RouteStatus.DELETED)
+                .orElseThrow(() -> new RouteException("코스를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        User editor = findUser(userId);
+        if (!canEditRoute(route, editor)) {
+            throw new RouteException("COURSE_FORBIDDEN", HttpStatus.FORBIDDEN);
+        }
+        if (req.version() != null && req.version() != route.getVersion()) {
+            throw new CourseVersionConflictException(route.getVersion(), toMyCourseDetail(route,
+                    waypointRepository.findByRouteOrderBySequenceAsc(route),
+                    legRepository.findByRouteOrderBySequenceAsc(route)));
+        }
+        if (Boolean.TRUE.equals(req.collaborative()) && route.isShared()) {
+            throw new RouteException("COURSE_NOT_COLLABORATIVE", HttpStatus.BAD_REQUEST);
+        }
+        if (req.collaborative() != null) {
+            if (req.collaborative()) {
+                route.enableCollaboration();
+                ensureCourseMember(route, route.getUser(), CourseMember.Role.OWNER);
+            } else if (route.getUser().getId().equals(userId)) {
+                route.disableCollaboration();
+            } else {
+                throw new RouteException("COURSE_FORBIDDEN", HttpStatus.FORBIDDEN);
+            }
+        }
+
+        int totalMinutes = req.legs() == null ? 0 :
+                req.legs().stream().mapToInt(l -> l.minutes() != null ? l.minutes() : 0).sum();
+        int totalMeters = req.legs() == null ? 0 :
+                req.legs().stream().mapToInt(l -> l.distanceMeters() != null ? l.distanceMeters() : 0).sum();
+        BigDecimal totalDistance = totalMeters > 0
+                ? BigDecimal.valueOf(totalMeters).divide(BigDecimal.valueOf(1000), 2, RoundingMode.HALF_UP)
+                : route.getTotalDistance();
+
+        route.update(
+                req.title() != null ? req.title() : route.getTitle(),
+                route.getDescription(),
+                totalDistance,
+                totalMinutes > 0 ? totalMinutes : route.getEstimatedTime(),
+                route.getThumbnailUrl(),
+                route.getRegion(),
+                route.getActivityType()
+        );
+        if (req.tags() != null) {
+            route.updateTags(processTags(req.tags()));
+        }
+
+        waypointRepository.deleteAllByRoute(route);
+        legRepository.deleteAllByRoute(route);
+
+        List<RouteWaypoint> waypoints = buildWaypoints(route, req.stops());
+        waypointRepository.saveAll(waypoints);
+
+        List<RouteLeg> legs = buildLegs(route, req.legs());
+        legRepository.saveAll(legs);
+
+        route.incrementVersion();
+        MyCourseDetailResponse response = toMyCourseDetail(route, waypoints, legs);
+        broadcastCourseUpdated(route, editor);
+        return response;
+    }
 
     @Transactional
     public MyCourseDetailResponse updateCourseStatus(Long userId, String courseId, RouteStatus status) {
@@ -703,6 +782,113 @@ public class CourseService {
     // private helpers
     // ──────────────────────────────────────────────────────────
 
+    @Transactional(readOnly = true)
+    public CollaborativeCourseResponse getCollaborativeCourse(Long userId, String courseId) {
+        Route route = findCollaborativeRoute(courseId);
+        User user = findUser(userId);
+        CourseMember member = requireCourseMember(route, user);
+        List<RouteWaypoint> waypoints = waypointRepository.findByRouteOrderBySequenceAsc(route);
+        List<RouteLeg> legs = legRepository.findByRouteOrderBySequenceAsc(route);
+        List<String> tags = route.getTags() != null ? List.copyOf(route.getTags()) : List.of();
+        String ownerNickname = profileRepository.findByUser(route.getUser())
+                .map(p -> p.getNickname())
+                .orElse(route.getUser().getUserId());
+        int memberCount = courseMemberRepository.findByRouteAndLeftAtIsNull(route).size();
+
+        return CollaborativeCourseResponse.of(
+                route,
+                member.getRole().name(),
+                member.canEdit(),
+                ownerNickname,
+                memberCount,
+                waypoints.stream().map(StopResponse::from).toList(),
+                legs.stream().map(LegResponse::from).toList(),
+                tags
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public CourseMemberListResponse getCourseMembers(Long userId, String courseId) {
+        Route route = findCollaborativeRoute(courseId);
+        requireCourseMember(route, findUser(userId));
+        List<CourseMember> members = courseMemberRepository.findByRouteAndLeftAtIsNull(route);
+        Map<Long, Profile> profiles = profileRepository.findByUserIn(members.stream().map(CourseMember::getUser).toList())
+                .stream()
+                .collect(Collectors.toMap(p -> p.getUser().getId(), Function.identity()));
+        return new CourseMemberListResponse(members.stream()
+                .map(member -> CollaborativeMemberResponse.of(member, profiles.get(member.getUser().getId())))
+                .toList());
+    }
+
+    @Transactional
+    public CollaborativeMemberResponse addCourseMember(Long userId, String courseId, AddCourseMemberRequest req) {
+        Route route = findCollaborativeRoute(courseId);
+        CourseMember requester = requireCourseMember(route, findUser(userId));
+        if (!requester.canEdit()) {
+            throw new RouteException("COURSE_FORBIDDEN", HttpStatus.FORBIDDEN);
+        }
+        User target = findTargetUser(req);
+        CourseMember.Role role = req.role() != null ? req.role() : CourseMember.Role.EDITOR;
+        if (role == CourseMember.Role.OWNER) {
+            throw new RouteException("OWNER 역할은 추가로 부여할 수 없습니다.", HttpStatus.BAD_REQUEST);
+        }
+        CourseMember member = ensureCourseMember(route, target, role);
+        ensureChatRoomMember(route.getChatRoom(), target, ChatRoomMember.MemberRole.MEMBER);
+        broadcastCourseMember(route, CourseEventEnvelope.EventType.COURSE_MEMBER_JOINED, member);
+        Profile profile = profileRepository.findByUser(target).orElse(null);
+        return CollaborativeMemberResponse.of(member, profile);
+    }
+
+    @Transactional
+    public void removeCourseMember(Long userId, String courseId, String targetUuid) {
+        Route route = findCollaborativeRoute(courseId);
+        CourseMember requester = requireCourseMember(route, findUser(userId));
+        User target = userRepository.findByUuid(targetUuid)
+                .orElseThrow(() -> new RouteException("사용자를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        CourseMember targetMember = requireCourseMember(route, target);
+        if (!requester.getRole().equals(CourseMember.Role.OWNER) && !target.getId().equals(userId)) {
+            throw new RouteException("COURSE_FORBIDDEN", HttpStatus.FORBIDDEN);
+        }
+        if (targetMember.getRole() == CourseMember.Role.OWNER) {
+            throw new RouteException("OWNER는 멤버에서 제거할 수 없습니다.", HttpStatus.BAD_REQUEST);
+        }
+        targetMember.leave();
+        broadcastCourseMember(route, CourseEventEnvelope.EventType.COURSE_MEMBER_LEFT, targetMember);
+    }
+
+    @Transactional
+    public void leaveCourse(Long userId, String courseId) {
+        User user = findUser(userId);
+        removeCourseMember(userId, courseId, user.getUuid());
+    }
+
+    @Transactional
+    public CourseChatRoomResponse linkCourseChatRoom(Long userId, String courseId, LinkCourseChatRoomRequest req) {
+        Route route = findCollaborativeRoute(courseId);
+        User requesterUser = findUser(userId);
+        CourseMember requester = requireCourseMember(route, requesterUser);
+        if (!requester.canEdit()) {
+            throw new RouteException("COURSE_FORBIDDEN", HttpStatus.FORBIDDEN);
+        }
+        ChatRoom room = chatRoomRepository.findByUuidAndDeletedAtIsNull(req.chatRoomUuid())
+                .orElseThrow(() -> new RouteException("채팅방을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        if (chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(room, requesterUser).isEmpty()) {
+            throw new RouteException("채팅방 멤버만 연결할 수 있습니다.", HttpStatus.FORBIDDEN);
+        }
+        route.assignChatRoom(room);
+        courseMemberRepository.findByRouteAndLeftAtIsNull(route)
+                .forEach(member -> ensureChatRoomMember(room, member.getUser(), ChatRoomMember.MemberRole.MEMBER));
+        return CourseChatRoomResponse.of(route.getUuid(), room, chatRoomMemberRepository.findByRoomAndLeftAtIsNull(room).size());
+    }
+
+    @Transactional(readOnly = true)
+    public CourseChatRoomResponse getCourseChatRoom(Long userId, String courseId) {
+        Route route = findCollaborativeRoute(courseId);
+        requireCourseMember(route, findUser(userId));
+        int memberCount = route.getChatRoom() == null ? 0 : chatRoomMemberRepository.findByRoomAndLeftAtIsNull(route.getChatRoom()).size();
+        return CourseChatRoomResponse.of(route.getUuid(), route.getChatRoom(), memberCount);
+    }
+
     private Route findSharedRoute(String courseId) {
         return routeRepository.findByUuidAndStatusNot(courseId, RouteStatus.DELETED)
                 .filter(Route::isShared)
@@ -712,6 +898,91 @@ public class CourseService {
     private User findUser(Long userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new RouteException("사용자를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+    }
+
+    private User findTargetUser(AddCourseMemberRequest req) {
+        if (req.userUuid() != null && !req.userUuid().isBlank()) {
+            return userRepository.findByUuid(req.userUuid())
+                    .orElseThrow(() -> new RouteException("사용자를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        }
+        if (req.userId() != null && !req.userId().isBlank()) {
+            return userRepository.findByUserId(req.userId())
+                    .orElseThrow(() -> new RouteException("사용자를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        }
+        throw new RouteException("userUuid 또는 userId가 필요합니다.", HttpStatus.BAD_REQUEST);
+    }
+
+    private Route findCollaborativeRoute(String courseId) {
+        return routeRepository.findByUuidAndStatusNot(courseId, RouteStatus.DELETED)
+                .filter(Route::isCollaborative)
+                .orElseThrow(() -> new RouteException("COURSE_NOT_COLLABORATIVE", HttpStatus.NOT_FOUND));
+    }
+
+    private CourseMember ensureCourseMember(Route route, User user, CourseMember.Role role) {
+        return courseMemberRepository.findByRouteAndUser(route, user)
+                .map(existing -> {
+                    if (existing.getLeftAt() != null) {
+                        existing.rejoin(role);
+                    } else if (existing.getRole() != CourseMember.Role.OWNER) {
+                        existing.updateRole(role);
+                    }
+                    return existing;
+                })
+                .orElseGet(() -> courseMemberRepository.save(CourseMember.builder()
+                        .route(route)
+                        .user(user)
+                        .role(role)
+                        .build()));
+    }
+
+    private CourseMember requireCourseMember(Route route, User user) {
+        if (route.getUser().getId().equals(user.getId())) {
+            return ensureCourseMember(route, user, CourseMember.Role.OWNER);
+        }
+        return courseMemberRepository.findByRouteAndUserAndLeftAtIsNull(route, user)
+                .orElseThrow(() -> new RouteException("COURSE_FORBIDDEN", HttpStatus.FORBIDDEN));
+    }
+
+    private void ensureChatRoomMember(ChatRoom room, User user, ChatRoomMember.MemberRole role) {
+        if (room == null) {
+            return;
+        }
+        chatRoomMemberRepository.findByRoomAndUser(room, user)
+                .ifPresentOrElse(member -> {
+                    if (member.getLeftAt() != null) {
+                        member.rejoin();
+                    }
+                    if (role == ChatRoomMember.MemberRole.ADMIN) {
+                        member.promoteToAdmin();
+                    }
+                }, () -> chatRoomMemberRepository.save(ChatRoomMember.builder()
+                        .room(room)
+                        .user(user)
+                        .role(role)
+                        .build()));
+    }
+
+    private void broadcastCourseUpdated(Route route, User editor) {
+        Profile profile = profileRepository.findByUser(editor).orElse(null);
+        String nickname = profile != null ? profile.getNickname() : editor.getUserId();
+        messagingTemplate.convertAndSend("/topic/course/" + route.getUuid(),
+                new CourseEventEnvelope(CourseEventEnvelope.EventType.COURSE_UPDATED,
+                        new CourseUpdatedEventPayload(
+                                route.getUuid(),
+                                route.getVersion(),
+                                route.getUpdatedAt(),
+                                editor.getUuid(),
+                                nickname
+                        )));
+    }
+
+    private void broadcastCourseMember(Route route, CourseEventEnvelope.EventType eventType, CourseMember member) {
+        messagingTemplate.convertAndSend("/topic/course/" + route.getUuid(),
+                new CourseEventEnvelope(eventType, Map.of(
+                        "courseUuid", route.getUuid(),
+                        "userUuid", member.getUser().getUuid(),
+                        "role", member.getRole().name()
+                )));
     }
 
     private List<CourseStepResponse> loadSteps(Route route) {
@@ -814,12 +1085,14 @@ public class CourseService {
         List<LegResponse> legResponses = legs.stream().map(LegResponse::from).toList();
         List<String> tags = route.getTags() != null ? List.copyOf(route.getTags()) : List.of();
         String chatRoomUuid = route.getChatRoom() != null ? route.getChatRoom().getUuid() : null;
-        boolean collaborative = route.getGroup() != null;
+        boolean collaborative = route.isCollaborative();
         return new MyCourseDetailResponse(
                 route.getUuid(),
                 route.getTitle(),
                 route.getThumbnailUrl(),
                 collaborative,
+                route.getVersion(),
+                route.getUpdatedAt(),
                 chatRoomUuid,
                 stops,
                 legResponses,
@@ -863,10 +1136,17 @@ public class CourseService {
     }
 
     private boolean canEditRoute(Route route, Long userId) {
-        if (route.getUser().getId().equals(userId)) return true;
-        if (route.getGroup() == null) return false;
         User user = userRepository.findById(userId).orElse(null);
-        if (user == null) return false;
-        return groupMemberRepository.existsByGroupAndUserAndLeftAtIsNull(route.getGroup(), user);
+        return user != null && canEditRoute(route, user);
+    }
+
+    private boolean canEditRoute(Route route, User user) {
+        if (route.getUser().getId().equals(user.getId())) return true;
+        if (route.isCollaborative()) {
+            return courseMemberRepository.findByRouteAndUserAndLeftAtIsNull(route, user)
+                    .map(CourseMember::canEdit)
+                    .orElse(false);
+        }
+        return route.getGroup() != null && groupMemberRepository.existsByGroupAndUserAndLeftAtIsNull(route.getGroup(), user);
     }
 }
