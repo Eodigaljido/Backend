@@ -1,5 +1,10 @@
 package com.eodigaljido.backend.config;
 
+import java.util.List;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Contact;
@@ -8,10 +13,6 @@ import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
 import io.swagger.v3.oas.models.tags.Tag;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-
-import java.util.List;
 
 @Configuration
 public class SwaggerConfig {
@@ -20,7 +21,7 @@ public class SwaggerConfig {
     public OpenAPI openAPI() {
         return new OpenAPI()
                 .info(new Info()
-                        .title("어디갈지도 API")
+                        .title("어디갈지도 Backend Swagger")
                         .description("""
                                 ## 어디갈지도 백엔드 REST API
 
@@ -30,35 +31,6 @@ public class SwaggerConfig {
                                 - 헤더 형식: `Authorization: Bearer {accessToken}`
                                 - 토큰 만료(401) 시 `POST /auth/token/refresh`로 재발급할 수 있습니다.
 
-                                ### 비로그인 허용 API
-                                | 경로 | 설명 |
-                                |------|------|
-                                | `GET /api/courses/public` | 공개 코스 목록 |
-                                | `GET /api/courses/{courseId}` | 공개 코스 상세 |
-                                | `GET /api/courses/public/{courseId}/preview` | 코스 공유 링크 preview |
-                                | `GET /api/friends/code/{friendCode}/preview` | 친구 초대 링크 preview |
-                                | `GET /api/weather` | 날씨 |
-                                | `GET /api/home/courses` | 인기 코스 |
-                                | `POST /api/courses/{courseId}/reviews` | 코스 리뷰 작성 |
-
-                                ### 코스 약속 API
-                                | 메서드 | 경로 | 설명 |
-                                |--------|------|------|
-                                | `GET` | `/api/course-schedules` | 코스 약속 목록 조회 (`from`, `to`, `chatRoomUuid`, `upcomingOnly`) |
-                                | `GET` | `/api/course-schedules/nearest` | 가장 가까운 미래 약속 1건 조회 |
-                                | `GET` | `/api/course-schedules/{scheduleUuid}` | 코스 약속 상세 조회 |
-                                | `POST` | `/api/course-schedules` | 코스 약속 생성 |
-                                | `PATCH` | `/api/course-schedules/{scheduleUuid}` | 코스 약속 수정 |
-                                | `DELETE` | `/api/course-schedules/{scheduleUuid}` | 코스 약속 삭제 |
-
-                                ### 코스 약속 사용 규칙
-                                - `scheduledAt`은 ISO-8601 형식입니다. 예: `2026-06-08T19:00:00+09:00`
-                                - 생성 시 `title`, `scheduledAt`, `chatRoomUuid`가 필수입니다.
-                                - 생성자는 선택한 채팅방의 현재 멤버여야 합니다.
-                                - 목록/상세 조회는 생성자 또는 연결된 채팅방 멤버에게 허용됩니다.
-                                - 수정/삭제는 생성자 또는 연결된 채팅방의 ADMIN 멤버에게 허용됩니다.
-                                - `notifyChat: true`이면 약속 생성 시 채팅방에 시스템 메시지를 남깁니다.
-
                                 ### 에러 응답 형식
                                 ```json
                                 {
@@ -67,32 +39,6 @@ public class SwaggerConfig {
                                   "timestamp": "2026-01-01T12:00:00"
                                 }
                                 ```
-
-                                ### 프로필 응답 주요 필드 (`GET /users/me`, `GET /users/{uuid}`)
-                                | 필드 | 설명 |
-                                |------|------|
-                                | `sharedCourseCount` | 공유 중인 코스 수 |
-                                | `averageRating` | 공유 코스들의 평균 평점. 리뷰가 없으면 null |
-                                | `savedCourseCount` | 즐겨찾기한 코스 수 |
-                                | `email` | 이메일. `GET /users/{uuid}`에서는 null |
-
-                                ### 즐겨찾기 코스 목록 API
-                                | 경로 | 설명 |
-                                |------|------|
-                                | `GET /users/me/saved-courses` | 내가 즐겨찾기한 코스 목록 |
-                                | `GET /users/{uuid}/saved-courses` | 다른 사용자가 즐겨찾기한 코스 목록 |
-
-                                ### 공유 링크 프론트
-                                | 유형 | 링크 패턴 | 대상 화면 |
-                                |------|-----------|---------|
-                                | 코스 공유 | `https://share.eodigaljido.rjsgud.com/courses/public/{courseId}` | SharedRoute |
-                                | 친구 초대 | `https://share.eodigaljido.rjsgud.com/friends/add/{friendCode}` | 친구 추가 |
-                                | 공동 루트 | `https://share.eodigaljido.rjsgud.com/routes/collaborative/{courseId}` | RouteCreate |
-
-                                ### 공동 루트 채팅방 연결 흐름
-                                1. `POST /api/courses/my/{courseId}/invites`로 공동 편집 활성화 및 채팅방 자동 생성
-                                2. `GET /api/courses/my/{courseId}/chat-room`로 `chatRoomUuid` 조회
-                                3. `POST /chats/{roomUuid}/members`에서 `userId`로 멤버 초대
 
                                 ### WebSocket 실시간 채팅
                                 - 연결 엔드포인트: `ws://{host}/ws/chat` (SockJS 지원)
