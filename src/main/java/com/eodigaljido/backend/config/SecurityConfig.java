@@ -42,6 +42,7 @@ public class SecurityConfig {
     private static final String[] PUBLIC_ENDPOINTS = {
             "/test.html",
             "/auth/login", "/auth/register",
+            "/auth/status",
             "/auth/token/refresh",
             "/auth/oauth/google", "/auth/oauth/kakao", "/auth/oauth/config",
             "/auth/phone/code", "/auth/phone/verify",

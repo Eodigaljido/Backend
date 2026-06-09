@@ -33,6 +33,28 @@ public class AuthController {
     private final PhoneVerificationService phoneVerificationService;
     private final OAuthProperties oAuthProperties;
 
+    @GetMapping("/status")
+    @Operation(
+            summary = "인증 상태 조회",
+            description = """
+                    현재 요청에 포함된 액세스 토큰의 인증 상태를 조회합니다.
+
+                    **헤더 (선택):**
+                    - `Authorization: Bearer {accessToken}`
+
+                    **응답:**
+                    - 유효한 액세스 토큰이며 활성 사용자에 속하는 경우: `authenticated=true`
+                    - 토큰이 없거나 만료·위조되었거나, refresh token이거나, 비활성 사용자에 속하는 경우: `authenticated=false`
+
+                    인증되지 않은 요청도 오류 없이 **200 OK**로 현재 인증 상태를 반환합니다.
+                    """
+    )
+    @ApiResponse(responseCode = "200", description = "현재 요청의 인증 상태 반환",
+            content = @Content(schema = @Schema(implementation = AuthStatusResponse.class)))
+    ResponseEntity<AuthStatusResponse> status(@AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(new AuthStatusResponse(userDetails != null));
+    }
+
     @PostMapping("/register")
     @Operation(
             summary = "회원가입",

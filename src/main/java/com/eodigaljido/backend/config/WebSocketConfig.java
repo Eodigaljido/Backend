@@ -22,6 +22,15 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Value("${websocket.allowed-origins:http://localhost:3000,http://localhost:5173,exp://172.28.22.99:8081,http://localhost:8081}")
     private String[] allowedOrigins;
 
+    @Value("${websocket.inbound.core-pool-size:8}")
+    private int inboundCorePoolSize;
+
+    @Value("${websocket.inbound.max-pool-size:32}")
+    private int inboundMaxPoolSize;
+
+    @Value("${websocket.inbound.queue-capacity:1000}")
+    private int inboundQueueCapacity;
+
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
         registry.enableSimpleBroker("/topic", "/queue");
@@ -33,9 +42,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void configureClientInboundChannel(ChannelRegistration registration) {
         registration.interceptors(stompJwtChannelInterceptor);
         registration.taskExecutor()
-                .corePoolSize(4)
-                .maxPoolSize(10)
-                .queueCapacity(50);
+                .corePoolSize(inboundCorePoolSize)
+                .maxPoolSize(inboundMaxPoolSize)
+                .queueCapacity(inboundQueueCapacity)
+                .keepAliveSeconds(60);
     }
 
     @Override
