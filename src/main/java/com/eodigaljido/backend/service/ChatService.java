@@ -427,6 +427,7 @@ public class ChatService {
 
         if (room.getType() == ChatRoom.RoomType.ROUTE) {
             User actor = membership.getUser();
+            String originalContent = message.getContent();
             routeRepository.findByChatRoomIdAndStatusNot(room.getId(), Route.RouteStatus.DELETED)
                     .ifPresent(route -> routeHistoryLogRepository.save(
                             RouteHistoryLog.builder()
@@ -434,6 +435,7 @@ public class ChatService {
                                     .actor(actor)
                                     .type(RouteHistoryLog.LogType.EDIT)
                                     .editAction("CHAT_DELETED")
+                                    .content(originalContent)
                                     .build()
                     ));
         }

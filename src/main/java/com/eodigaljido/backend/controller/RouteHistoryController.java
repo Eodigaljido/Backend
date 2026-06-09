@@ -90,10 +90,10 @@ public class RouteHistoryController {
 
                     | `type` | `action` | 설명 | 유효 필드 |
                     |--------|----------|------|-----------|
-                    | `CHAT` | null | 채팅 메시지 전송 | `content`, `actorNickname`, `actorProfileImageUrl` |
+                    | `CHAT` | `CHAT` | 채팅 메시지 전송 | `content`(전송 내용), `actorNickname`, `actorProfileImageUrl` |
                     | `EDIT` | `ROUTE_UPDATED` | 루트 편집 | `editDescription`, `actorNickname`, `actorProfileImageUrl` |
                     | `EDIT` | `CHAT_EDITED` | 채팅 메시지 수정 | `content`(수정 후 내용), `editDescription`, `actorNickname`, `actorProfileImageUrl` |
-                    | `EDIT` | `CHAT_DELETED` | 채팅 메시지 삭제 | `editDescription`, `actorNickname`, `actorProfileImageUrl` |
+                    | `EDIT` | `CHAT_DELETED` | 채팅 메시지 삭제 | `content`(삭제된 원본 내용), `editDescription`, `actorNickname`, `actorProfileImageUrl` |
 
                     **`editDescription` 예시**
                     - `ROUTE_UPDATED` → "홍길동님이 루트를 수정했습니다"

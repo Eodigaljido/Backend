@@ -35,9 +35,9 @@ public record RouteHistoryFeedItem(
         String content,
 
         @Schema(
-            description = "편집 액션 코드. type=EDIT일 때만 존재. ROUTE_UPDATED | CHAT_EDITED | CHAT_DELETED",
-            example = "ROUTE_UPDATED",
-            allowableValues = {"ROUTE_UPDATED", "CHAT_EDITED", "CHAT_DELETED"}
+            description = "액션 코드. type=CHAT이면 항상 CHAT. type=EDIT이면 ROUTE_UPDATED | CHAT_EDITED | CHAT_DELETED",
+            example = "CHAT",
+            allowableValues = {"CHAT", "ROUTE_UPDATED", "CHAT_EDITED", "CHAT_DELETED"}
         )
         String action,
 
@@ -63,7 +63,7 @@ public record RouteHistoryFeedItem(
                     nickname,
                     profileImageUrl,
                     log.getContent(),
-                    null,
+                    "CHAT",
                     null,
                     log.getCreatedAt()
             );
