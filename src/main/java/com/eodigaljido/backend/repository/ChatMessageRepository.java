@@ -21,6 +21,9 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
 
     Optional<ChatMessage> findTopByRoomOrderByCreatedAtDesc(ChatRoom room);
 
+    @Query("SELECT m FROM ChatMessage m WHERE m.room = :room ORDER BY m.createdAt ASC")
+    List<ChatMessage> findByRoomOrderByCreatedAtAsc(@Param("room") ChatRoom room);
+
     @Query("SELECT COUNT(m) FROM ChatMessage m WHERE m.room = :room")
     long countActiveByRoom(@Param("room") ChatRoom room);
 

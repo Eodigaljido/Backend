@@ -20,4 +20,6 @@ public interface CourseMemberRepository extends JpaRepository<CourseMember, Long
 
     @Query("SELECT m FROM CourseMember m JOIN FETCH m.user WHERE m.route = :route AND m.leftAt IS NULL ORDER BY m.createdAt ASC")
     List<CourseMember> findByRouteAndLeftAtIsNull(@Param("route") Route route);
+
+    long countByRoute(Route route);
 }
