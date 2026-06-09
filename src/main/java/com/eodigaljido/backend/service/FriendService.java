@@ -1,6 +1,7 @@
 package com.eodigaljido.backend.service;
 
 import com.eodigaljido.backend.domain.friend.Friend;
+import com.eodigaljido.backend.domain.notification.NotificationType;
 import com.eodigaljido.backend.domain.user.Profile;
 import com.eodigaljido.backend.domain.user.User;
 import com.eodigaljido.backend.dto.friend.FriendCodeResponse;
@@ -10,12 +11,14 @@ import com.eodigaljido.backend.dto.friend.FriendResponse;
 import com.eodigaljido.backend.dto.friend.RecentFriendResponse;
 import com.eodigaljido.backend.exception.FriendException;
 import com.eodigaljido.backend.exception.UserException;
+import com.eodigaljido.backend.event.NotificationEvent;
 import com.eodigaljido.backend.repository.ChatMessageRepository;
 import com.eodigaljido.backend.repository.FriendRepository;
 import com.eodigaljido.backend.repository.ProfileRepository;
 import com.eodigaljido.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,6 +38,7 @@ public class FriendService {
     private final ProfileRepository profileRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final FriendCodeService friendCodeService;
+    private final ApplicationEventPublisher eventPublisher;
 
     // 친구 코드로 초대자 preview 조회 (비로그인 허용)
     @Transactional(readOnly = true)
@@ -67,6 +71,7 @@ public class FriendService {
         });
 
         friendRepository.save(Friend.builder().requester(requester).receiver(target).build());
+        publishFriendRequest(requester, target);
     }
 
     @Transactional
@@ -175,6 +180,7 @@ public class FriendService {
                 .receiver(target)
                 .build();
         friendRepository.save(friend);
+        publishFriendRequest(requester, target);
     }
 
     // 친구 삭제
@@ -202,6 +208,13 @@ public class FriendService {
 
         if (accept) {
             request.accept();
+            eventPublisher.publishEvent(NotificationEvent.of(
+                    request.getRequester().getId(), receiverId,
+                    NotificationType.FRIEND_ACCEPTED,
+                    "친구 요청 수락",
+                    displayName(receiver) + "님이 친구 요청을 수락했습니다.",
+                    receiver.getUuid(), "USER"
+            ));
         } else {
             request.reject();
         }
@@ -246,6 +259,22 @@ public class FriendService {
                 .filter(java.util.Optional::isPresent)
                 .map(java.util.Optional::get)
                 .collect(Collectors.toMap(p -> p.getUser().getId(), p -> p));
+    }
+
+    private void publishFriendRequest(User requester, User target) {
+        eventPublisher.publishEvent(NotificationEvent.of(
+                target.getId(), requester.getId(),
+                NotificationType.FRIEND_REQUESTED,
+                "친구 요청",
+                displayName(requester) + "님이 친구 요청을 보냈습니다.",
+                requester.getUuid(), "USER"
+        ));
+    }
+
+    private String displayName(User user) {
+        return profileRepository.findByUser(user)
+                .map(Profile::getNickname)
+                .orElse(user.getUserId() != null ? user.getUserId() : "사용자");
     }
 
     // 닉네임 첫 글자의 그룹: 0=한글, 1=영어, 2=숫자, 3=특수기호

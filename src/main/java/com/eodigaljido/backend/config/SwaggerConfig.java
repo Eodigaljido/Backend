@@ -45,6 +45,12 @@ public class SwaggerConfig {
                                 - CONNECT 헤더: `Authorization: Bearer {accessToken}`
                                 - 메시지 수신 구독: `/topic/chat/{roomUuid}`
                                 - 타이핑 인디케이터: `/topic/chat/{roomUuid}/typing`
+
+                                ### 알림 설정
+                                - `GET /notification-settings`: 로그인 사용자의 전체 알림 설정 조회
+                                - `PATCH /notification-settings`: 변경할 설정만 부분 업데이트
+                                - 저장되지 않은 알림 설정은 기본값 **ON(true)** 으로 처리됩니다.
+                                - 서버 알림 설정이 OFF이면 알림 목록 저장과 STOMP 실시간 전송을 모두 생략합니다.
                                 """)
                         .version("v1.0.0")
                         .contact(new Contact()
@@ -70,7 +76,7 @@ public class SwaggerConfig {
                         new Tag().name("Friend").description("친구 / 친구 코드 / 초대 preview"),
                         new Tag().name("Group").description("모임 / 게시판 / 모임 채팅방"),
                         new Tag().name("Chat").description("채팅방 / 메시지 / REST + WebSocket"),
-                        new Tag().name("Notification").description("알림"),
+                        new Tag().name("Notification").description("알림 목록 / 읽음 처리 / 사용자별 알림 설정"),
                         new Tag().name("Following News").description("팔로잉 소식"),
                         new Tag().name("Onboarding").description("온보딩 설문"),
                         new Tag().name("Home").description("홈 화면"),

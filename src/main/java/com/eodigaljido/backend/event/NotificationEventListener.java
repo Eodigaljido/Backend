@@ -5,6 +5,7 @@ import com.eodigaljido.backend.domain.user.User;
 import com.eodigaljido.backend.dto.notification.NotificationResponse;
 import com.eodigaljido.backend.repository.NotificationRepository;
 import com.eodigaljido.backend.repository.UserRepository;
+import com.eodigaljido.backend.service.NotificationSettingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.annotation.Async;
@@ -19,12 +20,14 @@ public class NotificationEventListener {
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final NotificationSettingService notificationSettingService;
 
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handle(NotificationEvent event) {
         User recipient = userRepository.findById(event.recipientId()).orElse(null);
         if (recipient == null) return;
+        if (!notificationSettingService.isEnabled(recipient, event.type())) return;
 
         User sender = event.senderId() != null
                 ? userRepository.findById(event.senderId()).orElse(null)

@@ -215,6 +215,15 @@ public class CourseService {
             throw new RouteException("이미 저장된 코스입니다.", HttpStatus.CONFLICT);
         }
         savedRouteRepository.save(SavedRoute.builder().user(user).route(route).build());
+        if (!route.getUser().getId().equals(userId)) {
+            eventPublisher.publishEvent(NotificationEvent.of(
+                    route.getUser().getId(), userId,
+                    NotificationType.ROUTE_FAVORITED,
+                    "코스 즐겨찾기",
+                    displayName(user) + "님이 회원님의 코스를 즐겨찾기했습니다: " + route.getTitle(),
+                    route.getUuid(), "ROUTE"
+            ));
+        }
         followingNewsService.createNews(
                 userId,
                 FollowingNewsActionType.COURSE_SAVED,
@@ -349,6 +358,12 @@ public class CourseService {
         List<RouteLeg> legs = buildLegs(route, req.legs());
         legRepository.saveAll(legs);
 
+        notifyGroupMembers(
+                group, user, NotificationType.GROUP_ROUTE_CREATED,
+                "새 루트 공유",
+                displayName(user) + "님이 새 루트를 공유했습니다: " + route.getTitle(),
+                route.getUuid(), "ROUTE"
+        );
         return toMyCourseDetail(route, waypoints, legs);
     }
 
@@ -974,6 +989,34 @@ public class CourseService {
                                 editor.getUuid(),
                                 nickname
                         )));
+        if (route.getChatRoom() != null) {
+            chatRoomMemberRepository.findByRoomAndLeftAtIsNull(route.getChatRoom()).stream()
+                    .map(ChatRoomMember::getUser)
+                    .filter(member -> !member.getId().equals(editor.getId()))
+                    .forEach(member -> eventPublisher.publishEvent(NotificationEvent.of(
+                            member.getId(), editor.getId(),
+                            NotificationType.CHAT_ROUTE_CHANGED,
+                            "코스 생성·수정",
+                            nickname + "님이 코스를 수정했습니다: " + route.getTitle(),
+                            route.getUuid(), "ROUTE"
+                    )));
+        }
+    }
+
+    private void notifyGroupMembers(Group group, User actor, NotificationType type,
+                                    String title, String body, String referenceId, String referenceType) {
+        groupMemberRepository.findAllActiveMembers(group).stream()
+                .map(com.eodigaljido.backend.domain.group.GroupMember::getUser)
+                .filter(member -> !member.getId().equals(actor.getId()))
+                .forEach(member -> eventPublisher.publishEvent(NotificationEvent.of(
+                        member.getId(), actor.getId(), type, title, body, referenceId, referenceType
+                )));
+    }
+
+    private String displayName(User user) {
+        return profileRepository.findByUser(user)
+                .map(Profile::getNickname)
+                .orElse(user.getUserId() != null ? user.getUserId() : "사용자");
     }
 
     private void broadcastCourseMember(Route route, CourseEventEnvelope.EventType eventType, CourseMember member) {

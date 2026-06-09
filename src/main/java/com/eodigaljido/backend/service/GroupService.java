@@ -304,6 +304,12 @@ public class GroupService {
                 .role(ChatRoomMember.MemberRole.ADMIN)
                 .build());
 
+        notifyGroupMembers(
+                group, creator, NotificationType.GROUP_CHAT_ROOM_CREATED,
+                "새 채팅방",
+                "'" + room.getName() + "' 채팅방이 생성되었습니다.",
+                room.getUuid(), "CHAT_ROOM"
+        );
         return GroupChatRoomResponse.from(room);
     }
 
@@ -340,6 +346,12 @@ public class GroupService {
         }
         groupPostRepository.save(post);
 
+        notifyGroupMembers(
+                group, author, NotificationType.GROUP_POST_CREATED,
+                "새 게시물",
+                displayName(author) + "님이 새 게시물을 작성했습니다.",
+                post.getUuid(), "GROUP_POST"
+        );
         return GroupPostResponse.of(post, profileRepository.findByUser(author).orElse(null));
     }
 
@@ -451,6 +463,28 @@ public class GroupService {
                                 .role(GroupMember.MemberRole.MEMBER)
                                 .build())
                 );
+        notifyGroupMembers(
+                group, user, NotificationType.GROUP_MEMBER_JOINED,
+                "새 멤버 참여",
+                displayName(user) + "님이 '" + group.getName() + "' 모임에 참여했습니다.",
+                group.getUuid(), "GROUP"
+        );
+    }
+
+    private void notifyGroupMembers(Group group, User actor, NotificationType type,
+                                    String title, String body, String referenceId, String referenceType) {
+        groupMemberRepository.findAllActiveMembers(group).stream()
+                .map(GroupMember::getUser)
+                .filter(member -> !member.getId().equals(actor.getId()))
+                .forEach(member -> eventPublisher.publishEvent(NotificationEvent.of(
+                        member.getId(), actor.getId(), type, title, body, referenceId, referenceType
+                )));
+    }
+
+    private String displayName(User user) {
+        return profileRepository.findByUser(user)
+                .map(profile -> profile.getNickname())
+                .orElse(user.getUserId() != null ? user.getUserId() : "사용자");
     }
 
     private String uploadGroupImage(MultipartFile image, String groupUuid) {
