@@ -10,9 +10,9 @@ import java.time.LocalDateTime;
 public record RouteHistoryFeedItem(
 
         @Schema(
-            description = "이벤트 타입. CHAT: 메시지 전송, EDIT: 수정/삭제/루트편집",
+            description = "이벤트 타입. CHAT: 채팅 관련 이벤트(전송/수정/삭제), COURSE: 루트 편집 이벤트",
             example = "CHAT",
-            allowableValues = {"CHAT", "EDIT"}
+            allowableValues = {"CHAT", "COURSE"}
         )
         String type,
 
@@ -29,20 +29,20 @@ public record RouteHistoryFeedItem(
         String actorProfileImageUrl,
 
         @Schema(
-            description = "메시지 내용. type=CHAT이면 전송 시점 원본 내용, action=CHAT_EDITED이면 수정 후 내용, 그 외 null",
+            description = "메시지 내용. type=CHAT이면 항상 존재 (전송 원본, 수정 후 내용, 삭제된 원본 모두 포함). type=COURSE이면 null",
             example = "경유지 추가할게요"
         )
         String content,
 
         @Schema(
-            description = "액션 코드. type=CHAT이면 항상 CHAT. type=EDIT이면 ROUTE_UPDATED | CHAT_EDITED | CHAT_DELETED",
+            description = "액션 코드. type=CHAT이면 CHAT | CHAT_EDITED | CHAT_DELETED. type=COURSE이면 ROUTE_UPDATED",
             example = "CHAT",
-            allowableValues = {"CHAT", "ROUTE_UPDATED", "CHAT_EDITED", "CHAT_DELETED"}
+            allowableValues = {"CHAT", "CHAT_EDITED", "CHAT_DELETED", "ROUTE_UPDATED"}
         )
         String action,
 
         @Schema(
-            description = "사람이 읽기 쉬운 편집 설명. type=EDIT일 때만 존재. 예: '홍길동님이 메시지를 삭제했습니다'",
+            description = "사람이 읽기 쉬운 이벤트 설명. 예: '홍길동님이 메시지를 삭제했습니다'",
             example = "홍길동님이 루트를 수정했습니다"
         )
         String editDescription,
@@ -55,32 +55,24 @@ public record RouteHistoryFeedItem(
         String nickname = profile != null ? profile.getNickname() : log.getActor().getUserId();
         String profileImageUrl = profile != null ? profile.getProfileImageUrl() : null;
 
-        if (log.getType() == RouteHistoryLog.LogType.CHAT) {
-            return new RouteHistoryFeedItem(
-                    "CHAT",
-                    log.getId(),
-                    log.getActor().getUuid(),
-                    nickname,
-                    profileImageUrl,
-                    log.getContent(),
-                    "CHAT",
-                    null,
-                    log.getCreatedAt()
-            );
-        } else {
-            String description = buildEditDescription(nickname, log.getEditAction());
-            return new RouteHistoryFeedItem(
-                    "EDIT",
-                    log.getId(),
-                    log.getActor().getUuid(),
-                    nickname,
-                    profileImageUrl,
-                    null,
-                    log.getEditAction(),
-                    description,
-                    log.getCreatedAt()
-            );
-        }
+        String action = log.getType() == RouteHistoryLog.LogType.CHAT ? "CHAT" : log.getEditAction();
+        String description = buildEditDescription(nickname, action);
+
+        boolean isChatEvent = log.getType() == RouteHistoryLog.LogType.CHAT
+                || "CHAT_EDITED".equals(action)
+                || "CHAT_DELETED".equals(action);
+
+        return new RouteHistoryFeedItem(
+                isChatEvent ? "CHAT" : "COURSE",
+                log.getId(),
+                log.getActor().getUuid(),
+                nickname,
+                profileImageUrl,
+                isChatEvent ? log.getContent() : null,
+                action,
+                description,
+                log.getCreatedAt()
+        );
     }
 
     private static String buildEditDescription(String nickname, String action) {
