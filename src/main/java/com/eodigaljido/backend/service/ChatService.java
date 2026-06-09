@@ -23,6 +23,7 @@ import com.eodigaljido.backend.dto.chat.UpdateChatRoomNameRequest;
 import com.eodigaljido.backend.dto.chat.ChatEventEnvelope.EventType;
 import com.eodigaljido.backend.event.NotificationEvent;
 import com.eodigaljido.backend.exception.ChatException;
+import com.eodigaljido.backend.domain.route.RouteHistoryLog;
 import com.eodigaljido.backend.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -66,6 +67,7 @@ public class ChatService {
     private final UserRepository userRepository;
     private final ProfileRepository profileRepository;
     private final RouteRepository routeRepository;
+    private final RouteHistoryLogRepository routeHistoryLogRepository;
     private final FriendRepository friendRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final ApplicationEventPublisher eventPublisher;
@@ -260,6 +262,19 @@ public class ChatService {
                 .build();
         chatMessageRepository.save(message);
         senderMembership.updateLastReadAt();
+
+        // ROUTE 타입 방이면 발송 시점 내용을 불변 히스토리 로그에 스냅샷
+        if (room.getType() == ChatRoom.RoomType.ROUTE) {
+            routeRepository.findByChatRoomIdAndStatusNot(room.getId(), Route.RouteStatus.DELETED)
+                    .ifPresent(route -> routeHistoryLogRepository.save(
+                            RouteHistoryLog.builder()
+                                    .route(route)
+                                    .actor(me)
+                                    .type(RouteHistoryLog.LogType.CHAT)
+                                    .content(req.content())
+                                    .build()
+                    ));
+        }
 
         String senderNickname = profileRepository.findByUser(me)
                 .map(Profile::getNickname).orElse(me.getUserId());

@@ -6,6 +6,7 @@ import com.eodigaljido.backend.domain.group.Group;
 import com.eodigaljido.backend.domain.notification.NotificationType;
 import com.eodigaljido.backend.domain.route.CourseMember;
 import com.eodigaljido.backend.domain.route.Route;
+import com.eodigaljido.backend.domain.route.RouteHistoryLog;
 import com.eodigaljido.backend.domain.route.Route.RouteStatus;
 import com.eodigaljido.backend.domain.route.RouteLeg;
 import com.eodigaljido.backend.domain.route.RouteReview;
@@ -68,6 +69,7 @@ public class CourseService {
     private final ChatRoomRepository chatRoomRepository;
     private final ChatRoomMemberRepository chatRoomMemberRepository;
     private final CourseMemberRepository courseMemberRepository;
+    private final RouteHistoryLogRepository routeHistoryLogRepository;
     private final FollowingNewsService followingNewsService;
     private final ApplicationEventPublisher eventPublisher;
     private final FileStorageService fileStorageService;
@@ -571,6 +573,12 @@ public class CourseService {
         legRepository.saveAll(legs);
 
         route.incrementVersion();
+        routeHistoryLogRepository.save(RouteHistoryLog.builder()
+                .route(route)
+                .actor(editor)
+                .type(RouteHistoryLog.LogType.EDIT)
+                .editAction("ROUTE_UPDATED")
+                .build());
         MyCourseDetailResponse response = toMyCourseDetail(route, waypoints, legs);
         broadcastCourseUpdated(route, editor);
         return response;

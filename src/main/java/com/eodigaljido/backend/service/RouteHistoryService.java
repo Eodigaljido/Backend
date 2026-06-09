@@ -1,10 +1,9 @@
 package com.eodigaljido.backend.service;
 
-import com.eodigaljido.backend.domain.chat.ChatMessage;
 import com.eodigaljido.backend.domain.chat.ChatRoom;
 import com.eodigaljido.backend.domain.group.Group;
 import com.eodigaljido.backend.domain.route.Route;
-import com.eodigaljido.backend.domain.route.RouteEditLog;
+import com.eodigaljido.backend.domain.route.RouteHistoryLog;
 import com.eodigaljido.backend.domain.user.Profile;
 import com.eodigaljido.backend.domain.user.User;
 import com.eodigaljido.backend.dto.course.PageInfo;
@@ -20,8 +19,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -33,9 +30,8 @@ public class RouteHistoryService {
 
     private final ChatRoomRepository chatRoomRepository;
     private final ChatRoomMemberRepository chatRoomMemberRepository;
-    private final ChatMessageRepository chatMessageRepository;
     private final RouteRepository routeRepository;
-    private final RouteEditLogRepository routeEditLogRepository;
+    private final RouteHistoryLogRepository routeHistoryLogRepository;
     private final CourseMemberRepository courseMemberRepository;
     private final UserRepository userRepository;
     private final ProfileRepository profileRepository;
@@ -75,7 +71,7 @@ public class RouteHistoryService {
     }
 
     // ──────────────────────────────────────────────────────────
-    // 루트 기록 피드 (채팅 메시지 + 수정 이벤트 시간순)
+    // 루트 기록 피드 (불변 RouteHistoryLog 기반)
     // ──────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
@@ -86,36 +82,23 @@ public class RouteHistoryService {
         User user = findUser(userId);
         verifyFeedAccess(route, user);
 
-        List<ChatMessage> messages = route.getChatRoom() != null
-                ? chatMessageRepository.findByRoomOrderByCreatedAtAsc(route.getChatRoom())
-                : List.of();
+        List<RouteHistoryLog> logs = routeHistoryLogRepository.findByRouteOrderByCreatedAtAsc(route);
 
-        List<RouteEditLog> editLogs = routeEditLogRepository.findByRouteOrderByCreatedAtAsc(route);
-
-        // 프로필 일괄 조회
-        List<User> involvedUsers = new ArrayList<>();
-        messages.forEach(m -> involvedUsers.add(m.getSender()));
-        editLogs.forEach(e -> involvedUsers.add(e.getEditor()));
-
-        Map<Long, Profile> profiles = profileRepository.findByUserIn(involvedUsers)
+        // 관련 사용자 프로필 일괄 조회
+        List<User> actors = logs.stream().map(RouteHistoryLog::getActor).distinct().toList();
+        Map<Long, Profile> profiles = profileRepository.findByUserIn(actors)
                 .stream()
                 .collect(Collectors.toMap(p -> p.getUser().getId(), Function.identity(), (a, b) -> a));
 
-        List<RouteHistoryFeedItem> combined = new ArrayList<>();
-        messages.stream()
-                .map(m -> RouteHistoryFeedItem.fromChatMessage(m, profiles.get(m.getSender().getId())))
-                .forEach(combined::add);
-        editLogs.stream()
-                .map(e -> RouteHistoryFeedItem.fromEditLog(e, profiles.get(e.getEditor().getId())))
-                .forEach(combined::add);
+        List<RouteHistoryFeedItem> items = logs.stream()
+                .map(log -> RouteHistoryFeedItem.from(log, profiles.get(log.getActor().getId())))
+                .toList();
 
-        combined.sort(Comparator.comparing(RouteHistoryFeedItem::createdAt));
-
-        int total = combined.size();
+        int total = items.size();
         int start = page * size;
         List<RouteHistoryFeedItem> pageItems = start >= total
                 ? List.of()
-                : combined.subList(start, Math.min(start + size, total));
+                : items.subList(start, Math.min(start + size, total));
         int totalPages = (int) Math.ceil((double) total / Math.max(size, 1));
 
         return new RouteHistoryFeedResponse(pageItems, new PageInfo(page, size, total, totalPages));
@@ -126,7 +109,6 @@ public class RouteHistoryService {
     // ──────────────────────────────────────────────────────────
 
     private void verifyFeedAccess(Route route, User user) {
-        // CourseMember이거나, 루트 전용 채팅방 멤버이거나, 그룹 채팅방 멤버이면 허용
         if (courseMemberRepository.existsByRouteAndUserAndLeftAtIsNull(route, user)) {
             return;
         }
