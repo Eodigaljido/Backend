@@ -31,6 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class StompJwtChannelInterceptor implements ChannelInterceptor {
 
     private static final Duration FAILURE_LOG_INTERVAL = Duration.ofSeconds(60);
+    private static final String AUTH_FAILURE_MESSAGE = "WebSocket authentication failed.";
 
     private final JwtTokenProvider jwtTokenProvider;
     private final ConcurrentMap<String, SuppressedFailure> suppressedFailures = new ConcurrentHashMap<>();
@@ -46,52 +47,53 @@ public class StompJwtChannelInterceptor implements ChannelInterceptor {
 
         TokenResolution tokenResolution = resolveToken(accessor.getFirstNativeHeader("Authorization"));
         if (!StringUtils.hasText(tokenResolution.token())) {
-            logAuthFailure(accessor, tokenResolution.reason(), null, null);
-            throw new MessageDeliveryException(message, "WebSocket 인증에 실패했습니다.");
+            return reject(message, accessor, tokenResolution.reason(), null, null);
         }
 
         Claims claims;
         try {
             claims = jwtTokenProvider.parseToken(tokenResolution.token());
         } catch (ExpiredJwtException e) {
-            logAuthFailure(accessor, "token_expired", tokenResolution.token(),
+            return reject(message, accessor, "token_expired", tokenResolution.token(),
                     "expiredAt=" + formatDate(e.getClaims() != null ? e.getClaims().getExpiration() : null));
-            throw new MessageDeliveryException(message, "WebSocket 인증에 실패했습니다.");
         } catch (PrematureJwtException e) {
-            logAuthFailure(accessor, "token_not_yet_valid", tokenResolution.token(), e.getMessage());
-            throw new MessageDeliveryException(message, "WebSocket 인증에 실패했습니다.");
+            return reject(message, accessor, "token_not_yet_valid", tokenResolution.token(), e.getMessage());
         } catch (MalformedJwtException e) {
-            logAuthFailure(accessor, "token_malformed", tokenResolution.token(), e.getMessage());
-            throw new MessageDeliveryException(message, "WebSocket 인증에 실패했습니다.");
+            return reject(message, accessor, "token_malformed", tokenResolution.token(), e.getMessage());
         } catch (UnsupportedJwtException e) {
-            logAuthFailure(accessor, "token_unsupported", tokenResolution.token(), e.getMessage());
-            throw new MessageDeliveryException(message, "WebSocket 인증에 실패했습니다.");
+            return reject(message, accessor, "token_unsupported", tokenResolution.token(), e.getMessage());
         } catch (io.jsonwebtoken.security.SecurityException e) {
-            logAuthFailure(accessor, "token_signature_invalid", tokenResolution.token(), e.getMessage());
-            throw new MessageDeliveryException(message, "WebSocket 인증에 실패했습니다.");
+            return reject(message, accessor, "token_signature_invalid", tokenResolution.token(), e.getMessage());
         } catch (JwtException | IllegalArgumentException e) {
-            logAuthFailure(accessor, "token_invalid", tokenResolution.token(), e.getMessage());
-            throw new MessageDeliveryException(message, "WebSocket 인증에 실패했습니다.");
+            return reject(message, accessor, "token_invalid", tokenResolution.token(), e.getMessage());
+        }
+
+        if (!"access".equals(claims.get("typ", String.class))) {
+            return reject(message, accessor, "token_type_invalid", tokenResolution.token(), null);
         }
 
         String subject = claims.getSubject();
         if (!StringUtils.hasText(subject)) {
-            logAuthFailure(accessor, "subject_missing", tokenResolution.token(), null);
-            throw new MessageDeliveryException(message, "WebSocket 인증에 실패했습니다.");
+            return reject(message, accessor, "subject_missing", tokenResolution.token(), null);
         }
 
         Long userId;
         try {
             userId = Long.parseLong(subject);
         } catch (NumberFormatException e) {
-            logAuthFailure(accessor, "subject_not_numeric", tokenResolution.token(),
+            return reject(message, accessor, "subject_not_numeric", tokenResolution.token(),
                     "subjectLength=" + subject.length());
-            throw new MessageDeliveryException(message, "WebSocket 인증에 실패했습니다.");
         }
 
         accessor.setUser(() -> String.valueOf(userId));
-        log.debug("[STOMP] 인증 성공 - userId={}", userId);
+        log.debug("[STOMP] authentication succeeded - userId={}", userId);
         return message;
+    }
+
+    private Message<?> reject(
+            Message<?> message, StompHeaderAccessor accessor, String reason, String token, String detail) {
+        logAuthFailure(accessor, reason, token, detail);
+        throw new MessageDeliveryException(message, AUTH_FAILURE_MESSAGE + " reason=" + reason);
     }
 
     private TokenResolution resolveToken(String authHeader) {
@@ -121,7 +123,7 @@ public class StompJwtChannelInterceptor implements ChannelInterceptor {
             return;
         }
 
-        log.warn("[STOMP] JWT 인증 실패 - 연결 거부 reason={} sessionId={} acceptVersion={} heartbeat={} tokenHash={} detail={}",
+        log.warn("[STOMP] JWT authentication rejected reason={} sessionId={} acceptVersion={} heartbeat={} tokenHash={} detail={}",
                 reason,
                 accessor.getSessionId(),
                 accessor.getAcceptVersion(),

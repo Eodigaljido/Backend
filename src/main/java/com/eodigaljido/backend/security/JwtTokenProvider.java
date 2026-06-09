@@ -73,6 +73,14 @@ public class JwtTokenProvider {
         }
     }
 
+    public boolean isValidAccessToken(String token) {
+        try {
+            return "access".equals(parseToken(token).get("typ", String.class));
+        } catch (JwtException | IllegalArgumentException e) {
+            return false;
+        }
+    }
+
     public Long getUserId(String token) {
         return Long.parseLong(parseToken(token).getSubject());
     }
