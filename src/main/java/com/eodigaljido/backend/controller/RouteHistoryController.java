@@ -37,12 +37,22 @@ public class RouteHistoryController {
     @Operation(
             summary = "루트 기록 목록 조회",
             description = """
-                    채팅방(그룹)에 속한 루트 기록 목록을 반환합니다.
+                    그룹 채팅방에 속한 루트 기록 목록을 반환합니다.
 
-                    - `chatRoomUuid`: 그룹 채팅방 UUID (GROUP 타입)
-                    - 해당 채팅방에 속한 그룹의 모든 루트(전용 채팅방이 있는 루트만)를 반환합니다.
-                    - 루트 기록방 이름, 루트 UUID, 채팅방 UUID, 참가 인원 수를 포함합니다.
-                    - 채팅방 멤버인 경우에만 조회 가능합니다.
+                    **요청 조건**
+                    - `chatRoomUuid`: GROUP 타입 채팅방 UUID
+                    - 해당 채팅방 멤버만 조회 가능합니다.
+
+                    **반환 조건**
+                    - 해당 그룹 내 루트 중 전용 채팅방(ROUTE 타입)이 생성된 루트만 목록에 포함됩니다.
+
+                    **응답 필드**
+                    | 필드 | 설명 |
+                    |------|------|
+                    | `courseUuid` | 루트 UUID |
+                    | `routeChatRoomUuid` | 루트 전용 채팅방 UUID |
+                    | `name` | 루트 이름 |
+                    | `participantCount` | 공동 편집에 참여한 전체 인원 수 |
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
@@ -57,7 +67,7 @@ public class RouteHistoryController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<List<RouteHistoryItemResponse>> getRouteHistories(
-            @Parameter(description = "그룹 채팅방 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
+            @Parameter(description = "그룹 채팅방 UUID (GROUP 타입)", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
             @RequestParam String chatRoomUuid,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
@@ -72,17 +82,27 @@ public class RouteHistoryController {
     @Operation(
             summary = "루트 기록 피드 조회",
             description = """
-                    특정 루트의 기록 피드를 시간 순서대로 반환합니다.
+                    특정 루트에서 발생한 모든 이벤트를 발생 시각 오름차순으로 반환합니다.
 
-                    피드에는 두 종류의 항목이 포함됩니다:
-                    - **CHAT**: 루트 편집 세션 중 나눈 채팅 메시지
-                    - **EDIT**: 루트 수정 이벤트 (예: "홍길동님이 경유지를 추가했습니다")
+                    이벤트는 발생 시점에 불변 로그로 저장되므로 원본 메시지를 삭제·수정해도 기록은 유지됩니다.
 
-                    각 항목에는 작성자 프로필 이미지, 닉네임, 발생 시각이 포함됩니다.
+                    **`type` 값에 따른 응답 필드 사용 방법**
+
+                    | `type` | `action` | 설명 | 유효 필드 |
+                    |--------|----------|------|-----------|
+                    | `CHAT` | null | 채팅 메시지 전송 | `content`, `actorNickname`, `actorProfileImageUrl` |
+                    | `EDIT` | `ROUTE_UPDATED` | 루트 편집 | `editDescription`, `actorNickname`, `actorProfileImageUrl` |
+                    | `EDIT` | `CHAT_EDITED` | 채팅 메시지 수정 | `content`(수정 후 내용), `editDescription`, `actorNickname`, `actorProfileImageUrl` |
+                    | `EDIT` | `CHAT_DELETED` | 채팅 메시지 삭제 | `editDescription`, `actorNickname`, `actorProfileImageUrl` |
+
+                    **`editDescription` 예시**
+                    - `ROUTE_UPDATED` → "홍길동님이 루트를 수정했습니다"
+                    - `CHAT_EDITED` → "홍길동님이 메시지를 수정했습니다"
+                    - `CHAT_DELETED` → "홍길동님이 메시지를 삭제했습니다"
 
                     **조회 권한:** CourseMember이거나, 루트 전용 채팅방 멤버이거나, 그룹 채팅방 멤버인 경우 조회 가능합니다.
 
-                    **주의:** 이 API는 조회 전용입니다. 루트 수정은 공동 편집 세션에서만 가능합니다.
+                    이 API는 조회 전용입니다. 루트 수정은 공동 편집 세션에서만 가능합니다.
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
@@ -91,7 +111,7 @@ public class RouteHistoryController {
                     content = @Content(schema = @Schema(implementation = RouteHistoryFeedResponse.class))),
             @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "403", description = "접근 권한 없음",
+            @ApiResponse(responseCode = "403", description = "접근 권한 없음 (CourseMember, 루트 채팅방 멤버, 그룹 채팅방 멤버 중 하나여야 함)",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "루트를 찾을 수 없음",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
