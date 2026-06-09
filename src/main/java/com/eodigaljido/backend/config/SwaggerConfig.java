@@ -55,7 +55,7 @@ public class SwaggerConfig {
                         .version("v1.0.0")
                         .contact(new Contact()
                                 .name("어디갈지도 팀")
-                                .email("russeldestiny1234@gmail.com")))
+                                .email("eodigaljido@gmail.com")))
                 .servers(List.of(
                         new Server().url("/").description("현재 접속 주소"),
                         new Server().url("https://api.eodigaljido.uk").description("운영 서버"),
