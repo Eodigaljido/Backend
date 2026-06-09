@@ -391,6 +391,22 @@ public class ChatService {
         if (!message.getSender().getId().equals(userId)) {
             throw new ChatException("메시지 수정 권한이 없습니다.", HttpStatus.FORBIDDEN);
         }
+
+        if (room.getType() == ChatRoom.RoomType.ROUTE) {
+            User sender = message.getSender();
+            String newContent = req.content();
+            routeRepository.findByChatRoomIdAndStatusNot(room.getId(), Route.RouteStatus.DELETED)
+                    .ifPresent(route -> routeHistoryLogRepository.save(
+                            RouteHistoryLog.builder()
+                                    .route(route)
+                                    .actor(sender)
+                                    .type(RouteHistoryLog.LogType.EDIT)
+                                    .editAction("CHAT_EDITED")
+                                    .content(newContent)
+                                    .build()
+                    ));
+        }
+
         message.edit(req.content());
         ChatMessageResponse response = toMessageResponse(message);
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
@@ -416,6 +432,19 @@ public class ChatService {
         boolean isAdmin = membership.getRole() == ChatRoomMember.MemberRole.ADMIN;
         if (!isSender && !isAdmin) {
             throw new ChatException("메시지 삭제 권한이 없습니다.", HttpStatus.FORBIDDEN);
+        }
+
+        if (room.getType() == ChatRoom.RoomType.ROUTE) {
+            User actor = membership.getUser();
+            routeRepository.findByChatRoomIdAndStatusNot(room.getId(), Route.RouteStatus.DELETED)
+                    .ifPresent(route -> routeHistoryLogRepository.save(
+                            RouteHistoryLog.builder()
+                                    .route(route)
+                                    .actor(actor)
+                                    .type(RouteHistoryLog.LogType.EDIT)
+                                    .editAction("CHAT_DELETED")
+                                    .build()
+                    ));
         }
 
         ChatMessageResponse deleteResponse = toMessageResponse(message);

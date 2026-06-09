@@ -84,6 +84,8 @@ public record RouteHistoryFeedItem(
             case "UPDATE_TAGS" -> "님이 태그를 변경했습니다";
             case "UPDATE_REGION" -> "님이 지역을 변경했습니다";
             case "UPDATE_ACTIVITY_TYPE" -> "님이 활동 유형을 변경했습니다";
+            case "CHAT_EDITED" -> "님이 메시지를 수정했습니다";
+            case "CHAT_DELETED" -> "님이 메시지를 삭제했습니다";
             default -> "님이 루트를 수정했습니다";
         };
         return nickname + suffix;
