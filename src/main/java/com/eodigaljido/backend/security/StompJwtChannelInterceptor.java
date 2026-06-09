@@ -1,6 +1,5 @@
 package com.eodigaljido.backend.security;
 
-import com.eodigaljido.backend.exception.ChatException;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
@@ -9,9 +8,9 @@ import io.jsonwebtoken.PrematureJwtException;
 import io.jsonwebtoken.UnsupportedJwtException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessageDeliveryException;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
@@ -48,7 +47,7 @@ public class StompJwtChannelInterceptor implements ChannelInterceptor {
         TokenResolution tokenResolution = resolveToken(accessor.getFirstNativeHeader("Authorization"));
         if (!StringUtils.hasText(tokenResolution.token())) {
             logAuthFailure(accessor, tokenResolution.reason(), null, null);
-            throw new ChatException("WebSocket 인증에 실패했습니다.", HttpStatus.UNAUTHORIZED);
+            throw new MessageDeliveryException(message, "WebSocket 인증에 실패했습니다.");
         }
 
         Claims claims;
@@ -57,28 +56,28 @@ public class StompJwtChannelInterceptor implements ChannelInterceptor {
         } catch (ExpiredJwtException e) {
             logAuthFailure(accessor, "token_expired", tokenResolution.token(),
                     "expiredAt=" + formatDate(e.getClaims() != null ? e.getClaims().getExpiration() : null));
-            throw new ChatException("WebSocket 인증에 실패했습니다.", HttpStatus.UNAUTHORIZED);
+            throw new MessageDeliveryException(message, "WebSocket 인증에 실패했습니다.");
         } catch (PrematureJwtException e) {
             logAuthFailure(accessor, "token_not_yet_valid", tokenResolution.token(), e.getMessage());
-            throw new ChatException("WebSocket 인증에 실패했습니다.", HttpStatus.UNAUTHORIZED);
+            throw new MessageDeliveryException(message, "WebSocket 인증에 실패했습니다.");
         } catch (MalformedJwtException e) {
             logAuthFailure(accessor, "token_malformed", tokenResolution.token(), e.getMessage());
-            throw new ChatException("WebSocket 인증에 실패했습니다.", HttpStatus.UNAUTHORIZED);
+            throw new MessageDeliveryException(message, "WebSocket 인증에 실패했습니다.");
         } catch (UnsupportedJwtException e) {
             logAuthFailure(accessor, "token_unsupported", tokenResolution.token(), e.getMessage());
-            throw new ChatException("WebSocket 인증에 실패했습니다.", HttpStatus.UNAUTHORIZED);
+            throw new MessageDeliveryException(message, "WebSocket 인증에 실패했습니다.");
         } catch (io.jsonwebtoken.security.SecurityException e) {
             logAuthFailure(accessor, "token_signature_invalid", tokenResolution.token(), e.getMessage());
-            throw new ChatException("WebSocket 인증에 실패했습니다.", HttpStatus.UNAUTHORIZED);
+            throw new MessageDeliveryException(message, "WebSocket 인증에 실패했습니다.");
         } catch (JwtException | IllegalArgumentException e) {
             logAuthFailure(accessor, "token_invalid", tokenResolution.token(), e.getMessage());
-            throw new ChatException("WebSocket 인증에 실패했습니다.", HttpStatus.UNAUTHORIZED);
+            throw new MessageDeliveryException(message, "WebSocket 인증에 실패했습니다.");
         }
 
         String subject = claims.getSubject();
         if (!StringUtils.hasText(subject)) {
             logAuthFailure(accessor, "subject_missing", tokenResolution.token(), null);
-            throw new ChatException("WebSocket 인증에 실패했습니다.", HttpStatus.UNAUTHORIZED);
+            throw new MessageDeliveryException(message, "WebSocket 인증에 실패했습니다.");
         }
 
         Long userId;
@@ -87,7 +86,7 @@ public class StompJwtChannelInterceptor implements ChannelInterceptor {
         } catch (NumberFormatException e) {
             logAuthFailure(accessor, "subject_not_numeric", tokenResolution.token(),
                     "subjectLength=" + subject.length());
-            throw new ChatException("WebSocket 인증에 실패했습니다.", HttpStatus.UNAUTHORIZED);
+            throw new MessageDeliveryException(message, "WebSocket 인증에 실패했습니다.");
         }
 
         accessor.setUser(() -> String.valueOf(userId));

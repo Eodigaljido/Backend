@@ -499,6 +499,7 @@ public class ChatService {
         return response;
     }
 
+    @Transactional(readOnly = true)
     public void broadcastTyping(Long userId, String roomUuid, TypingRequest req) {
         ChatRoom room = getActiveRoom(roomUuid);
         User me = getMembership(room, userId).getUser();
