@@ -21,6 +21,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
+import com.eodigaljido.backend.security.JwtAuthenticationFilter;
+import com.eodigaljido.backend.security.JwtTokenProvider;
 
 @RestController
 @RequestMapping("/auth")
@@ -43,16 +45,36 @@ public class AuthController {
                     - `Authorization: Bearer {accessToken}`
 
                     **응답:**
-                    - 유효한 액세스 토큰이며 활성 사용자에 속하는 경우: `authenticated=true`
-                    - 토큰이 없거나 만료·위조되었거나, refresh token이거나, 비활성 사용자에 속하는 경우: `authenticated=false`
+                    - 유효한 액세스 토큰이며 활성 사용자에 속하는 경우: `authenticated=true`, `status=AUTHENTICATED`
+                    - 액세스 토큰이 만료된 경우: `authenticated=false`, `status=TOKEN_EXPIRED`, `refreshRequired=true`
+                    - 토큰 누락·위조·잘못된 종류·비활성 사용자인 경우 상태에 맞는 `status`를 반환합니다.
 
                     인증되지 않은 요청도 오류 없이 **200 OK**로 현재 인증 상태를 반환합니다.
                     """
     )
     @ApiResponse(responseCode = "200", description = "현재 요청의 인증 상태 반환",
             content = @Content(schema = @Schema(implementation = AuthStatusResponse.class)))
-    ResponseEntity<AuthStatusResponse> status(@AuthenticationPrincipal UserDetails userDetails) {
-        return ResponseEntity.ok(new AuthStatusResponse(userDetails != null));
+    ResponseEntity<AuthStatusResponse> status(
+            @AuthenticationPrincipal UserDetails userDetails,
+            HttpServletRequest request) {
+        JwtTokenProvider.AccessTokenStatus tokenStatus = (JwtTokenProvider.AccessTokenStatus)
+                request.getAttribute(JwtAuthenticationFilter.ACCESS_TOKEN_STATUS_ATTRIBUTE);
+        if (userDetails != null) {
+            return ResponseEntity.ok(new AuthStatusResponse(true, "AUTHENTICATED", false));
+        }
+        return ResponseEntity.ok(toAuthStatusResponse(tokenStatus));
+    }
+
+    private AuthStatusResponse toAuthStatusResponse(JwtTokenProvider.AccessTokenStatus tokenStatus) {
+        if (tokenStatus == null || tokenStatus == JwtTokenProvider.AccessTokenStatus.MISSING) {
+            return new AuthStatusResponse(false, "TOKEN_MISSING", false);
+        }
+        return switch (tokenStatus) {
+            case EXPIRED -> new AuthStatusResponse(false, "TOKEN_EXPIRED", true);
+            case WRONG_TYPE -> new AuthStatusResponse(false, "TOKEN_TYPE_INVALID", false);
+            case USER_INACTIVE -> new AuthStatusResponse(false, "USER_INACTIVE", false);
+            default -> new AuthStatusResponse(false, "TOKEN_INVALID", false);
+        };
     }
 
     @PostMapping("/register")
@@ -127,6 +149,9 @@ public class AuthController {
 
                     **Response:**
                     - `accessToken`: 새로 발급된 access token (유효기간 1시간)
+
+                    재발급 후에는 REST 요청의 Authorization 헤더를 새 access token으로 교체해야 합니다.
+                    WebSocket(STOMP)이 연결되어 있었다면 기존 연결을 종료하고, CONNECT 헤더에 새 access token을 넣어 다시 연결해야 합니다.
 
                     refresh token이 만료되었거나 폐기된 경우 401을 반환합니다. 이 경우 재로그인이 필요합니다.
                     """

@@ -27,4 +27,19 @@ class JwtTokenProviderTest {
                 jwtTokenProvider.generateRefreshToken(1L))).isFalse();
         assertThat(jwtTokenProvider.isValidAccessToken("invalid-token")).isFalse();
     }
+
+    @Test
+    void distinguishesExpiredInvalidAndWrongTypeAccessTokens() {
+        String refreshToken = jwtTokenProvider.generateRefreshToken(1L);
+
+        assertThat(jwtTokenProvider.validateAccessToken(null).status())
+                .isEqualTo(JwtTokenProvider.AccessTokenStatus.MISSING);
+        assertThat(jwtTokenProvider.validateAccessToken("invalid-token").status())
+                .isEqualTo(JwtTokenProvider.AccessTokenStatus.INVALID);
+        assertThat(jwtTokenProvider.validateAccessToken(refreshToken).status())
+                .isEqualTo(JwtTokenProvider.AccessTokenStatus.WRONG_TYPE);
+        assertThat(jwtTokenProvider.isValidRefreshToken(refreshToken)).isTrue();
+        assertThat(jwtTokenProvider.isValidRefreshToken(
+                jwtTokenProvider.generateAccessToken(1L, "USER"))).isFalse();
+    }
 }

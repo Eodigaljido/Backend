@@ -1,0 +1,44 @@
+name: Cleanup Docker Resources
+
+on:
+  workflow_run:
+    workflows:
+      - Deploy to EC2
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ec2-docker-maintenance
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Cleanup unused Docker resources on EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          password: ${{ secrets.EC2_PASSWORD }}
+          port: 22
+          script_stop: true
+          script: |
+            set -e
+
+            echo "Docker disk usage before cleanup:"
+            docker system df
+
+            # Remove all build cache and resources unused by running containers.
+            # Volumes are intentionally preserved because they may contain persistent data.
+            docker builder prune -af
+            docker system prune -af
+
+            echo "Docker disk usage after cleanup:"
+            docker system df

@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -119,7 +120,7 @@ public class AuthService {
 
     @Transactional
     public TokenRefreshResponse refreshToken(TokenRefreshRequest request) {
-        if (!jwtTokenProvider.isValid(request.refreshToken())) {
+        if (!jwtTokenProvider.isValidRefreshToken(request.refreshToken())) {
             throw new AuthException("유효하지 않은 refresh token입니다.", HttpStatus.UNAUTHORIZED);
         }
 
@@ -133,6 +134,10 @@ public class AuthService {
         }
 
         User user = stored.getUser();
+        if (user.getStatus() != User.UserStatus.ACTIVE) {
+            stored.revoke();
+            throw new AuthException("비활성화된 계정입니다. 다시 로그인할 수 없습니다.", HttpStatus.UNAUTHORIZED);
+        }
         String newAccessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getRole().name());
         long expiresIn = jwtProperties.getAccessTokenExpiry() / 1000;
         return TokenRefreshResponse.of(newAccessToken, expiresIn);
@@ -140,7 +145,7 @@ public class AuthService {
 
     @Transactional
     public void logout(Long userId, String refreshToken) {
-        if (!jwtTokenProvider.isValid(refreshToken)) {
+        if (!jwtTokenProvider.isValidRefreshToken(refreshToken)) {
             throw new AuthException("유효하지 않은 refresh token입니다.", HttpStatus.BAD_REQUEST);
         }
         String tokenHash = jwtTokenProvider.hashToken(refreshToken);
@@ -226,7 +231,7 @@ public class AuthService {
                 .tokenHash(jwtTokenProvider.hashToken(refreshTokenStr))
                 .deviceInfo(deviceInfo)
                 .ipAddress(ipAddress)
-                .expiresAt(LocalDateTime.now().plusDays(30))
+                .expiresAt(LocalDateTime.now().plus(Duration.ofMillis(jwtProperties.getRefreshTokenExpiry())))
                 .build();
 
         refreshTokenRepository.save(refreshToken);

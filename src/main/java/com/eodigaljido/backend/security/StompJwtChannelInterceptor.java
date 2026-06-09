@@ -15,6 +15,7 @@ import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -34,6 +35,7 @@ public class StompJwtChannelInterceptor implements ChannelInterceptor {
     private static final String AUTH_FAILURE_MESSAGE = "WebSocket authentication failed.";
 
     private final JwtTokenProvider jwtTokenProvider;
+    private final CustomUserDetailsService userDetailsService;
     private final ConcurrentMap<String, SuppressedFailure> suppressedFailures = new ConcurrentHashMap<>();
 
     @Override
@@ -83,6 +85,12 @@ public class StompJwtChannelInterceptor implements ChannelInterceptor {
         } catch (NumberFormatException e) {
             return reject(message, accessor, "subject_not_numeric", tokenResolution.token(),
                     "subjectLength=" + subject.length());
+        }
+
+        try {
+            userDetailsService.loadUserByUsername(String.valueOf(userId));
+        } catch (UsernameNotFoundException e) {
+            return reject(message, accessor, "user_inactive", tokenResolution.token(), null);
         }
 
         accessor.setUser(() -> String.valueOf(userId));

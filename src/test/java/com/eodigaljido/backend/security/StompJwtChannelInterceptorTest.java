@@ -8,13 +8,18 @@ import org.springframework.messaging.MessageDeliveryException;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.MessageBuilder;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class StompJwtChannelInterceptorTest {
 
     private JwtTokenProvider jwtTokenProvider;
+    private CustomUserDetailsService userDetailsService;
     private StompJwtChannelInterceptor interceptor;
 
     @BeforeEach
@@ -24,7 +29,10 @@ class StompJwtChannelInterceptorTest {
         properties.setAccessTokenExpiry(60_000);
         properties.setRefreshTokenExpiry(60_000);
         jwtTokenProvider = new JwtTokenProvider(properties);
-        interceptor = new StompJwtChannelInterceptor(jwtTokenProvider);
+        userDetailsService = mock(CustomUserDetailsService.class);
+        when(userDetailsService.loadUserByUsername("7"))
+                .thenReturn(User.withUsername("7").password("").roles("USER").build());
+        interceptor = new StompJwtChannelInterceptor(jwtTokenProvider, userDetailsService);
     }
 
     @Test
@@ -54,6 +62,17 @@ class StompJwtChannelInterceptorTest {
         Message<byte[]> message = MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
 
         assertThat(interceptor.preSend(message, null)).isSameAs(message);
+    }
+
+    @Test
+    void rejectsInactiveUserOnConnect() {
+        when(userDetailsService.loadUserByUsername("7"))
+                .thenThrow(new UsernameNotFoundException("User not found."));
+        Message<byte[]> message = connectMessage(jwtTokenProvider.generateAccessToken(7L, "USER"));
+
+        assertThatThrownBy(() -> interceptor.preSend(message, null))
+                .isInstanceOf(MessageDeliveryException.class)
+                .hasMessageContaining("reason=user_inactive");
     }
 
     private Message<byte[]> connectMessage(String token) {

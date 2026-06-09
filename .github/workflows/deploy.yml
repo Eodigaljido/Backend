@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: ec2-docker-maintenance
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest

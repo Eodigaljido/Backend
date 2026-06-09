@@ -74,10 +74,35 @@ public class JwtTokenProvider {
     }
 
     public boolean isValidAccessToken(String token) {
+        return validateAccessToken(token).status() == AccessTokenStatus.VALID;
+    }
+
+    public boolean isValidRefreshToken(String token) {
         try {
-            return "access".equals(parseToken(token).get("typ", String.class));
+            return "refresh".equals(parseToken(token).get("typ", String.class));
         } catch (JwtException | IllegalArgumentException e) {
             return false;
+        }
+    }
+
+    public AccessTokenValidation validateAccessToken(String token) {
+        if (token == null || token.isBlank()) {
+            return new AccessTokenValidation(AccessTokenStatus.MISSING, null);
+        }
+        try {
+            Claims claims = parseToken(token);
+            if (!"access".equals(claims.get("typ", String.class))) {
+                return new AccessTokenValidation(AccessTokenStatus.WRONG_TYPE, null);
+            }
+            if (claims.getSubject() == null) {
+                return new AccessTokenValidation(AccessTokenStatus.INVALID, null);
+            }
+            Long.parseLong(claims.getSubject());
+            return new AccessTokenValidation(AccessTokenStatus.VALID, claims);
+        } catch (ExpiredJwtException e) {
+            return new AccessTokenValidation(AccessTokenStatus.EXPIRED, null);
+        } catch (JwtException | IllegalArgumentException e) {
+            return new AccessTokenValidation(AccessTokenStatus.INVALID, null);
         }
     }
 
@@ -92,5 +117,17 @@ public class JwtTokenProvider {
         } catch (Exception e) {
             throw new RuntimeException("토큰 해싱 실패", e);
         }
+    }
+
+    public enum AccessTokenStatus {
+        VALID,
+        MISSING,
+        EXPIRED,
+        INVALID,
+        WRONG_TYPE,
+        USER_INACTIVE
+    }
+
+    public record AccessTokenValidation(AccessTokenStatus status, Claims claims) {
     }
 }
