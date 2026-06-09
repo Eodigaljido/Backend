@@ -2,6 +2,8 @@ package com.eodigaljido.backend.domain.notification;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class NotificationSettingKeyTest {
@@ -16,7 +18,7 @@ class NotificationSettingKeyTest {
                 .contains(NotificationSettingKey.MEET_JOIN_RESULT);
         assertThat(NotificationSettingKey.fromNotificationType(NotificationType.ROUTE_USED))
                 .contains(NotificationSettingKey.COURSE_FAVORITED_OR_USED);
-        assertThat(NotificationSettingKey.fromNotificationType(NotificationType.GROUP_INVITED))
-                .isEmpty();
+        assertThat(Arrays.stream(NotificationType.values()))
+                .allMatch(type -> NotificationSettingKey.fromNotificationType(type).isPresent());
     }
 }

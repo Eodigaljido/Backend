@@ -14,6 +14,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -65,6 +67,18 @@ class NotificationSettingServiceTest {
         assertThat(result.get("chatMessage")).isFalse();
         assertThat(result.get("friendRequest")).isTrue();
         assertThat(service.isEnabled(user, NotificationType.CHAT_MESSAGE)).isFalse();
+    }
+
+    @Test
+    void supportsTurningOffEveryNotificationSetting() {
+        Map<String, Boolean> allDisabled = Stream.of(NotificationSettingKey.values())
+                .collect(Collectors.toMap(NotificationSettingKey::key, ignored -> false));
+
+        Map<String, Boolean> result = service.updateSettings(1L, allDisabled);
+
+        assertThat(result.values()).containsOnly(false);
+        assertThat(Stream.of(NotificationType.values()))
+                .allMatch(type -> !service.isEnabled(user, type));
     }
 
     @Test

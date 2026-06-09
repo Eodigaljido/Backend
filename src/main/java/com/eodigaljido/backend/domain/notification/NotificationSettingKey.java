@@ -53,7 +53,7 @@ public enum NotificationSettingKey {
             case GROUP_CHAT_ROOM_CREATED -> MEET_NEW_CHAT_ROOM;
             case ROUTE_RECOMMENDED -> COURSE_RECOMMENDED;
             case ROUTE_FAVORITED, ROUTE_USED -> COURSE_FAVORITED_OR_USED;
-            case GROUP_INVITED -> null;
+            case GROUP_INVITED -> MEET_JOIN_REQUEST;
         });
     }
 }

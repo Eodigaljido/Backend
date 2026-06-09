@@ -44,6 +44,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -280,32 +281,22 @@ public class ChatService {
                 .map(Profile::getNickname).orElse(me.getUserId());
         List<ChatRoomMember> otherMembers = chatRoomMemberRepository.findByRoomAndLeftAtIsNull(room)
                 .stream().filter(m -> !m.getUser().getId().equals(userId)).toList();
+        Set<String> mentionedUserUuids = req.mentionedUserUuids() == null
+                ? Set.of()
+                : req.mentionedUserUuids().stream()
+                        .filter(uuid -> uuid != null && !uuid.isBlank())
+                        .collect(Collectors.toSet());
 
         for (ChatRoomMember member : otherMembers) {
             Long recipientId = member.getUser().getId();
+            boolean mentioned = mentionedUserUuids.contains(member.getUser().getUuid());
             eventPublisher.publishEvent(NotificationEvent.of(
                     recipientId, userId,
-                    NotificationType.CHAT_MESSAGE,
-                    senderNickname,
+                    mentioned ? NotificationType.CHAT_MENTION : NotificationType.CHAT_MESSAGE,
+                    mentioned ? senderNickname + "님이 회원님을 멘션했습니다" : senderNickname,
                     req.content().length() > 50 ? req.content().substring(0, 50) + "…" : req.content(),
                     room.getUuid(), "CHAT_ROOM"
             ));
-        }
-
-        if (req.mentionedUserUuids() != null) {
-            for (String mentionedUuid : req.mentionedUserUuids()) {
-                userRepository.findByUuid(mentionedUuid).ifPresent(mentionedUser -> {
-                    if (!mentionedUser.getId().equals(userId)) {
-                        eventPublisher.publishEvent(NotificationEvent.of(
-                                mentionedUser.getId(), userId,
-                                NotificationType.CHAT_MENTION,
-                                senderNickname + "님이 멘션했습니다",
-                                req.content().length() > 50 ? req.content().substring(0, 50) + "…" : req.content(),
-                                room.getUuid(), "CHAT_ROOM"
-                        ));
-                    }
-                });
-            }
         }
 
         ChatMessageResponse response = toMessageResponse(message);

@@ -4,6 +4,7 @@ import com.eodigaljido.backend.domain.chat.ChatRoom;
 import com.eodigaljido.backend.domain.chat.ChatRoomMember;
 import com.eodigaljido.backend.domain.group.Group;
 import com.eodigaljido.backend.domain.notification.NotificationType;
+import com.eodigaljido.backend.domain.onboarding.OnboardingAnswer;
 import com.eodigaljido.backend.domain.route.CourseMember;
 import com.eodigaljido.backend.domain.route.Route;
 import com.eodigaljido.backend.domain.route.RouteHistoryLog;
@@ -508,6 +509,7 @@ public class CourseService {
         List<RouteLeg> legs = buildLegs(route, req.legs());
         legRepository.saveAll(legs);
 
+        notifyChatCourseChanged(route, editor, "수정했습니다");
         return toMyCourseDetail(route, waypoints, legs);
     }
 
@@ -691,11 +693,12 @@ public class CourseService {
             );
         }
 
-        if (route.getRegion() != null || route.getActivityType() != null) {
+        if (!wasShared && (route.getRegion() != null || route.getActivityType() != null)) {
             onboardingAnswerRepository
-                    .findMatchingUsers(route.getRegion(), route.getActivityType())
+                    .findByStatus(OnboardingAnswer.OnboardingStatus.COMPLETED)
                     .stream()
                     .filter(answer -> !answer.getUser().getId().equals(userId))
+                    .filter(answer -> matchesRecommendedCourse(answer, route))
                     .limit(1000)
                     .forEach(answer -> eventPublisher.publishEvent(NotificationEvent.of(
                             answer.getUser().getId(), userId,
@@ -898,9 +901,13 @@ public class CourseService {
         if (chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(room, requesterUser).isEmpty()) {
             throw new RouteException("채팅방 멤버만 연결할 수 있습니다.", HttpStatus.FORBIDDEN);
         }
+        boolean chatRoomChanged = route.getChatRoom() == null || !route.getChatRoom().getId().equals(room.getId());
         route.assignChatRoom(room);
         courseMemberRepository.findByRouteAndLeftAtIsNull(route)
                 .forEach(member -> ensureChatRoomMember(room, member.getUser(), ChatRoomMember.MemberRole.MEMBER));
+        if (chatRoomChanged) {
+            notifyChatCourseChanged(route, requesterUser, "채팅방에 연결했습니다");
+        }
         return CourseChatRoomResponse.of(route.getUuid(), room, chatRoomMemberRepository.findByRoomAndLeftAtIsNull(room).size());
     }
 
@@ -997,7 +1004,12 @@ public class CourseService {
                                 editor.getUuid(),
                                 nickname
                         )));
+        notifyChatCourseChanged(route, editor, "수정했습니다");
+    }
+
+    private void notifyChatCourseChanged(Route route, User editor, String action) {
         if (route.getChatRoom() != null) {
+            String nickname = displayName(editor);
             chatRoomMemberRepository.findByRoomAndLeftAtIsNull(route.getChatRoom()).stream()
                     .map(ChatRoomMember::getUser)
                     .filter(member -> !member.getId().equals(editor.getId()))
@@ -1005,10 +1017,18 @@ public class CourseService {
                             member.getId(), editor.getId(),
                             NotificationType.CHAT_ROUTE_CHANGED,
                             "코스 생성·수정",
-                            nickname + "님이 코스를 수정했습니다: " + route.getTitle(),
+                            nickname + "님이 코스를 " + action + ": " + route.getTitle(),
                             route.getUuid(), "ROUTE"
                     )));
         }
+    }
+
+    static boolean matchesRecommendedCourse(OnboardingAnswer answer, Route route) {
+        boolean regionMatches = route.getRegion() != null && route.getRegion().equals(answer.getRegion());
+        boolean activityMatches = route.getActivityType() != null
+                && answer.getActivity() != null
+                && answer.getActivity().contains(route.getActivityType());
+        return regionMatches || activityMatches;
     }
 
     private void notifyGroupMembers(Group group, User actor, NotificationType type,
