@@ -487,7 +487,7 @@ public class AuthController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     ResponseEntity<PhoneCodeResponse> sendPhoneCode(@Valid @RequestBody PhoneCodeRequest request) {
-        phoneVerificationService.sendCode(request.phone(), request.purpose());
+        authService.sendPhoneCode(request.phone(), request.purpose());
         return ResponseEntity.ok(PhoneCodeResponse.of(180));
     }
 

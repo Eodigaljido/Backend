@@ -95,6 +95,16 @@ public class AuthService {
         phoneVerificationService.clearVerified(phone, PhoneVerification.Purpose.REGISTER);
     }
 
+    public void sendPhoneCode(String phone, PhoneVerification.Purpose purpose) {
+        if ((purpose == PhoneVerification.Purpose.REGISTER
+                || purpose == PhoneVerification.Purpose.CHANGE_PHONE)
+                && userRepository.existsByPhone(phone)) {
+            throw new AuthException("이미 사용중인 전화번호입니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        phoneVerificationService.sendCode(phone, purpose);
+    }
+
     @Transactional
     public LoginResponse login(LoginRequest request, String deviceInfo, String ipAddress) {
         String identifier = request.identifier();
