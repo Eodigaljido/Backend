@@ -37,21 +37,20 @@ public class RouteHistoryLog {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
-    private LogType type;
+    private Type type;
 
-    // CHAT 타입: 전송 시점의 메시지 내용 스냅샷 (이후 수정/삭제와 무관)
+    // CHAT 액션의 메시지 내용 스냅샷 (전송 당시/수정 후/삭제 직전 내용)
     @Column(columnDefinition = "TEXT")
     private String content;
 
-    // EDIT 타입: 어떤 편집이 발생했는지 (예: ADD_WAYPOINT, ROUTE_UPDATED)
-    @Column(name = "edit_action", length = 30)
+    @Column(name = "edit_action", length = 20)
     private String editAction;
 
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    public enum LogType {
-        CHAT, EDIT
+    public enum Type {
+        CHAT, COURSE
     }
 }

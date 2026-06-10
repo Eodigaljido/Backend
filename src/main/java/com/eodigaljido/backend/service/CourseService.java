@@ -7,8 +7,8 @@ import com.eodigaljido.backend.domain.notification.NotificationType;
 import com.eodigaljido.backend.domain.onboarding.OnboardingAnswer;
 import com.eodigaljido.backend.domain.route.CourseMember;
 import com.eodigaljido.backend.domain.route.Route;
-import com.eodigaljido.backend.domain.route.RouteHistoryLog;
 import com.eodigaljido.backend.domain.route.Route.RouteStatus;
+import com.eodigaljido.backend.domain.route.RouteHistoryLog;
 import com.eodigaljido.backend.domain.route.RouteLeg;
 import com.eodigaljido.backend.domain.route.RouteReview;
 import com.eodigaljido.backend.domain.route.RouteWaypoint;
@@ -578,7 +578,7 @@ public class CourseService {
         routeHistoryLogRepository.save(RouteHistoryLog.builder()
                 .route(route)
                 .actor(editor)
-                .type(RouteHistoryLog.LogType.EDIT)
+                .type(RouteHistoryLog.Type.COURSE)
                 .editAction("ROUTE_UPDATED")
                 .build());
         MyCourseDetailResponse response = toMyCourseDetail(route, waypoints, legs);

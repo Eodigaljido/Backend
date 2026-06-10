@@ -11,9 +11,9 @@ public record RouteHistoryItemResponse(
         @Schema(description = "루트 전용 채팅방 UUID (ROUTE 타입)", example = "660e8400-e29b-41d4-a716-446655440001")
         String routeChatRoomUuid,
 
-        @Schema(description = "루트 이름", example = "서울 송파구")
+        @Schema(description = "루트 기록방 이름 (루트 제목)", example = "서울 송파구")
         String name,
 
-        @Schema(description = "공동 편집에 참여한 전체 인원 수 (탈퇴한 멤버 포함)", example = "3")
+        @Schema(description = "실시간 공동 편집에 참여한 전체 인원 수 (탈퇴한 멤버 포함)", example = "3")
         long participantCount
 ) {}

@@ -5,7 +5,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
 
-@Schema(description = "루트 기록 피드 응답 (채팅 메시지 + 수정 이벤트 시간순 정렬)")
+@Schema(description = "루트 기록 상세 피드 응답 (채팅 메시지 + 루트 수정 이벤트를 발생 시각 오름차순으로 정렬)")
 public record RouteHistoryFeedResponse(
 
         @Schema(description = "피드 항목 목록")

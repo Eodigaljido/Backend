@@ -44,15 +44,17 @@ public class RouteHistoryController {
                     - 해당 채팅방 멤버만 조회 가능합니다.
 
                     **반환 조건**
-                    - 해당 그룹 내 루트 중 전용 채팅방(ROUTE 타입)이 생성된 루트만 목록에 포함됩니다.
+                    - 해당 그룹 내 루트 중, 실시간 공동 편집 세션을 위한 전용 채팅방(ROUTE 타입)이
+                      생성된 적 있는 루트만 목록에 포함됩니다.
+                    - 일반 채팅만 나눈 루트(전용 채팅방이 없는 루트)는 목록에 표시되지 않습니다.
 
                     **응답 필드**
                     | 필드 | 설명 |
                     |------|------|
                     | `courseUuid` | 루트 UUID |
                     | `routeChatRoomUuid` | 루트 전용 채팅방 UUID |
-                    | `name` | 루트 이름 |
-                    | `participantCount` | 공동 편집에 참여한 전체 인원 수 |
+                    | `name` | 루트 기록방 이름 (루트 제목) |
+                    | `participantCount` | 실시간 공동 편집에 참여한 전체 인원 수 |
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
@@ -75,16 +77,18 @@ public class RouteHistoryController {
     }
 
     // ──────────────────────────────────────────────────────────
-    // 루트 기록 피드 (상세)
+    // 루트 기록 상세 피드
     // ──────────────────────────────────────────────────────────
 
     @GetMapping("/{courseId}/feed")
     @Operation(
-            summary = "루트 기록 피드 조회",
+            summary = "루트 기록 상세 피드 조회",
             description = """
-                    특정 루트에서 발생한 모든 이벤트를 발생 시각 오름차순으로 반환합니다.
+                    특정 루트의 실시간 공동 편집 세션 중 발생한 채팅 메시지와 루트 수정 이벤트를
+                    발생 시각 오름차순으로 반환합니다.
 
-                    이벤트는 발생 시점에 불변 로그로 저장되므로 원본 메시지를 삭제·수정해도 기록은 유지됩니다.
+                    이벤트는 발생 시점에 불변 로그로 저장되므로, 원본 채팅 메시지를 이후에
+                    수정·삭제하더라도 기록 자체는 유지됩니다.
 
                     **`type` 값에 따른 응답 필드 사용 방법**
 
@@ -92,8 +96,8 @@ public class RouteHistoryController {
                     |--------|----------|------|-----------|
                     | `CHAT` | `CHAT_SENDED` | 채팅 메시지 전송 | `content`(전송 내용), `editDescription`, `actorNickname`, `actorProfileImageUrl` |
                     | `CHAT` | `CHAT_EDITED` | 채팅 메시지 수정 | `content`(수정 후 내용), `editDescription`, `actorNickname`, `actorProfileImageUrl` |
-                    | `CHAT` | `CHAT_DELETED` | 채팅 메시지 삭제 | `content`(삭제된 원본 내용), `editDescription`, `actorNickname`, `actorProfileImageUrl` |
-                    | `COURSE` | `ROUTE_UPDATED` | 루트 편집 | `editDescription`, `actorNickname`, `actorProfileImageUrl` |
+                    | `CHAT` | `CHAT_DELETED` | 채팅 메시지 삭제 | `content`(삭제 직전 내용), `editDescription`, `actorNickname`, `actorProfileImageUrl` |
+                    | `COURSE` | `ROUTE_UPDATED` | 루트 편집 | `editDescription`, `actorNickname`, `actorProfileImageUrl` (`content`는 null) |
 
                     **`editDescription` 예시**
                     - `ROUTE_UPDATED` → "홍길동님이 루트를 수정했습니다"
@@ -101,14 +105,16 @@ public class RouteHistoryController {
                     - `CHAT_EDITED` → "홍길동님이 메시지를 수정했습니다"
                     - `CHAT_DELETED` → "홍길동님이 메시지를 삭제했습니다"
 
-                    **조회 권한:** CourseMember이거나, 루트 전용 채팅방 멤버이거나, 그룹 채팅방 멤버인 경우 조회 가능합니다.
+                    **조회 권한:** 루트의 CourseMember이거나, 루트 전용 채팅방 멤버이거나,
+                    루트가 속한 그룹의 채팅방 멤버인 경우 조회 가능합니다.
 
-                    이 API는 조회 전용입니다. 루트 수정은 공동 편집 세션에서만 가능합니다.
+                    이 API는 조회 전용입니다. 루트를 추가로 수정하려면 실시간 공동 편집
+                    세션에 재진입해야 합니다.
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "루트 기록 피드 반환",
+            @ApiResponse(responseCode = "200", description = "루트 기록 상세 피드 반환",
                     content = @Content(schema = @Schema(implementation = RouteHistoryFeedResponse.class))),
             @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
@@ -126,7 +132,7 @@ public class RouteHistoryController {
             @RequestParam(defaultValue = "30") int size,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
-        int clampedSize = Math.min(size, 50);
+        int clampedSize = Math.min(Math.max(size, 1), 50);
         return ResponseEntity.ok(routeHistoryService.getRouteHistoryFeed(userId, courseId, page, clampedSize));
     }
 }

@@ -15,6 +15,8 @@ import com.eodigaljido.backend.exception.RouteException;
 import com.eodigaljido.backend.exception.UserException;
 import com.eodigaljido.backend.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +28,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class RouteHistoryService {
 
     private final ChatRoomRepository chatRoomRepository;
@@ -40,7 +43,6 @@ public class RouteHistoryService {
     // 루트 기록 목록 (채팅방 기준)
     // ──────────────────────────────────────────────────────────
 
-    @Transactional(readOnly = true)
     public List<RouteHistoryItemResponse> getRouteHistories(Long userId, String chatRoomUuid) {
         ChatRoom chatRoom = chatRoomRepository.findByUuidAndDeletedAtIsNull(chatRoomUuid)
                 .orElseThrow(() -> new ChatException("채팅방을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
@@ -58,23 +60,19 @@ public class RouteHistoryService {
 
         return routes.stream()
                 .filter(r -> r.getChatRoom() != null)
-                .map(r -> {
-                    long participantCount = courseMemberRepository.countByRoute(r);
-                    return new RouteHistoryItemResponse(
-                            r.getUuid(),
-                            r.getChatRoom().getUuid(),
-                            r.getTitle(),
-                            participantCount
-                    );
-                })
+                .map(r -> new RouteHistoryItemResponse(
+                        r.getUuid(),
+                        r.getChatRoom().getUuid(),
+                        r.getTitle(),
+                        courseMemberRepository.countByRoute(r)
+                ))
                 .toList();
     }
 
     // ──────────────────────────────────────────────────────────
-    // 루트 기록 피드 (불변 RouteHistoryLog 기반)
+    // 루트 기록 상세 피드 (불변 RouteHistoryLog 기반)
     // ──────────────────────────────────────────────────────────
 
-    @Transactional(readOnly = true)
     public RouteHistoryFeedResponse getRouteHistoryFeed(Long userId, String courseId, int page, int size) {
         Route route = routeRepository.findByUuidAndStatusNot(courseId, Route.RouteStatus.DELETED)
                 .orElseThrow(() -> new RouteException("루트를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
@@ -82,26 +80,21 @@ public class RouteHistoryService {
         User user = findUser(userId);
         verifyFeedAccess(route, user);
 
-        List<RouteHistoryLog> logs = routeHistoryLogRepository.findByRouteOrderByCreatedAtAsc(route);
+        Page<RouteHistoryLog> logPage = routeHistoryLogRepository.findByRouteOrderByCreatedAtAsc(
+                route, PageRequest.of(page, size));
 
-        // 관련 사용자 프로필 일괄 조회
-        List<User> actors = logs.stream().map(RouteHistoryLog::getActor).distinct().toList();
+        List<User> actors = logPage.getContent().stream().map(RouteHistoryLog::getActor).distinct().toList();
         Map<Long, Profile> profiles = profileRepository.findByUserIn(actors)
                 .stream()
                 .collect(Collectors.toMap(p -> p.getUser().getId(), Function.identity(), (a, b) -> a));
 
-        List<RouteHistoryFeedItem> items = logs.stream()
+        List<RouteHistoryFeedItem> items = logPage.getContent().stream()
                 .map(log -> RouteHistoryFeedItem.from(log, profiles.get(log.getActor().getId())))
                 .toList();
 
-        int total = items.size();
-        int start = page * size;
-        List<RouteHistoryFeedItem> pageItems = start >= total
-                ? List.of()
-                : items.subList(start, Math.min(start + size, total));
-        int totalPages = (int) Math.ceil((double) total / Math.max(size, 1));
-
-        return new RouteHistoryFeedResponse(pageItems, new PageInfo(page, size, total, totalPages));
+        PageInfo pageInfo = new PageInfo(logPage.getNumber(), logPage.getSize(),
+                logPage.getTotalElements(), logPage.getTotalPages());
+        return new RouteHistoryFeedResponse(items, pageInfo);
     }
 
     // ──────────────────────────────────────────────────────────
