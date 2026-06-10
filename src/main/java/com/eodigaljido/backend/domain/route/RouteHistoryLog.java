@@ -51,6 +51,27 @@ public class RouteHistoryLog {
     private LocalDateTime createdAt;
 
     public enum Type {
-        CHAT, COURSE
+        CHAT, COURSE,
+        /**
+         * Legacy value kept so Hibernate does not destructively narrow the production enum.
+         * New records must use CHAT or COURSE.
+         */
+        EDIT
+    }
+
+    public Type getEffectiveType() {
+        if (type != Type.EDIT) {
+            return type;
+        }
+        return editAction != null && editAction.startsWith("CHAT_")
+                ? Type.CHAT
+                : Type.COURSE;
+    }
+
+    public String getEffectiveEditAction() {
+        if (editAction != null && !editAction.isBlank()) {
+            return editAction;
+        }
+        return getEffectiveType() == Type.CHAT ? "CHAT_SENDED" : "ROUTE_UPDATED";
     }
 }

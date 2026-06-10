@@ -54,16 +54,18 @@ public record RouteHistoryFeedItem(
     public static RouteHistoryFeedItem from(RouteHistoryLog log, Profile profile) {
         String nickname = profile != null ? profile.getNickname() : log.getActor().getUserId();
         String profileImageUrl = profile != null ? profile.getProfileImageUrl() : null;
+        RouteHistoryLog.Type effectiveType = log.getEffectiveType();
+        String effectiveAction = log.getEffectiveEditAction();
 
         return new RouteHistoryFeedItem(
-                log.getType().name(),
+                effectiveType.name(),
                 log.getId(),
                 log.getActor().getUuid(),
                 nickname,
                 profileImageUrl,
-                log.getType() == RouteHistoryLog.Type.CHAT ? log.getContent() : null,
-                log.getEditAction(),
-                buildEditDescription(nickname, log.getEditAction()),
+                effectiveType == RouteHistoryLog.Type.CHAT ? log.getContent() : null,
+                effectiveAction,
+                buildEditDescription(nickname, effectiveAction),
                 log.getCreatedAt()
         );
     }
