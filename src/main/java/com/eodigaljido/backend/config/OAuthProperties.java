@@ -24,5 +24,11 @@ public class OAuthProperties {
         private String clientSecret;
         private String redirectUri;
         private List<String> allowedRedirectUris = new ArrayList<>();
+        private List<String> additionalAllowedRedirectUris = new ArrayList<>();
+
+        public boolean isRedirectUriAllowed(String redirectUri) {
+            return allowedRedirectUris.contains(redirectUri)
+                    || additionalAllowedRedirectUris.contains(redirectUri);
+        }
     }
 }

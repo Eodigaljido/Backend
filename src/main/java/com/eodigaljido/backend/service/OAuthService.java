@@ -273,8 +273,9 @@ public class OAuthService {
         // 허용 목록 검사 (목록이 비어 있으면 기본 redirectUri만 허용)
         List<String> allowlist = cfg.getAllowedRedirectUris();
         boolean permitted = (allowlist != null && !allowlist.isEmpty())
-                ? allowlist.contains(normalized)
-                : normalized.equals(cfg.getRedirectUri());
+                ? cfg.isRedirectUriAllowed(normalized)
+                : normalized.equals(cfg.getRedirectUri())
+                    || cfg.getAdditionalAllowedRedirectUris().contains(normalized);
         if (!permitted) {
             throw new AuthException("허용되지 않은 redirect_uri 입니다.", HttpStatus.BAD_REQUEST);
         }
