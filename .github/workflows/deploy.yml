@@ -12,29 +12,59 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
-      - name: Checkout code 
-        uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v6
 
-      - name: Deploy to EC2 via SSH
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build deploy JAR
+        run: |
+          chmod +x gradlew
+          ./gradlew bootJar -x test --no-daemon
+          mkdir -p deploy
+          JAR_PATH="$(find build/libs -maxdepth 1 -name '*.jar' ! -name '*-plain.jar' -print -quit)"
+          test -n "$JAR_PATH"
+          cp "$JAR_PATH" deploy/app.jar
+
+      - name: Upload deploy JAR to EC2
+        uses: appleboy/scp-action@v1
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           password: ${{ secrets.EC2_PASSWORD }}
           port: 22
+          source: deploy/app.jar
+          target: /home/${{ secrets.EC2_USER }}/Backend
+          overwrite: true
+
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          password: ${{ secrets.EC2_PASSWORD }}
+          port: 22
+          script_stop: true
           script: |
+            set -e
             cd ~/Backend
 
             # Pull latest code
-            git pull origin main
+            git pull --ff-only origin main
 
-            # Rebuild and restart
+            # Build the lightweight runtime image from the uploaded JAR and restart
             docker compose -f docker-compose.prod.yml up -d --build
-
-            # Remove unused images
-            docker image prune -f
 
             echo "Deploy complete. Container status:"
             docker compose -f docker-compose.prod.yml ps

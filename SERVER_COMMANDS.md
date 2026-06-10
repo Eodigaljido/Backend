@@ -50,8 +50,8 @@ cd ~/Backend && sudo docker compose -f docker-compose.prod.yml restart
 # 완전 중지 후 재시작
 cd ~/Backend && sudo docker compose -f docker-compose.prod.yml down && sudo docker compose -f docker-compose.prod.yml up -d
 
-# 코드 변경 후 재빌드 + 재시작
-cd ~/Backend && git pull origin main && sudo docker compose -f docker-compose.prod.yml up -d --build
+# 일반 배포는 GitHub Actions의 "Deploy to EC2"를 재실행
+# 긴급 수동 배포는 아래 "최신 코드 배포 (수동)" 절차 사용
 ```
 
 ---
@@ -98,10 +98,11 @@ cat ~/Backend/.env.prod
 cd ~/Backend
 
 # 최신 코드 pull
-git pull origin main
+git pull --ff-only origin main
 
-# 재빌드 + 재시작
-sudo docker compose -f docker-compose.prod.yml up -d --build
+# 긴급 수동 배포: EC2에서 전체 소스 빌드
+sudo docker build -t eodigaljido-backend:latest .
+sudo docker compose -f docker-compose.prod.yml up -d --no-build app
 
 # 사용하지 않는 이미지 정리
 sudo docker image prune -f

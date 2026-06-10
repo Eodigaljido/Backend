@@ -6,7 +6,9 @@ services:
     restart: always
 
   app:
-    build: .
+    image: eodigaljido-backend:latest
+    build:
+      context: ./deploy
     # host network: 컨테이너가 EC2 호스트 네트워크 직접 사용
     # DB_HOST=127.0.0.1 → EC2에 설치된 MySQL 직접 접근 가능
     # REDIS_HOST=localhost → 위 redis 컨테이너 접근 가능
