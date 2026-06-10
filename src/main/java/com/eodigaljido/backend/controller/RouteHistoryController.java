@@ -90,13 +90,14 @@ public class RouteHistoryController {
 
                     | `type` | `action` | 설명 | 유효 필드 |
                     |--------|----------|------|-----------|
-                    | `CHAT` | `CHAT` | 채팅 메시지 전송 | `content`(전송 내용), `actorNickname`, `actorProfileImageUrl` |
+                    | `CHAT` | `CHAT_SENDED` | 채팅 메시지 전송 | `content`(전송 내용), `editDescription`, `actorNickname`, `actorProfileImageUrl` |
                     | `CHAT` | `CHAT_EDITED` | 채팅 메시지 수정 | `content`(수정 후 내용), `editDescription`, `actorNickname`, `actorProfileImageUrl` |
                     | `CHAT` | `CHAT_DELETED` | 채팅 메시지 삭제 | `content`(삭제된 원본 내용), `editDescription`, `actorNickname`, `actorProfileImageUrl` |
                     | `COURSE` | `ROUTE_UPDATED` | 루트 편집 | `editDescription`, `actorNickname`, `actorProfileImageUrl` |
 
                     **`editDescription` 예시**
                     - `ROUTE_UPDATED` → "홍길동님이 루트를 수정했습니다"
+                    - `CHAT_SENDED` → "홍길동님이 메시지를 보냈습니다"
                     - `CHAT_EDITED` → "홍길동님이 메시지를 수정했습니다"
                     - `CHAT_DELETED` → "홍길동님이 메시지를 삭제했습니다"
 

@@ -16,6 +16,7 @@ public record RouteHistoryFeedItem(
         )
         String type,
 
+
         @Schema(description = "이벤트 고유 ID (route_history_logs PK)", example = "42")
         Long itemId,
 
@@ -35,9 +36,9 @@ public record RouteHistoryFeedItem(
         String content,
 
         @Schema(
-            description = "액션 코드. type=CHAT이면 CHAT | CHAT_EDITED | CHAT_DELETED. type=COURSE이면 ROUTE_UPDATED",
-            example = "CHAT",
-            allowableValues = {"CHAT", "CHAT_EDITED", "CHAT_DELETED", "ROUTE_UPDATED"}
+            description = "액션 코드. type=CHAT이면 CHAT_SENDED | CHAT_EDITED | CHAT_DELETED. type=COURSE이면 ROUTE_UPDATED",
+            example = "CHAT_SENDED",
+            allowableValues = {"CHAT_SENDED", "CHAT_EDITED", "CHAT_DELETED", "ROUTE_UPDATED"}
         )
         String action,
 
@@ -55,7 +56,7 @@ public record RouteHistoryFeedItem(
         String nickname = profile != null ? profile.getNickname() : log.getActor().getUserId();
         String profileImageUrl = profile != null ? profile.getProfileImageUrl() : null;
 
-        String action = log.getType() == RouteHistoryLog.LogType.CHAT ? "CHAT" : log.getEditAction();
+        String action = log.getType() == RouteHistoryLog.LogType.CHAT ? "CHAT_SENDED" : log.getEditAction();
         String description = buildEditDescription(nickname, action);
 
         boolean isChatEvent = log.getType() == RouteHistoryLog.LogType.CHAT
@@ -90,7 +91,7 @@ public record RouteHistoryFeedItem(
             case "UPDATE_TAGS" -> "님이 태그를 변경했습니다";
             case "UPDATE_REGION" -> "님이 지역을 변경했습니다";
             case "UPDATE_ACTIVITY_TYPE" -> "님이 활동 유형을 변경했습니다";
-            case "CHAT" -> "님이 메시지를 보냈습니다";
+            case "CHAT_SENDED" -> "님이 메시지를 보냈습니다";
             case "CHAT_EDITED" -> "님이 메시지를 수정했습니다";
             case "CHAT_DELETED" -> "님이 메시지를 삭제했습니다";
             default -> "님이 루트를 수정했습니다";
