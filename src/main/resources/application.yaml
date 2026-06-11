@@ -50,8 +50,8 @@ solapi:
 
 oauth:
   google:
-    # Android 클라이언트 ID — ID Token audience 검증에 사용
-    client-id: ${GOOGLE_CLIENT_ID:}
+    # 웹 클라이언트 ID — Android 앱이 requestIdToken(webClientId) 시 발급된 ID Token의 audience 검증에 사용
+    client-id: ${GOOGLE_CLIENT_ID:658554777625-ssds5atn1lpo91sccghm3ph8dvipqhtj.apps.googleusercontent.com}
   kakao:
     client-id: ${KAKAO_CLIENT_ID:}
     client-secret: ${KAKAO_CLIENT_SECRET:}
