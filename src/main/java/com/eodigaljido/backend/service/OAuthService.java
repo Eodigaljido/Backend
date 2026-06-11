@@ -49,10 +49,8 @@ public class OAuthService {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Transactional
-    public OAuthLoginResponse loginWithGoogle(String authorizationCode, String redirectUri) {
-        String effectiveRedirectUri = resolveAndValidateRedirectUri(redirectUri, oAuthProperties.getGoogle());
-        String accessToken = exchangeGoogleCode(authorizationCode, effectiveRedirectUri);
-        JsonNode userInfo = getGoogleUserInfo(accessToken);
+    public OAuthLoginResponse loginWithGoogle(String idToken) {
+        JsonNode userInfo = verifyGoogleIdToken(idToken);
 
         String providerId = userInfo.get("sub").asText();
         String email = userInfo.path("email").asText(null);
@@ -80,16 +78,14 @@ public class OAuthService {
     }
 
     @Transactional
-    public void linkGoogle(Long userId, String authorizationCode, String redirectUri) {
+    public void linkGoogle(Long userId, String idToken) {
         User user = getActiveUser(userId);
 
         if (oAuthProviderRepository.existsByUserAndProvider(user, OAuthProvider.GOOGLE)) {
             throw new AuthException("이미 구글 계정이 연동되어 있습니다.", HttpStatus.CONFLICT);
         }
 
-        String effectiveRedirectUri = resolveAndValidateRedirectUri(redirectUri, oAuthProperties.getGoogle());
-        String googleAccessToken = exchangeGoogleCode(authorizationCode, effectiveRedirectUri);
-        String googleId = getGoogleUserInfo(googleAccessToken).get("sub").asText();
+        String googleId = verifyGoogleIdToken(idToken).get("sub").asText();
 
         if (oAuthProviderRepository.existsByProviderAndProviderId(OAuthProvider.GOOGLE, googleId)) {
             throw new AuthException("해당 구글 계정은 이미 다른 계정에 연결되어 있습니다.", HttpStatus.CONFLICT);
@@ -214,27 +210,36 @@ public class OAuthService {
 
     // ── Google 내부 ──────────────────────────────────────────────────────────
 
-    private String exchangeGoogleCode(String code, String redirectUri) {
-        OAuthProperties.Provider cfg = oAuthProperties.getGoogle();
-        String body = "code=" + encode(code)
-                + "&client_id=" + encode(cfg.getClientId())
-                + "&client_secret=" + encode(cfg.getClientSecret())
-                + "&redirect_uri=" + encode(redirectUri)
-                + "&grant_type=authorization_code";
+    private JsonNode verifyGoogleIdToken(String idToken) {
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("https://oauth2.googleapis.com/tokeninfo?id_token=" + encode(idToken)))
+                    .GET()
+                    .build();
 
-        JsonNode json = postForm("https://oauth2.googleapis.com/token", body);
-        JsonNode tokenNode = json.get("access_token");
-        if (tokenNode == null || tokenNode.isNull()) {
-            // 내부 에러 서버 로그에만 기록, 클라이언트에는 일반 메시지 반환
-            log.error("[구글 토큰 교환 실패] error={}, description={}", json.path("error").asText(), json.path("error_description").asText());
-            throw new AuthException("Google OAuth 인증에 실패했습니다. 인가 코드를 다시 확인해주세요.", HttpStatus.BAD_REQUEST);
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            JsonNode json = objectMapper.readTree(response.body());
+
+            if (response.statusCode() != 200) {
+                log.error("[구글 ID 토큰 검증 실패] status={}, error={}", response.statusCode(), json.path("error_description").asText(json.path("error").asText()));
+                throw new AuthException("유효하지 않은 Google ID 토큰입니다.", HttpStatus.BAD_REQUEST);
+            }
+
+            String aud = json.path("aud").asText();
+            String expectedClientId = oAuthProperties.getGoogle().getClientId();
+            if (!expectedClientId.equals(aud)) {
+                log.error("[구글 ID 토큰 audience 불일치] expected={}, actual={}", expectedClientId, aud);
+                throw new AuthException("유효하지 않은 Google ID 토큰입니다.", HttpStatus.BAD_REQUEST);
+            }
+
+            log.debug("[구글 ID 토큰 검증 성공] sub={}", json.path("sub").asText());
+            return json;
+        } catch (AuthException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new AuthException("Google 토큰 검증 중 오류가 발생했습니다: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
         }
-        log.debug("[구글 토큰 교환 성공]");
-        return tokenNode.asText();
-    }
-
-    private JsonNode getGoogleUserInfo(String accessToken) {
-        return getWithBearer("https://www.googleapis.com/oauth2/v3/userinfo", accessToken);
     }
 
     // ── Kakao 내부 ───────────────────────────────────────────────────────────

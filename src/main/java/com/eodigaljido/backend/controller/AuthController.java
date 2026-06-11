@@ -219,19 +219,16 @@ public class AuthController {
 
     @PostMapping("/oauth/google")
     @Operation(
-            summary = "Google OAuth 로그인/회원가입",
+            summary = "Google OAuth 로그인/회원가입 (Android)",
             description = """
-                    Google OAuth 인가 코드로 로그인하거나 신규 가입합니다.
+                    Android Google Sign-In SDK에서 발급받은 ID Token으로 로그인하거나 신규 가입합니다.
 
                     **흐름:**
-                    1. 프론트엔드가 Google 로그인 페이지로 이동
-                    2. 사용자 동의 후 `redirect_uri`로 `code` 파라미터와 함께 리다이렉트
-                    3. 해당 `code`를 본 API에 전달
+                    1. 앱에서 Google Sign-In SDK로 로그인
+                    2. `GoogleSignInAccount.getIdToken()` 값을 본 API에 전달
 
                     **Request Body:**
-                    - `code` (필수): Google 인가 코드 (redirect URI로 전달된 `code` 쿼리 파라미터 값)
-                    - `redirectUri` (선택): 인가 코드 발급 시 사용한 redirect_uri. 생략 시 서버 기본값 사용.
-                      서버에 등록된 허용 목록(`allowedRedirectUris`) 외의 값은 **400** 반환.
+                    - `idToken` (필수): Google Sign-In SDK에서 발급받은 ID Token
 
                     **Response:**
                     - `accessToken` / `refreshToken` 발급 (신규 유저는 자동 가입 후 발급)
@@ -243,33 +240,11 @@ public class AuthController {
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "로그인/회원가입 성공"),
-            @ApiResponse(responseCode = "400", description = "유효하지 않은 Google 인가 코드 또는 허용되지 않은 redirect_uri",
+            @ApiResponse(responseCode = "400", description = "유효하지 않은 Google ID Token",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    ResponseEntity<OAuthLoginResponse> googleOAuth(@Valid @RequestBody OAuthLoginRequest request) {
-        return ResponseEntity.ok(oAuthService.loginWithGoogle(request.code(), request.redirectUri()));
-    }
-
-    @GetMapping("/oauth/google")
-    @Operation(
-            summary = "Google OAuth 리디렉션 콜백",
-            description = """
-                    Google Cloud Console의 승인된 리디렉션 URI가 `/auth/oauth/google`인 경우
-                    브라우저가 `GET /auth/oauth/google?code=...`로 돌아오므로 해당 인가 코드를 즉시 처리합니다.
-
-                    테스트 페이지를 사용하는 경우에는 `redirect_uri`를 `/test.html`로 두고
-                    기존 `POST /auth/oauth/google` API를 호출해도 됩니다.
-                    """
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "로그인/회원가입 성공"),
-            @ApiResponse(responseCode = "400", description = "유효하지 않은 Google 인가 코드",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
-    ResponseEntity<OAuthLoginResponse> googleOAuthCallback(
-            @RequestParam String code,
-            @RequestParam(required = false) String redirectUri) {
-        return ResponseEntity.ok(oAuthService.loginWithGoogle(code, redirectUri));
+    ResponseEntity<OAuthLoginResponse> googleOAuth(@Valid @RequestBody GoogleOAuthLoginRequest request) {
+        return ResponseEntity.ok(oAuthService.loginWithGoogle(request.idToken()));
     }
 
     @PostMapping("/oauth/kakao")
@@ -367,8 +342,7 @@ public class AuthController {
                     **헤더:** `Authorization: Bearer {accessToken}` (필수)
 
                     **Request Body:**
-                    - `code` (필수): 구글 인가 코드
-                    - `redirectUri` (선택): 인가 코드 발급 시 사용한 redirect_uri (생략 시 서버 설정값 사용)
+                    - `idToken` (필수): Android Google Sign-In SDK에서 발급받은 ID Token
 
                     **제약 조건:**
                     - 이미 구글로 가입한 계정은 연동 불필요 (400)
@@ -378,7 +352,7 @@ public class AuthController {
     )
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "구글 연동 성공"),
-            @ApiResponse(responseCode = "400", description = "유효하지 않은 코드 또는 구글 가입 계정",
+            @ApiResponse(responseCode = "400", description = "유효하지 않은 Google ID Token",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
@@ -389,7 +363,7 @@ public class AuthController {
     })
     ResponseEntity<Void> linkGoogle(@AuthenticationPrincipal UserDetails userDetails,
                                     @Valid @RequestBody GoogleLinkRequest request) {
-        oAuthService.linkGoogle(Long.valueOf(userDetails.getUsername()), request.code(), request.redirectUri());
+        oAuthService.linkGoogle(Long.valueOf(userDetails.getUsername()), request.idToken());
         return ResponseEntity.noContent().build();
     }
 

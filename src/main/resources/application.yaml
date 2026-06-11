@@ -50,12 +50,8 @@ solapi:
 
 oauth:
   google:
+    # Android 클라이언트 ID — ID Token audience 검증에 사용
     client-id: ${GOOGLE_CLIENT_ID:}
-    client-secret: ${GOOGLE_CLIENT_SECRET:}
-    redirect-uri: ${GOOGLE_REDIRECT_URI:}
-    allowed-redirect-uris: ${GOOGLE_ALLOWED_REDIRECT_URIS:${GOOGLE_REDIRECT_URI:}}
-    additional-allowed-redirect-uris:
-      - https://eodigaljido.uk/oauth/google
   kakao:
     client-id: ${KAKAO_CLIENT_ID:}
     client-secret: ${KAKAO_CLIENT_SECRET:}
