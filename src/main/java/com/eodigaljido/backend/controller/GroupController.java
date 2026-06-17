@@ -15,6 +15,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.MediaType;
@@ -381,7 +382,7 @@ public class GroupController {
                     모임에 게시물을 작성합니다. 모임 멤버만 작성할 수 있습니다.
 
                     **Request (multipart/form-data):**
-                    - `request` (필수, `application/json`): `{ "content": "..." }`
+                    - `content` (필수, 텍스트): 게시물 내용
                     - `images` (선택): 이미지 파일 목록 (JPEG·PNG·GIF·WebP, 최대 10MB, 최대 10장)
                     """,
             security = @SecurityRequirement(name = "Bearer")
@@ -396,11 +397,11 @@ public class GroupController {
     })
     public ResponseEntity<GroupPostResponse> createPost(
             @Parameter(description = "모임 UUID", required = true) @PathVariable String groupUuid,
-            @RequestPart("request") @Valid CreateGroupPostRequest request,
+            @RequestParam @NotBlank String content,
             @RequestPart(value = "images", required = false) List<MultipartFile> images,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
-        return ResponseEntity.status(201).body(groupService.createPost(userId, groupUuid, request, images));
+        return ResponseEntity.status(201).body(groupService.createPost(userId, groupUuid, content, images));
     }
 
     // ──────────────────────────────────────────────────────────
@@ -439,7 +440,7 @@ public class GroupController {
                     게시물을 수정합니다. 작성자만 수정할 수 있습니다.
 
                     **Request (multipart/form-data):**
-                    - `request` (필수, `application/json`): `{ "content": "..." }`
+                    - `content` (필수, 텍스트): 게시물 내용
                     - `images` (선택): 새 이미지 파일 목록 (JPEG·PNG·GIF·WebP, 최대 10MB). 전달하면 기존 이미지를 교체하고, 생략하면 기존 이미지 유지
                     """,
             security = @SecurityRequirement(name = "Bearer")
@@ -456,11 +457,11 @@ public class GroupController {
     })
     public ResponseEntity<GroupPostResponse> updatePost(
             @Parameter(description = "게시물 UUID", required = true) @PathVariable String postUuid,
-            @RequestPart("request") @Valid CreateGroupPostRequest request,
+            @RequestParam @NotBlank String content,
             @RequestPart(value = "images", required = false) List<MultipartFile> images,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
-        return ResponseEntity.ok(groupService.updatePost(userId, postUuid, request, images));
+        return ResponseEntity.ok(groupService.updatePost(userId, postUuid, content, images));
     }
 
     // ──────────────────────────────────────────────────────────
