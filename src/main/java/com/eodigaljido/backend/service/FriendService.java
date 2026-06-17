@@ -9,10 +9,13 @@ import com.eodigaljido.backend.dto.friend.FriendPreviewResponse;
 import com.eodigaljido.backend.dto.friend.FriendRequestResponse;
 import com.eodigaljido.backend.dto.friend.FriendResponse;
 import com.eodigaljido.backend.dto.friend.RecentFriendResponse;
+import com.eodigaljido.backend.exception.ChatException;
 import com.eodigaljido.backend.exception.FriendException;
 import com.eodigaljido.backend.exception.UserException;
 import com.eodigaljido.backend.event.NotificationEvent;
 import com.eodigaljido.backend.repository.ChatMessageRepository;
+import com.eodigaljido.backend.repository.ChatRoomMemberRepository;
+import com.eodigaljido.backend.repository.ChatRoomRepository;
 import com.eodigaljido.backend.repository.FriendRepository;
 import com.eodigaljido.backend.repository.ProfileRepository;
 import com.eodigaljido.backend.repository.UserRepository;
@@ -27,6 +30,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -37,6 +41,8 @@ public class FriendService {
     private final UserRepository userRepository;
     private final ProfileRepository profileRepository;
     private final ChatMessageRepository chatMessageRepository;
+    private final ChatRoomRepository chatRoomRepository;
+    private final ChatRoomMemberRepository chatRoomMemberRepository;
     private final FriendCodeService friendCodeService;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -98,6 +104,56 @@ public class FriendService {
                     User other = f.getRequester().getId().equals(me.getId()) ? f.getReceiver() : f.getRequester();
                     return FriendResponse.of(f, me, profileMap.get(other.getId()));
                 })
+                .sorted((a, b) -> {
+                    String na = a.nickname() != null ? a.nickname() : "";
+                    String nb = b.nickname() != null ? b.nickname() : "";
+                    if (na.isEmpty() && nb.isEmpty()) return 0;
+                    if (na.isEmpty()) return 1;
+                    if (nb.isEmpty()) return -1;
+                    int ga = charGroup(na.charAt(0));
+                    int gb = charGroup(nb.charAt(0));
+                    if (ga != gb) return Integer.compare(ga, gb);
+                    if (ga == 0) return koreanCollator.compare(na, nb);
+                    return na.compareToIgnoreCase(nb);
+                })
+                .toList();
+    }
+
+    // 채팅방에 초대 가능한 친구 목록 (해당 채팅방 미참여 친구만)
+    @Transactional(readOnly = true)
+    public List<FriendResponse> getInvitableFriends(Long userId, String roomUuid) {
+        User me = findUser(userId);
+
+        com.eodigaljido.backend.domain.chat.ChatRoom room = chatRoomRepository.findByUuidAndDeletedAtIsNull(roomUuid)
+                .orElseThrow(() -> new ChatException("존재하지 않는 채팅방입니다.", HttpStatus.NOT_FOUND));
+
+        chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(room, me)
+                .orElseThrow(() -> new ChatException("채팅방 멤버가 아닙니다.", HttpStatus.FORBIDDEN));
+
+        Set<Long> memberUserIds = chatRoomMemberRepository.findByRoomAndLeftAtIsNull(room).stream()
+                .map(m -> m.getUser().getId())
+                .collect(Collectors.toSet());
+
+        List<Friend> friends = friendRepository.findAcceptedFriends(me);
+
+        List<Friend> invitableFriends = friends.stream()
+                .filter(f -> {
+                    User other = f.getRequester().getId().equals(me.getId()) ? f.getReceiver() : f.getRequester();
+                    return !memberUserIds.contains(other.getId());
+                })
+                .toList();
+
+        List<User> others = invitableFriends.stream()
+                .map(f -> f.getRequester().getId().equals(me.getId()) ? f.getReceiver() : f.getRequester())
+                .toList();
+
+        Map<Long, Profile> profileMap = buildProfileMap(others);
+        Collator koreanCollator = Collator.getInstance(Locale.KOREAN);
+
+        return invitableFriends.stream()
+                .map(f -> FriendResponse.of(f, me, profileMap.get(
+                        (f.getRequester().getId().equals(me.getId()) ? f.getReceiver() : f.getRequester()).getId()
+                )))
                 .sorted((a, b) -> {
                     String na = a.nickname() != null ? a.nickname() : "";
                     String nb = b.nickname() != null ? b.nickname() : "";

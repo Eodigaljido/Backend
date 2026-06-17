@@ -149,6 +149,40 @@ public class FriendController {
     }
 
     // ──────────────────────────────────────────────────────────
+    // 채팅방 초대 가능 친구 목록 (인증 필요)
+    // ──────────────────────────────────────────────────────────
+
+    @GetMapping("/invitable")
+    @Operation(
+            summary = "채팅방에 초대 가능한 친구 목록 조회",
+            description = """
+                    지정한 채팅방에 아직 참여하지 않은 친구 목록을 반환합니다.
+                    이미 채팅방에 있는 친구는 제외됩니다.
+                    본인이 해당 채팅방의 멤버여야 합니다.
+
+                    **Response 주요 필드:**
+                    - `userId`: 채팅방 멤버 초대 시 사용 (`POST /chats/{roomUuid}/members`)
+                    - `uuid`: 채팅방 생성 시 사용 (`POST /chats`)
+                    """,
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "초대 가능한 친구 목록 반환 (빈 배열이면 초대할 친구 없음)"),
+            @ApiResponse(responseCode = "401", description = "인증 토큰이 없거나 만료됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "해당 채팅방의 멤버가 아님",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "존재하지 않는 채팅방",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<List<FriendResponse>> getInvitableFriends(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @Parameter(description = "초대하려는 채팅방의 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
+            @RequestParam String roomUuid) {
+        return ResponseEntity.ok(friendService.getInvitableFriends(Long.parseLong(userDetails.getUsername()), roomUuid));
+    }
+
+    // ──────────────────────────────────────────────────────────
     // 전체 친구 목록 (인증 필요)
     // ──────────────────────────────────────────────────────────
 
