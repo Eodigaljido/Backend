@@ -133,13 +133,13 @@ public class CourseScheduleController {
     @Operation(
             summary = "코스 약속 생성",
             description = """
-                    기존 채팅방에 연결되는 코스 약속을 생성합니다.
+                    코스 약속을 생성합니다. 채팅방 없이도 저장할 수 있습니다.
 
                     필수 조건:
-                    - `title`, `scheduledAt`, `chatRoomUuid`는 필수입니다.
-                    - 요청 사용자는 `chatRoomUuid`에 해당하는 채팅방의 현재 멤버여야 합니다.
+                    - `title`, `scheduledAt`은 필수입니다.
+                    - `chatRoomUuid`는 선택값입니다. 지정하면 요청 사용자가 해당 채팅방의 현재 멤버여야 합니다.
                     - `courseUuid`는 선택 값이며, 공개 코스 또는 본인이 접근 가능한 내 코스만 연결할 수 있습니다.
-                    - `notifyChat`이 `true`이면 해당 채팅방에 약속 생성 시스템 메시지를 남깁니다.
+                    - `notifyChat`이 `true`여도 채팅방이 없으면 시스템 메시지는 생성하지 않습니다.
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
