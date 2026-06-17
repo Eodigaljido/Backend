@@ -192,8 +192,7 @@ public class FriendController {
                     수락된 친구 목록을 닉네임 기준 한글 → 영어 → 숫자 → 특수기호 순으로 정렬하여 반환합니다.
 
                     **Response 주요 필드:**
-                    - `userId`: 채팅방 멤버 초대 시 사용 (`POST /chats/{roomUuid}/members`)
-                    - `uuid`: 채팅방 생성 시 사용 (`POST /chats`)
+                    - `uuid`: 채팅방 멤버 초대 및 채팅방 생성 시 모두 사용 (`POST /chats/{roomUuid}/members`, `POST /chats`)
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )

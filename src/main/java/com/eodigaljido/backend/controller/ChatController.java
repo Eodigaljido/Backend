@@ -15,6 +15,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Encoding;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -90,6 +91,12 @@ public class ChatController {
                     - `image` (선택): 그룹 채팅방 프로필 이미지 (JPEG·PNG·GIF·WebP, 최대 10MB). 1:1 채팅방은 무시됨
                     """,
             security = @SecurityRequirement(name = "Bearer")
+    )
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+            content = @Content(
+                    mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
+                    encoding = @Encoding(name = "request", contentType = MediaType.APPLICATION_JSON_VALUE)
+            )
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "채팅방 생성 성공",
@@ -389,7 +396,7 @@ public class ChatController {
                     **친구 관계(ACCEPTED)인 유저만 초대할 수 있습니다.**
 
                     **Request Body:**
-                    - `userId` (필수): 초대할 유저의 아이디 (`GET /api/friends`의 `userId` 필드)
+                    - `userUuid` (필수): 초대할 유저의 UUID (`GET /api/friends`의 `uuid` 필드)
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
@@ -514,7 +521,7 @@ public class ChatController {
             summary = "채팅방 프로필 이미지 변경",
             description = """
                     그룹 채팅방의 프로필 이미지를 변경합니다. **ADMIN(방장)만** 가능합니다.
-                    1:1 채팅방에는 사용할 수 없습니다.
+                    일반 1:1 채팅방에는 사용할 수 없습니다. 단, 두 멤버가 같은 공동 루트의 협업 멤버인 1:1 채팅방은 예외적으로 허용됩니다.
 
                     **Request (multipart/form-data):**
                     - `image` (필수): 이미지 파일 (JPEG·PNG·GIF·WebP, 최대 10MB)
@@ -547,6 +554,7 @@ public class ChatController {
             description = """
                     그룹 채팅방의 프로필 이미지를 기본 이미지(5종 랜덤)로 초기화합니다. **ADMIN(방장)만** 가능합니다.
                     직접 업로드한 이미지가 있으면 삭제됩니다.
+                    일반 1:1 채팅방에는 사용할 수 없습니다. 단, 두 멤버가 같은 공동 루트의 협업 멤버인 1:1 채팅방은 예외적으로 허용됩니다.
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )

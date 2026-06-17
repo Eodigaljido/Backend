@@ -525,7 +525,7 @@ public class CourseController {
 
                     - multipart part 이름은 `image`를 우선 사용합니다.
                     - 기존 앱 폴백 호환을 위해 `file` part도 허용합니다.
-                    - 허용 형식: JPEG, PNG, WebP
+                    - 허용 형식: JPEG, PNG, GIF, WebP
                     - 최대 용량: 10MB
                     """,
             security = @SecurityRequirement(name = "Bearer")
