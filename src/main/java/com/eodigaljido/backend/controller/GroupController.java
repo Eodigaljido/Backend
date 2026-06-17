@@ -374,24 +374,33 @@ public class GroupController {
     // 게시물 작성
     // ──────────────────────────────────────────────────────────
 
-    @PostMapping("/{groupUuid}/posts")
+    @PostMapping(value = "/{groupUuid}/posts", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(
             summary = "모임 게시물 작성",
-            description = "모임에 게시물을 작성합니다. 모임 멤버만 작성할 수 있습니다.",
+            description = """
+                    모임에 게시물을 작성합니다. 모임 멤버만 작성할 수 있습니다.
+
+                    **Request (multipart/form-data):**
+                    - `request` (필수, `application/json`): `{ "content": "..." }`
+                    - `images` (선택): 이미지 파일 목록 (JPEG·PNG·GIF·WebP, 최대 10MB, 최대 10장)
+                    """,
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "게시물 작성 성공",
                     content = @Content(schema = @Schema(implementation = GroupPostResponse.class))),
+            @ApiResponse(responseCode = "400", description = "이미지 형식 오류",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "403", description = "모임 멤버가 아님",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<GroupPostResponse> createPost(
             @Parameter(description = "모임 UUID", required = true) @PathVariable String groupUuid,
-            @Valid @RequestBody CreateGroupPostRequest request,
+            @RequestPart("request") @Valid CreateGroupPostRequest request,
+            @RequestPart(value = "images", required = false) List<MultipartFile> images,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
-        return ResponseEntity.status(201).body(groupService.createPost(userId, groupUuid, request));
+        return ResponseEntity.status(201).body(groupService.createPost(userId, groupUuid, request, images));
     }
 
     // ──────────────────────────────────────────────────────────
@@ -423,15 +432,23 @@ public class GroupController {
     // 게시물 수정
     // ──────────────────────────────────────────────────────────
 
-    @PatchMapping("/posts/{postUuid}")
+    @PatchMapping(value = "/posts/{postUuid}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(
             summary = "모임 게시물 수정",
-            description = "게시물을 수정합니다. 작성자만 수정할 수 있습니다.",
+            description = """
+                    게시물을 수정합니다. 작성자만 수정할 수 있습니다.
+
+                    **Request (multipart/form-data):**
+                    - `request` (필수, `application/json`): `{ "content": "..." }`
+                    - `images` (선택): 새 이미지 파일 목록 (JPEG·PNG·GIF·WebP, 최대 10MB). 전달하면 기존 이미지를 교체하고, 생략하면 기존 이미지 유지
+                    """,
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "수정 성공",
                     content = @Content(schema = @Schema(implementation = GroupPostResponse.class))),
+            @ApiResponse(responseCode = "400", description = "이미지 형식 오류",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "403", description = "작성자가 아님",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "게시물을 찾을 수 없음",
@@ -439,10 +456,11 @@ public class GroupController {
     })
     public ResponseEntity<GroupPostResponse> updatePost(
             @Parameter(description = "게시물 UUID", required = true) @PathVariable String postUuid,
-            @Valid @RequestBody CreateGroupPostRequest request,
+            @RequestPart("request") @Valid CreateGroupPostRequest request,
+            @RequestPart(value = "images", required = false) List<MultipartFile> images,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
-        return ResponseEntity.ok(groupService.updatePost(userId, postUuid, request));
+        return ResponseEntity.ok(groupService.updatePost(userId, postUuid, request, images));
     }
 
     // ──────────────────────────────────────────────────────────

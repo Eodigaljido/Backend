@@ -330,19 +330,22 @@ public class GroupService {
     // ──────────────────────────────────────────────────────────
 
     @Transactional
-    public GroupPostResponse createPost(Long userId, String groupUuid, CreateGroupPostRequest req) {
+    public GroupPostResponse createPost(Long userId, String groupUuid, CreateGroupPostRequest req, List<MultipartFile> images) {
         Group group = findActiveGroup(groupUuid);
         requireMember(group, userId);
         User author = findUser(userId);
 
+        String postUuid = UUID.randomUUID().toString();
+        List<String> uploadedUrls = uploadPostImages(images, postUuid);
+
         GroupPost post = GroupPost.builder()
-                .uuid(UUID.randomUUID().toString())
+                .uuid(postUuid)
                 .group(group)
                 .author(author)
                 .content(req.content())
                 .build();
-        if (req.imageUrls() != null) {
-            post.update(req.content(), req.imageUrls());
+        if (!uploadedUrls.isEmpty()) {
+            post.update(req.content(), uploadedUrls);
         }
         groupPostRepository.save(post);
 
@@ -374,14 +377,40 @@ public class GroupService {
     // ──────────────────────────────────────────────────────────
 
     @Transactional
-    public GroupPostResponse updatePost(Long userId, String postUuid, CreateGroupPostRequest req) {
+    public GroupPostResponse updatePost(Long userId, String postUuid, CreateGroupPostRequest req, List<MultipartFile> images) {
         GroupPost post = groupPostRepository.findByUuidAndDeletedAtIsNull(postUuid)
                 .orElseThrow(() -> new GroupException("게시물을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
         if (!post.getAuthor().getId().equals(userId)) {
             throw new GroupException("게시물 작성자만 수정할 수 있습니다.", HttpStatus.FORBIDDEN);
         }
-        post.update(req.content(), req.imageUrls());
+
+        List<String> newUrls;
+        if (images != null && !images.isEmpty()) {
+            post.getImageUrls().forEach(fileStorageService::delete);
+            newUrls = uploadPostImages(images, post.getUuid());
+        } else {
+            newUrls = post.getImageUrls();
+        }
+        post.update(req.content(), newUrls);
         return GroupPostResponse.of(post, profileRepository.findByUser(post.getAuthor()).orElse(null));
+    }
+
+    private List<String> uploadPostImages(List<MultipartFile> images, String postUuid) {
+        if (images == null || images.isEmpty()) return List.of();
+        List<String> urls = new java.util.ArrayList<>();
+        for (MultipartFile image : images) {
+            if (image == null || image.isEmpty()) continue;
+            try {
+                urls.add(fileStorageService.store(image, "group-posts/" + postUuid, UUID.randomUUID().toString()));
+            } catch (IllegalStateException e) {
+                throw new GroupException("파일 저장소 설정이 누락되었습니다. " + e.getMessage(), HttpStatus.SERVICE_UNAVAILABLE);
+            } catch (IllegalArgumentException e) {
+                throw new GroupException(e.getMessage(), HttpStatus.BAD_REQUEST);
+            } catch (IOException e) {
+                throw new GroupException("이미지 업로드 중 오류가 발생했습니다.", HttpStatus.INTERNAL_SERVER_ERROR);
+            }
+        }
+        return urls;
     }
 
     // ──────────────────────────────────────────────────────────

@@ -68,6 +68,7 @@ public class ChatService {
     private final UserRepository userRepository;
     private final ProfileRepository profileRepository;
     private final RouteRepository routeRepository;
+    private final CourseMemberRepository courseMemberRepository;
     private final RouteHistoryLogRepository routeHistoryLogRepository;
     private final FriendRepository friendRepository;
     private final SimpMessagingTemplate messagingTemplate;
@@ -723,6 +724,23 @@ public class ChatService {
     }
 
     private boolean isCollaborativeRouteChatRoom(ChatRoom room) {
-        return routeRepository.findByChatRoomIdAndStatusNot(room.getId(), Route.RouteStatus.DELETED).isPresent();
+        if (routeRepository.findByChatRoomIdAndStatusNot(room.getId(), Route.RouteStatus.DELETED).isPresent()) {
+            return true;
+        }
+        List<ChatRoomMember> activeMembers = chatRoomMemberRepository.findByRoomAndLeftAtIsNull(room);
+        if (activeMembers.size() < 2) {
+            return false;
+        }
+        User firstUser = activeMembers.get(0).getUser();
+        List<Route> collaborativeRoutes = courseMemberRepository.findCollaborativeRoutesByUserAndStatusNot(
+                firstUser, Route.RouteStatus.DELETED);
+        for (Route route : collaborativeRoutes) {
+            boolean allMatch = activeMembers.stream().allMatch(m ->
+                    courseMemberRepository.existsByRouteAndUserAndLeftAtIsNull(route, m.getUser()));
+            if (allMatch) {
+                return true;
+            }
+        }
+        return false;
     }
 }

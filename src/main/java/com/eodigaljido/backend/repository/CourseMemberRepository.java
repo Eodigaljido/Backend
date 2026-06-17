@@ -22,4 +22,7 @@ public interface CourseMemberRepository extends JpaRepository<CourseMember, Long
     List<CourseMember> findByRouteAndLeftAtIsNull(@Param("route") Route route);
 
     long countByRoute(Route route);
+
+    @Query("SELECT cm.route FROM CourseMember cm WHERE cm.user = :user AND cm.leftAt IS NULL AND cm.route.status <> :excludedStatus AND cm.route.isCollaborative = true")
+    List<Route> findCollaborativeRoutesByUserAndStatusNot(@Param("user") User user, @Param("excludedStatus") Route.RouteStatus excludedStatus);
 }
