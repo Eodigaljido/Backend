@@ -2,6 +2,7 @@ package com.eodigaljido.backend.dto.onboarding;
 
 import com.eodigaljido.backend.domain.onboarding.OnboardingAnswer;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public record OnboardingAnswersResponse(
@@ -10,7 +11,8 @@ public record OnboardingAnswersResponse(
         String region,
         String age,
         List<String> activity,
-        String gender
+        String gender,
+        LocalDateTime completedAt
 ) {
     public static OnboardingAnswersResponse of(OnboardingAnswer answer) {
         return new OnboardingAnswersResponse(
@@ -19,7 +21,8 @@ public record OnboardingAnswersResponse(
                 answer.getRegion(),
                 answer.getAge(),
                 answer.getActivity(),
-                answer.getGender()
+                answer.getGender(),
+                answer.getCompletedAt()
         );
     }
 }
