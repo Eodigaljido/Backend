@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -45,6 +46,8 @@ public class FileStorageService {
 
         try (S3Client s3Client = createS3Client()) {
             s3Client.putObject(request, RequestBody.fromBytes(bytes));
+        } catch (SdkException e) {
+            throw new IOException("S3 업로드 실패: " + e.getMessage(), e);
         }
         return storageProperties.publicUrl(objectKey);
     }

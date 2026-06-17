@@ -108,6 +108,8 @@ public class ChatService {
                     profileImageUrl = fileStorageService.store(image, "chat-rooms", roomUuid);
                 } catch (IllegalStateException e) {
                     throw new ChatException("파일 저장소 설정이 누락되었습니다. " + e.getMessage(), HttpStatus.SERVICE_UNAVAILABLE);
+                } catch (IllegalArgumentException e) {
+                    throw new ChatException(e.getMessage(), HttpStatus.BAD_REQUEST);
                 } catch (IOException e) {
                     throw new ChatException("프로필 이미지 업로드 중 오류가 발생했습니다.", HttpStatus.INTERNAL_SERVER_ERROR);
                 }
@@ -562,6 +564,8 @@ public class ChatService {
             newUrl = fileStorageService.store(image, "chat-rooms", room.getUuid());
         } catch (IllegalStateException e) {
             throw new ChatException("파일 저장소 설정이 누락되었습니다. " + e.getMessage(), HttpStatus.SERVICE_UNAVAILABLE);
+        } catch (IllegalArgumentException e) {
+            throw new ChatException(e.getMessage(), HttpStatus.BAD_REQUEST);
         } catch (IOException e) {
             throw new ChatException("파일 업로드 중 오류가 발생했습니다.", HttpStatus.INTERNAL_SERVER_ERROR);
         }
