@@ -157,13 +157,13 @@ public class ChatService {
     }
 
     @Transactional
-    public ChatRoomResponse inviteMember(Long requesterId, String roomUuid, String targetUserId) {
+    public ChatRoomResponse inviteMember(Long requesterId, String roomUuid, String targetUserUuid) {
         ChatRoom room = getActiveRoom(roomUuid);
         User requester = getUser(requesterId);
         getMembership(room, requesterId);
 
-        User target = userRepository.findByUserId(targetUserId)
-                .orElseThrow(() -> new ChatException("존재하지 않는 유저입니다: " + targetUserId, HttpStatus.NOT_FOUND));
+        User target = userRepository.findByUuid(targetUserUuid)
+                .orElseThrow(() -> new ChatException("존재하지 않는 유저입니다: " + targetUserUuid, HttpStatus.NOT_FOUND));
 
         friendRepository.findBetween(requester, target)
                 .filter(f -> f.getStatus() == Friend.FriendStatus.ACCEPTED)

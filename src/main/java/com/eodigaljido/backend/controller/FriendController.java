@@ -161,8 +161,7 @@ public class FriendController {
                     본인이 해당 채팅방의 멤버여야 합니다.
 
                     **Response 주요 필드:**
-                    - `userId`: 채팅방 멤버 초대 시 사용 (`POST /chats/{roomUuid}/members`)
-                    - `uuid`: 채팅방 생성 시 사용 (`POST /chats`)
+                    - `uuid`: 채팅방 멤버 초대 및 채팅방 생성 시 모두 사용 (`POST /chats/{roomUuid}/members`, `POST /chats`)
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )

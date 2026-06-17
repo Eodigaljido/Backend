@@ -412,7 +412,7 @@ public class ChatController {
             @Parameter(description = "채팅방 UUID", required = true) @PathVariable String roomUuid,
             @Valid @RequestBody InviteMemberRequest req) {
         Long userId = Long.valueOf(userDetails.getUsername());
-        return ResponseEntity.ok(chatService.inviteMember(userId, roomUuid, req.userId()));
+        return ResponseEntity.ok(chatService.inviteMember(userId, roomUuid, req.userUuid()));
     }
 
     @DeleteMapping("/{roomUuid}/members/{targetUuid}")

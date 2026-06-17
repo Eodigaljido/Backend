@@ -10,7 +10,6 @@ import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Encoding;
 import io.swagger.v3.oas.annotations.media.Schema;
-import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -52,7 +51,7 @@ public class GroupController {
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
-    @RequestBody(
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
             content = @Content(
                     mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
                     encoding = @Encoding(name = "request", contentType = MediaType.APPLICATION_JSON_VALUE)
