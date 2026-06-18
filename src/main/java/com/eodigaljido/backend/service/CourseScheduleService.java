@@ -63,7 +63,7 @@ public class CourseScheduleService {
     @Transactional
     public CourseScheduleResponse createSchedule(Long userId, CreateCourseScheduleRequest req) {
         User creator = findActiveUser(userId);
-        ChatRoom chatRoom = resolveChatRoomForMember(req.chatRoomUuid(), creator);
+        ChatRoom chatRoom = resolveOptionalChatRoomForMember(req.chatRoomUuid(), creator);
         Route course = resolveCourse(req.courseUuid(), creator);
 
         CourseSchedule schedule = CourseSchedule.builder()
@@ -75,8 +75,10 @@ public class CourseScheduleService {
                 .course(course)
                 .build();
         courseScheduleRepository.save(schedule);
-        snapshotParticipants(schedule, chatRoom);
-        if (Boolean.TRUE.equals(req.notifyChat())) {
+        if (chatRoom != null) {
+            snapshotParticipants(schedule, chatRoom);
+        }
+        if (Boolean.TRUE.equals(req.notifyChat()) && chatRoom != null) {
             createChatNotification(schedule, creator);
         }
 
@@ -166,7 +168,13 @@ public class CourseScheduleService {
         if (chatRoomUuid == null || chatRoomUuid.isBlank()) {
             throw new CourseScheduleException("chatRoomUuid is required.", HttpStatus.BAD_REQUEST);
         }
+        return resolveOptionalChatRoomForMember(chatRoomUuid, user);
+    }
 
+    private ChatRoom resolveOptionalChatRoomForMember(String chatRoomUuid, User user) {
+        if (chatRoomUuid == null || chatRoomUuid.isBlank()) {
+            return null;
+        }
         ChatRoom chatRoom = chatRoomRepository.findByUuidAndDeletedAtIsNull(chatRoomUuid)
                 .orElseThrow(() -> new CourseScheduleException("Chat room not found.", HttpStatus.NOT_FOUND));
         if (chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(chatRoom, user).isEmpty()) {

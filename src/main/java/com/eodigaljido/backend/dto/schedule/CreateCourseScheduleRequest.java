@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+
 import java.time.OffsetDateTime;
 
 @Schema(description = "코스 약속 생성 요청")
@@ -17,13 +18,12 @@ public record CreateCourseScheduleRequest(
         @NotNull
         OffsetDateTime scheduledAt,
 
-        @Schema(description = "약속을 연결할 기존 채팅방 UUID. 요청 사용자는 해당 채팅방 멤버여야 합니다.", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
-        @NotNull
+        @Schema(description = "연결할 기존 채팅방 UUID. 없으면 채팅방 없이 약속만 저장됩니다.", nullable = true, example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
         String chatRoomUuid,
 
         @Schema(description = "연결할 코스 UUID. 없으면 null입니다.", nullable = true, example = "7ecc5401-1234-5678-abcd-000000000001")
         String courseUuid,
 
-        @Schema(description = "true이면 약속 생성 후 채팅방에 시스템 메시지를 남깁니다.", example = "false", defaultValue = "false")
+        @Schema(description = "true이면 채팅방이 있을 때만 시스템 메시지를 남깁니다.", example = "false", defaultValue = "false")
         Boolean notifyChat
 ) {}
