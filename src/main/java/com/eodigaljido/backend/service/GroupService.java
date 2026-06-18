@@ -373,6 +373,24 @@ public class GroupService {
     }
 
     // ──────────────────────────────────────────────────────────
+    // 게시물 상세조회
+    // ──────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public GroupPostResponse getPost(Long userId, String groupUuid, String postUuid) {
+        Group group = findActiveGroup(groupUuid);
+        requireMember(group, userId);
+
+        GroupPost post = groupPostRepository.findByUuidAndDeletedAtIsNull(postUuid)
+                .orElseThrow(() -> new GroupException("게시물을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        if (!post.getGroup().getId().equals(group.getId())) {
+            throw new GroupException("게시물을 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
+        }
+
+        return GroupPostResponse.of(post, profileRepository.findByUser(post.getAuthor()).orElse(null));
+    }
+
+    // ──────────────────────────────────────────────────────────
     // 게시물 수정
     // ──────────────────────────────────────────────────────────
 

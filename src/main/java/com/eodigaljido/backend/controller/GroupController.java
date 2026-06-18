@@ -430,6 +430,32 @@ public class GroupController {
     }
 
     // ──────────────────────────────────────────────────────────
+    // 게시물 상세조회
+    // ──────────────────────────────────────────────────────────
+
+    @GetMapping("/{groupUuid}/posts/{postUuid}")
+    @Operation(
+            summary = "모임 게시물 상세조회",
+            description = "게시물 UUID로 상세 정보를 조회합니다. 모임 멤버만 조회할 수 있습니다.",
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "게시물 상세 반환",
+                    content = @Content(schema = @Schema(implementation = GroupPostResponse.class))),
+            @ApiResponse(responseCode = "403", description = "모임 멤버가 아님",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "게시물을 찾을 수 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<GroupPostResponse> getPost(
+            @Parameter(description = "모임 UUID", required = true) @PathVariable String groupUuid,
+            @Parameter(description = "게시물 UUID", required = true) @PathVariable String postUuid,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.ok(groupService.getPost(userId, groupUuid, postUuid));
+    }
+
+    // ──────────────────────────────────────────────────────────
     // 게시물 수정
     // ──────────────────────────────────────────────────────────
 
