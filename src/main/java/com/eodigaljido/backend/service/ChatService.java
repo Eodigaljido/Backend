@@ -182,6 +182,11 @@ public class ChatService {
                 )
         );
 
+        if (room.getType() == ChatRoom.RoomType.DIRECT
+                && chatRoomMemberRepository.findByRoomAndLeftAtIsNull(room).size() > 2) {
+            room.promoteToGroup();
+        }
+
         String requesterNickname = profileRepository.findByUser(requester)
                 .map(Profile::getNickname).orElse(requester.getUserId());
         eventPublisher.publishEvent(NotificationEvent.of(

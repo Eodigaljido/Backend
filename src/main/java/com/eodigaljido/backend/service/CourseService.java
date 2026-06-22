@@ -549,6 +549,9 @@ public class CourseService {
                 ? BigDecimal.valueOf(totalMeters).divide(BigDecimal.valueOf(1000), 2, RoundingMode.HALF_UP)
                 : route.getTotalDistance();
 
+        String previousTitle = route.getTitle();
+        int previousStopCount = waypointRepository.findByRouteOrderBySequenceAsc(route).size();
+
         route.update(
                 req.title() != null ? req.title() : route.getTitle(),
                 route.getDescription(),
@@ -581,15 +584,54 @@ public class CourseService {
         }
 
         route.incrementVersion();
+        recordCourseEditHistory(route, editor, req, previousTitle, previousStopCount, waypoints.size());
+        MyCourseDetailResponse response = toMyCourseDetail(route, waypoints, legs);
+        broadcastCourseUpdated(route, editor);
+        return response;
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 공동 편집 완료 / 재개
+    // ──────────────────────────────────────────────────────────
+
+    @Transactional
+    public MyCourseDetailResponse completeCourseEditing(Long userId, String courseId) {
+        Route route = findCollaborativeRoute(courseId);
+        User editor = findUser(userId);
+        CourseMember requester = requireCourseMember(route, editor);
+        if (!requester.canEdit()) {
+            throw new RouteException("COURSE_FORBIDDEN", HttpStatus.FORBIDDEN);
+        }
+        route.markEditingCompleted();
         routeHistoryLogRepository.save(RouteHistoryLog.builder()
                 .route(route)
                 .actor(editor)
                 .type(RouteHistoryLog.Type.COURSE)
-                .editAction("ROUTE_UPDATED")
+                .editAction("EDITING_COMPLETED")
                 .build());
-        MyCourseDetailResponse response = toMyCourseDetail(route, waypoints, legs);
-        broadcastCourseUpdated(route, editor);
-        return response;
+        List<RouteWaypoint> waypoints = waypointRepository.findByRouteOrderBySequenceAsc(route);
+        List<RouteLeg> legs = legRepository.findByRouteOrderBySequenceAsc(route);
+        return toMyCourseDetail(route, waypoints, legs);
+    }
+
+    @Transactional
+    public MyCourseDetailResponse resumeCourseEditing(Long userId, String courseId) {
+        Route route = findCollaborativeRoute(courseId);
+        User editor = findUser(userId);
+        CourseMember requester = requireCourseMember(route, editor);
+        if (!requester.canEdit()) {
+            throw new RouteException("COURSE_FORBIDDEN", HttpStatus.FORBIDDEN);
+        }
+        route.resumeEditing();
+        routeHistoryLogRepository.save(RouteHistoryLog.builder()
+                .route(route)
+                .actor(editor)
+                .type(RouteHistoryLog.Type.COURSE)
+                .editAction("EDITING_RESUMED")
+                .build());
+        List<RouteWaypoint> waypoints = waypointRepository.findByRouteOrderBySequenceAsc(route);
+        List<RouteLeg> legs = legRepository.findByRouteOrderBySequenceAsc(route);
+        return toMyCourseDetail(route, waypoints, legs);
     }
 
     @Transactional
@@ -865,10 +907,32 @@ public class CourseService {
             throw new RouteException("OWNER 역할은 추가로 부여할 수 없습니다.", HttpStatus.BAD_REQUEST);
         }
         CourseMember member = ensureCourseMember(route, target, role);
-        ensureChatRoomMember(route.getChatRoom(), target, ChatRoomMember.MemberRole.MEMBER);
+        ChatRoom room = ensureRouteChatRoom(route);
+        ensureChatRoomMember(room, target, ChatRoomMember.MemberRole.MEMBER);
         broadcastCourseMember(route, CourseEventEnvelope.EventType.COURSE_MEMBER_JOINED, member);
         Profile profile = profileRepository.findByUser(target).orElse(null);
         return CollaborativeMemberResponse.of(member, profile);
+    }
+
+    /**
+     * 루트에 연결된 채팅방이 없으면 새로 만들어 연결한다.
+     * 이미 연결된 채팅방이 있으면 그대로 재사용한다 — 친구를 추가로 초대할 때마다
+     * 새 채팅방이 생기지 않고 항상 같은 방으로 모이도록 하기 위함.
+     */
+    private ChatRoom ensureRouteChatRoom(Route route) {
+        if (route.getChatRoom() != null) {
+            return route.getChatRoom();
+        }
+        ChatRoom room = ChatRoom.builder()
+                .uuid(java.util.UUID.randomUUID().toString())
+                .name(route.getTitle())
+                .type(ChatRoom.RoomType.ROUTE)
+                .createdBy(route.getUser())
+                .build();
+        chatRoomRepository.save(room);
+        route.assignChatRoom(room);
+        ensureChatRoomMember(room, route.getUser(), ChatRoomMember.MemberRole.ADMIN);
+        return room;
     }
 
     @Transactional
@@ -907,7 +971,10 @@ public class CourseService {
         if (chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(room, requesterUser).isEmpty()) {
             throw new RouteException("채팅방 멤버만 연결할 수 있습니다.", HttpStatus.FORBIDDEN);
         }
-        boolean chatRoomChanged = route.getChatRoom() == null || !route.getChatRoom().getId().equals(room.getId());
+        if (route.getChatRoom() != null && !route.getChatRoom().getId().equals(room.getId())) {
+            throw new RouteException("이미 다른 채팅방이 연결되어 있습니다.", HttpStatus.CONFLICT);
+        }
+        boolean chatRoomChanged = route.getChatRoom() == null;
         route.assignChatRoom(room);
         courseMemberRepository.findByRouteAndLeftAtIsNull(route)
                 .forEach(member -> ensureChatRoomMember(room, member.getUser(), ChatRoomMember.MemberRole.MEMBER));
@@ -999,6 +1066,29 @@ public class CourseService {
                         .user(user)
                         .role(role)
                         .build()));
+    }
+
+    private void recordCourseEditHistory(Route route, User editor, CreateMyCourseRequest req,
+                                          String previousTitle, int previousStopCount, int newStopCount) {
+        List<String> actions = new java.util.ArrayList<>();
+        if (req.title() != null && !req.title().equals(previousTitle)) {
+            actions.add("TITLE_CHANGED");
+        }
+        if (req.stops() != null && newStopCount != previousStopCount) {
+            actions.add(newStopCount > previousStopCount ? "STOP_ADDED" : "STOP_REMOVED");
+        }
+        if (req.legs() != null) {
+            actions.add("LEG_UPDATED");
+        }
+        if (actions.isEmpty()) {
+            actions.add("ROUTE_UPDATED");
+        }
+        actions.forEach(action -> routeHistoryLogRepository.save(RouteHistoryLog.builder()
+                .route(route)
+                .actor(editor)
+                .type(RouteHistoryLog.Type.COURSE)
+                .editAction(action)
+                .build()));
     }
 
     private void broadcastCourseUpdated(Route route, User editor) {
@@ -1171,6 +1261,7 @@ public class CourseService {
                 route.getTitle(),
                 route.getThumbnailUrl(),
                 collaborative,
+                route.getCollaborationStatus().name(),
                 route.getVersion(),
                 route.getUpdatedAt(),
                 chatRoomUuid,

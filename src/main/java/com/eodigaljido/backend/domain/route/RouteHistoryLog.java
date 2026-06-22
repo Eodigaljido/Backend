@@ -43,7 +43,7 @@ public class RouteHistoryLog {
     @Column(columnDefinition = "TEXT")
     private String content;
 
-    @Column(name = "edit_action", length = 20)
+    @Column(name = "edit_action", length = 32)
     private String editAction;
 
     @CreatedDate

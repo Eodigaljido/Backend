@@ -18,6 +18,9 @@ public record CollaborativeCourseResponse(
         @Schema(description = "공동 편집 여부")
         boolean collaborative,
 
+        @Schema(description = "공동 편집 상태 (EDITING | COMPLETED)")
+        String collaborationStatus,
+
         @Schema(description = "공동 편집 충돌 방지 버전")
         long version,
 
@@ -64,6 +67,7 @@ public record CollaborativeCourseResponse(
                 route.getUuid(),
                 route.getTitle(),
                 route.isCollaborative(),
+                route.getCollaborationStatus().name(),
                 route.getVersion(),
                 route.getUpdatedAt(),
                 myRole,

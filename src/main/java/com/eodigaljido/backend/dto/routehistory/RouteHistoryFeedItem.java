@@ -35,9 +35,9 @@ public record RouteHistoryFeedItem(
         String content,
 
         @Schema(
-            description = "액션 코드. type=CHAT이면 CHAT_SENDED | CHAT_EDITED | CHAT_DELETED. type=COURSE이면 ROUTE_UPDATED",
+            description = "액션 코드. type=CHAT이면 CHAT_SENDED | CHAT_EDITED | CHAT_DELETED. type=COURSE이면 ROUTE_UPDATED | STOP_ADDED | STOP_REMOVED | LEG_UPDATED | TITLE_CHANGED | EDITING_COMPLETED | EDITING_RESUMED",
             example = "CHAT_SENDED",
-            allowableValues = {"CHAT_SENDED", "CHAT_EDITED", "CHAT_DELETED", "ROUTE_UPDATED"}
+            allowableValues = {"CHAT_SENDED", "CHAT_EDITED", "CHAT_DELETED", "ROUTE_UPDATED", "STOP_ADDED", "STOP_REMOVED", "LEG_UPDATED", "TITLE_CHANGED", "EDITING_COMPLETED", "EDITING_RESUMED"}
         )
         String action,
 
@@ -75,6 +75,12 @@ public record RouteHistoryFeedItem(
             case "CHAT_SENDED" -> "님이 메시지를 보냈습니다";
             case "CHAT_EDITED" -> "님이 메시지를 수정했습니다";
             case "CHAT_DELETED" -> "님이 메시지를 삭제했습니다";
+            case "STOP_ADDED" -> "님이 경유지를 추가했습니다";
+            case "STOP_REMOVED" -> "님이 경유지를 삭제했습니다";
+            case "LEG_UPDATED" -> "님이 이동 구간을 수정했습니다";
+            case "TITLE_CHANGED" -> "님이 루트 이름을 변경했습니다";
+            case "EDITING_COMPLETED" -> "님이 편집을 완료했습니다";
+            case "EDITING_RESUMED" -> "님이 편집을 재개했습니다";
             default -> "님이 루트를 수정했습니다";
         };
         return nickname + suffix;

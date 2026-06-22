@@ -468,7 +468,11 @@ public class CourseController {
     }
 
     @PostMapping("/my/{courseId}/members")
-    @Operation(summary = "공동 루트 멤버 추가", description = "OWNER 또는 EDITOR만 멤버를 추가할 수 있습니다.", security = @SecurityRequirement(name = "Bearer"))
+    @Operation(
+            summary = "공동 루트 멤버 추가",
+            description = "OWNER 또는 EDITOR만 멤버를 추가할 수 있습니다. 루트에 연결된 채팅방이 없으면 이 호출 시점에 자동으로 생성되어 연결되며, 이후 추가되는 멤버는 항상 이 채팅방으로 모입니다(매 초대마다 새 채팅방이 생기지 않음).",
+            security = @SecurityRequirement(name = "Bearer")
+    )
     public ResponseEntity<CollaborativeMemberResponse> addCourseMember(
             @PathVariable String courseId,
             @Valid @RequestBody AddCourseMemberRequest request,
@@ -499,7 +503,11 @@ public class CourseController {
     }
 
     @PutMapping("/my/{courseId}/chat-room")
-    @Operation(summary = "공동 루트 채팅방 연결", security = @SecurityRequirement(name = "Bearer"))
+    @Operation(
+            summary = "공동 루트 채팅방 연결",
+            description = "루트에 아직 채팅방이 연결되지 않은 경우에만 사용하세요. 이미 다른 채팅방이 연결되어 있으면 409 Conflict가 반환됩니다(채팅방을 바꿔치기하지 않음).",
+            security = @SecurityRequirement(name = "Bearer")
+    )
     public ResponseEntity<CourseChatRoomResponse> linkCourseChatRoom(
             @PathVariable String courseId,
             @Valid @RequestBody LinkCourseChatRoomRequest request,
@@ -515,6 +523,32 @@ public class CourseController {
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
         return ResponseEntity.ok(courseService.getCourseChatRoom(userId, courseId));
+    }
+
+    @PostMapping("/my/{courseId}/complete-editing")
+    @Operation(
+            summary = "공동 루트 편집 완료",
+            description = "공동 편집 세션을 COMPLETED 상태로 전환합니다. OWNER 또는 EDITOR만 호출할 수 있습니다.",
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    public ResponseEntity<MyCourseDetailResponse> completeCourseEditing(
+            @PathVariable String courseId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.ok(courseService.completeCourseEditing(userId, courseId));
+    }
+
+    @PostMapping("/my/{courseId}/resume-editing")
+    @Operation(
+            summary = "공동 루트 편집 재개",
+            description = "COMPLETED 상태였던 공동 편집 세션을 다시 EDITING 상태로 전환합니다. OWNER 또는 EDITOR만 호출할 수 있습니다.",
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    public ResponseEntity<MyCourseDetailResponse> resumeCourseEditing(
+            @PathVariable String courseId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.ok(courseService.resumeCourseEditing(userId, courseId));
     }
 
     @PatchMapping(value = "/my/{courseId}/thumbnail", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

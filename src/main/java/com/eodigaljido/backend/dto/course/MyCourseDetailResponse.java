@@ -20,6 +20,9 @@ public record MyCourseDetailResponse(
         @Schema(description = "공동 편집 여부", example = "false")
         boolean collaborative,
 
+        @Schema(description = "공동 편집 상태 (EDITING | COMPLETED)", example = "EDITING")
+        String collaborationStatus,
+
         @Schema(description = "공동 편집 충돌 방지 버전", example = "12")
         long version,
 

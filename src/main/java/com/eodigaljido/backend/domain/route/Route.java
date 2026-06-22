@@ -59,6 +59,11 @@ public class Route extends BaseTimeEntity {
     @Builder.Default
     private boolean isCollaborative = false;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "collaboration_status", nullable = false, length = 20, columnDefinition = "varchar(20) default 'EDITING'")
+    @Builder.Default
+    private CollaborationStatus collaborationStatus = CollaborationStatus.EDITING;
+
     @Column(name = "version", nullable = false)
     @Builder.Default
     private long version = 0L;
@@ -126,6 +131,10 @@ public class Route extends BaseTimeEntity {
 
     public enum RouteStatus {
         DRAFT, PUBLISHED, DELETED
+    }
+
+    public enum CollaborationStatus {
+        EDITING, COMPLETED
     }
 
     public void incrementViews() {
@@ -197,10 +206,19 @@ public class Route extends BaseTimeEntity {
 
     public void enableCollaboration() {
         this.isCollaborative = true;
+        this.collaborationStatus = CollaborationStatus.EDITING;
     }
 
     public void disableCollaboration() {
         this.isCollaborative = false;
+    }
+
+    public void markEditingCompleted() {
+        this.collaborationStatus = CollaborationStatus.COMPLETED;
+    }
+
+    public void resumeEditing() {
+        this.collaborationStatus = CollaborationStatus.EDITING;
     }
 
     public void incrementVersion() {
