@@ -2,6 +2,8 @@ package com.eodigaljido.backend.repository;
 
 import com.eodigaljido.backend.domain.chat.ChatMessage;
 import com.eodigaljido.backend.domain.chat.ChatRoom;
+import com.eodigaljido.backend.domain.route.Route;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -13,6 +15,9 @@ import java.util.Optional;
 public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> {
 
     Optional<ChatMessage> findByUuid(String uuid);
+
+    @Query("SELECT m FROM ChatMessage m JOIN FETCH m.sender WHERE m.route = :route ORDER BY m.createdAt ASC")
+    Page<ChatMessage> findByRouteOrderByCreatedAtAsc(@Param("route") Route route, Pageable pageable);
 
     List<ChatMessage> findByRoomOrderByCreatedAtDesc(ChatRoom room, Pageable pageable);
 

@@ -1,6 +1,6 @@
 package com.eodigaljido.backend.dto.routehistory;
 
-import com.eodigaljido.backend.domain.route.RouteHistoryLog;
+import com.eodigaljido.backend.domain.chat.ChatMessage;
 import com.eodigaljido.backend.domain.user.Profile;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -10,13 +10,13 @@ import java.time.LocalDateTime;
 public record RouteHistoryFeedItem(
 
         @Schema(
-            description = "이벤트 타입. CHAT: 채팅 메시지 관련 이벤트(전송/수정/삭제), COURSE: 루트 수정 이벤트",
+            description = "이벤트 타입. CHAT: 채팅 메시지 관련 이벤트, COURSE: 루트 수정 이벤트",
             example = "CHAT",
             allowableValues = {"CHAT", "COURSE"}
         )
         String type,
 
-        @Schema(description = "이벤트 고유 ID (route_history_logs PK)", example = "42")
+        @Schema(description = "이벤트 고유 ID (chat_messages PK)", example = "42")
         Long itemId,
 
         @Schema(description = "이벤트를 발생시킨 사용자 UUID", example = "770e8400-e29b-41d4-a716-446655440002")
@@ -35,9 +35,9 @@ public record RouteHistoryFeedItem(
         String content,
 
         @Schema(
-            description = "액션 코드. type=CHAT이면 CHAT_SENDED | CHAT_EDITED | CHAT_DELETED. type=COURSE이면 ROUTE_UPDATED | STOP_ADDED | STOP_REMOVED | LEG_UPDATED | TITLE_CHANGED | EDITING_COMPLETED | EDITING_RESUMED",
+            description = "액션 코드. type=CHAT이면 CHAT_SENDED. type=COURSE이면 ROUTE_UPDATED | STOP_ADDED | STOP_REMOVED | LEG_UPDATED | TITLE_CHANGED | EDITING_COMPLETED | EDITING_RESUMED",
             example = "CHAT_SENDED",
-            allowableValues = {"CHAT_SENDED", "CHAT_EDITED", "CHAT_DELETED", "ROUTE_UPDATED", "STOP_ADDED", "STOP_REMOVED", "LEG_UPDATED", "TITLE_CHANGED", "EDITING_COMPLETED", "EDITING_RESUMED"}
+            allowableValues = {"CHAT_SENDED", "ROUTE_UPDATED", "STOP_ADDED", "STOP_REMOVED", "LEG_UPDATED", "TITLE_CHANGED", "EDITING_COMPLETED", "EDITING_RESUMED"}
         )
         String action,
 
@@ -47,42 +47,32 @@ public record RouteHistoryFeedItem(
         )
         String editDescription,
 
+        @Schema(
+            description = "구체적인 변경 내용 (JSON 문자열). type=COURSE일 때만 존재할 수 있으며, 없으면 null. 예: {\"stopNames\":[\"신세계백화점\"]}",
+            example = "{\"stopNames\":[\"신세계백화점\"]}"
+        )
+        String editDetails,
+
         @Schema(description = "이벤트 발생 시각", example = "2026-04-01T10:00:00")
         LocalDateTime createdAt
 ) {
 
-    public static RouteHistoryFeedItem from(RouteHistoryLog log, Profile profile) {
-        String nickname = profile != null ? profile.getNickname() : log.getActor().getUserId();
+    public static RouteHistoryFeedItem from(ChatMessage message, Profile profile) {
+        String nickname = profile != null ? profile.getNickname() : message.getSender().getUserId();
         String profileImageUrl = profile != null ? profile.getProfileImageUrl() : null;
-        RouteHistoryLog.Type effectiveType = log.getEffectiveType();
-        String effectiveAction = log.getEffectiveEditAction();
+        boolean isCourseEvent = message.getType().isCourseEvent();
 
         return new RouteHistoryFeedItem(
-                effectiveType.name(),
-                log.getId(),
-                log.getActor().getUuid(),
+                isCourseEvent ? "COURSE" : "CHAT",
+                message.getId(),
+                message.getSender().getUuid(),
                 nickname,
                 profileImageUrl,
-                effectiveType == RouteHistoryLog.Type.CHAT ? log.getContent() : null,
-                effectiveAction,
-                buildEditDescription(nickname, effectiveAction),
-                log.getCreatedAt()
+                isCourseEvent ? null : message.getContent(),
+                isCourseEvent ? message.getType().name() : "CHAT_SENDED",
+                message.getType().describe(nickname),
+                isCourseEvent ? message.getEditDetails() : null,
+                message.getCreatedAt()
         );
-    }
-
-    private static String buildEditDescription(String nickname, String action) {
-        String suffix = switch (action) {
-            case "CHAT_SENDED" -> "님이 메시지를 보냈습니다";
-            case "CHAT_EDITED" -> "님이 메시지를 수정했습니다";
-            case "CHAT_DELETED" -> "님이 메시지를 삭제했습니다";
-            case "STOP_ADDED" -> "님이 경유지를 추가했습니다";
-            case "STOP_REMOVED" -> "님이 경유지를 삭제했습니다";
-            case "LEG_UPDATED" -> "님이 이동 구간을 수정했습니다";
-            case "TITLE_CHANGED" -> "님이 루트 이름을 변경했습니다";
-            case "EDITING_COMPLETED" -> "님이 편집을 완료했습니다";
-            case "EDITING_RESUMED" -> "님이 편집을 재개했습니다";
-            default -> "님이 루트를 수정했습니다";
-        };
-        return nickname + suffix;
     }
 }

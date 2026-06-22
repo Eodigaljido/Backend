@@ -1,5 +1,6 @@
 package com.eodigaljido.backend.service;
 
+import com.eodigaljido.backend.domain.chat.ChatMessage;
 import com.eodigaljido.backend.domain.chat.ChatRoom;
 import com.eodigaljido.backend.domain.chat.ChatRoomMember;
 import com.eodigaljido.backend.domain.group.Group;
@@ -8,7 +9,6 @@ import com.eodigaljido.backend.domain.onboarding.OnboardingAnswer;
 import com.eodigaljido.backend.domain.route.CourseMember;
 import com.eodigaljido.backend.domain.route.Route;
 import com.eodigaljido.backend.domain.route.Route.RouteStatus;
-import com.eodigaljido.backend.domain.route.RouteHistoryLog;
 import com.eodigaljido.backend.domain.route.RouteLeg;
 import com.eodigaljido.backend.domain.route.RouteReview;
 import com.eodigaljido.backend.domain.route.RouteWaypoint;
@@ -17,6 +17,8 @@ import com.eodigaljido.backend.domain.route.SavedRoute;
 import com.eodigaljido.backend.domain.following.FollowingNewsActionType;
 import com.eodigaljido.backend.domain.user.Profile;
 import com.eodigaljido.backend.domain.user.User;
+import com.eodigaljido.backend.dto.chat.ChatEventEnvelope;
+import com.eodigaljido.backend.dto.chat.ChatMessageResponse;
 import com.eodigaljido.backend.dto.course.*;
 import com.eodigaljido.backend.event.NotificationEvent;
 import com.eodigaljido.backend.repository.RouteLegRepository;
@@ -25,6 +27,8 @@ import com.eodigaljido.backend.exception.RouteException;
 import com.eodigaljido.backend.exception.UserException;
 import com.eodigaljido.backend.repository.*;
 import com.eodigaljido.backend.exception.GroupException;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.ApplicationEventPublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -70,11 +74,12 @@ public class CourseService {
     private final ChatRoomRepository chatRoomRepository;
     private final ChatRoomMemberRepository chatRoomMemberRepository;
     private final CourseMemberRepository courseMemberRepository;
-    private final RouteHistoryLogRepository routeHistoryLogRepository;
+    private final ChatMessageRepository chatMessageRepository;
     private final FollowingNewsService followingNewsService;
     private final ApplicationEventPublisher eventPublisher;
     private final FileStorageService fileStorageService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     // ──────────────────────────────────────────────────────────
     // 코스 공유 링크 preview (비로그인 허용, 조회수 증가 없음)
@@ -550,7 +555,8 @@ public class CourseService {
                 : route.getTotalDistance();
 
         String previousTitle = route.getTitle();
-        int previousStopCount = waypointRepository.findByRouteOrderBySequenceAsc(route).size();
+        List<RouteWaypoint> previousWaypoints = waypointRepository.findByRouteOrderBySequenceAsc(route);
+        List<RouteLeg> previousLegs = legRepository.findByRouteOrderBySequenceAsc(route);
 
         route.update(
                 req.title() != null ? req.title() : route.getTitle(),
@@ -584,7 +590,7 @@ public class CourseService {
         }
 
         route.incrementVersion();
-        recordCourseEditHistory(route, editor, req, previousTitle, previousStopCount, waypoints.size());
+        recordCourseEditHistory(route, editor, req, previousTitle, previousWaypoints, waypoints, previousLegs, legs);
         MyCourseDetailResponse response = toMyCourseDetail(route, waypoints, legs);
         broadcastCourseUpdated(route, editor);
         return response;
@@ -603,12 +609,7 @@ public class CourseService {
             throw new RouteException("COURSE_FORBIDDEN", HttpStatus.FORBIDDEN);
         }
         route.markEditingCompleted();
-        routeHistoryLogRepository.save(RouteHistoryLog.builder()
-                .route(route)
-                .actor(editor)
-                .type(RouteHistoryLog.Type.COURSE)
-                .editAction("EDITING_COMPLETED")
-                .build());
+        recordCourseEvent(route, editor, ChatMessage.MessageType.EDITING_COMPLETED, null);
         List<RouteWaypoint> waypoints = waypointRepository.findByRouteOrderBySequenceAsc(route);
         List<RouteLeg> legs = legRepository.findByRouteOrderBySequenceAsc(route);
         return toMyCourseDetail(route, waypoints, legs);
@@ -623,12 +624,7 @@ public class CourseService {
             throw new RouteException("COURSE_FORBIDDEN", HttpStatus.FORBIDDEN);
         }
         route.resumeEditing();
-        routeHistoryLogRepository.save(RouteHistoryLog.builder()
-                .route(route)
-                .actor(editor)
-                .type(RouteHistoryLog.Type.COURSE)
-                .editAction("EDITING_RESUMED")
-                .build());
+        recordCourseEvent(route, editor, ChatMessage.MessageType.EDITING_RESUMED, null);
         List<RouteWaypoint> waypoints = waypointRepository.findByRouteOrderBySequenceAsc(route);
         List<RouteLeg> legs = legRepository.findByRouteOrderBySequenceAsc(route);
         return toMyCourseDetail(route, waypoints, legs);
@@ -1068,27 +1064,89 @@ public class CourseService {
                         .build()));
     }
 
+    private record CourseEditEvent(ChatMessage.MessageType type, Map<String, ?> details) {}
+
     private void recordCourseEditHistory(Route route, User editor, CreateMyCourseRequest req,
-                                          String previousTitle, int previousStopCount, int newStopCount) {
-        List<String> actions = new java.util.ArrayList<>();
+                                          String previousTitle, List<RouteWaypoint> previousWaypoints,
+                                          List<RouteWaypoint> waypoints, List<RouteLeg> previousLegs,
+                                          List<RouteLeg> legs) {
+        List<CourseEditEvent> events = new java.util.ArrayList<>();
         if (req.title() != null && !req.title().equals(previousTitle)) {
-            actions.add("TITLE_CHANGED");
+            events.add(new CourseEditEvent(ChatMessage.MessageType.TITLE_CHANGED,
+                    Map.of("before", previousTitle, "after", req.title())));
         }
-        if (req.stops() != null && newStopCount != previousStopCount) {
-            actions.add(newStopCount > previousStopCount ? "STOP_ADDED" : "STOP_REMOVED");
+        if (req.stops() != null && waypoints.size() != previousWaypoints.size()) {
+            boolean added = waypoints.size() > previousWaypoints.size();
+            Set<String> previousNames = previousWaypoints.stream().map(RouteWaypoint::getName).collect(Collectors.toSet());
+            Set<String> newNames = waypoints.stream().map(RouteWaypoint::getName).collect(Collectors.toSet());
+            List<String> changedNames = added
+                    ? newNames.stream().filter(name -> !previousNames.contains(name)).toList()
+                    : previousNames.stream().filter(name -> !newNames.contains(name)).toList();
+            events.add(new CourseEditEvent(
+                    added ? ChatMessage.MessageType.STOP_ADDED : ChatMessage.MessageType.STOP_REMOVED,
+                    Map.of("stopNames", changedNames)));
         }
         if (req.legs() != null) {
-            actions.add("LEG_UPDATED");
+            events.add(new CourseEditEvent(ChatMessage.MessageType.LEG_UPDATED,
+                    Map.of("previousLegCount", previousLegs.size(), "newLegCount", legs.size())));
         }
-        if (actions.isEmpty()) {
-            actions.add("ROUTE_UPDATED");
+        if (events.isEmpty()) {
+            events.add(new CourseEditEvent(ChatMessage.MessageType.ROUTE_UPDATED, null));
         }
-        actions.forEach(action -> routeHistoryLogRepository.save(RouteHistoryLog.builder()
+        events.forEach(event -> recordCourseEvent(route, editor, event.type(), event.details()));
+    }
+
+    /**
+     * 루트 편집/협업 상태 변경 이벤트를 루트에 연결된 채팅방에 기록한다.
+     * 연결된 채팅방이 없으면 기록할 곳이 없으므로 건너뛴다.
+     */
+    private void recordCourseEvent(Route route, User editor, ChatMessage.MessageType type, Map<String, ?> details) {
+        if (route.getChatRoom() == null) {
+            return;
+        }
+        String detailsJson = null;
+        if (details != null) {
+            try {
+                detailsJson = objectMapper.writeValueAsString(details);
+            } catch (JsonProcessingException e) {
+                detailsJson = null;
+            }
+        }
+        Profile profile = profileRepository.findByUser(editor).orElse(null);
+        String nickname = profile != null ? profile.getNickname() : editor.getUserId();
+
+        ChatMessage message = ChatMessage.builder()
+                .uuid(UUID.randomUUID().toString())
+                .room(route.getChatRoom())
+                .sender(editor)
+                .type(type)
+                .content(type.describe(nickname))
                 .route(route)
-                .actor(editor)
-                .type(RouteHistoryLog.Type.COURSE)
-                .editAction(action)
-                .build()));
+                .editDetails(detailsJson)
+                .build();
+        chatMessageRepository.save(message);
+        broadcastCourseChatMessage(route.getChatRoom(), message, profile);
+    }
+
+    private void broadcastCourseChatMessage(ChatRoom room, ChatMessage message, Profile senderProfile) {
+        String nickname = senderProfile != null ? senderProfile.getNickname() : message.getSender().getUserId();
+        String imageUrl = senderProfile != null ? senderProfile.getProfileImageUrl() : null;
+        ChatMessageResponse response = new ChatMessageResponse(
+                message.getUuid(),
+                message.getSender().getUuid(),
+                nickname,
+                imageUrl,
+                message.getType().name(),
+                message.getContent(),
+                message.getAttachmentUrl(),
+                null,
+                null,
+                null,
+                message.getCreatedAt(),
+                message.getEditedAt()
+        );
+        messagingTemplate.convertAndSend("/topic/chat/" + room.getUuid(),
+                new ChatEventEnvelope(ChatEventEnvelope.EventType.MESSAGE_CREATED, response));
     }
 
     private void broadcastCourseUpdated(Route route, User editor) {

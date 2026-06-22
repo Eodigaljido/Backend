@@ -6,7 +6,6 @@ import com.eodigaljido.backend.domain.chat.ChatRoomMember;
 import com.eodigaljido.backend.domain.friend.Friend;
 import com.eodigaljido.backend.domain.notification.NotificationType;
 import com.eodigaljido.backend.domain.route.Route;
-import com.eodigaljido.backend.domain.route.RouteHistoryLog;
 import com.eodigaljido.backend.domain.user.Profile;
 import com.eodigaljido.backend.domain.user.User;
 import com.eodigaljido.backend.dto.chat.ChatEventEnvelope;
@@ -69,7 +68,6 @@ public class ChatService {
     private final ProfileRepository profileRepository;
     private final RouteRepository routeRepository;
     private final CourseMemberRepository courseMemberRepository;
-    private final RouteHistoryLogRepository routeHistoryLogRepository;
     private final FriendRepository friendRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final ApplicationEventPublisher eventPublisher;
@@ -261,26 +259,20 @@ public class ChatService {
         ChatRoomMember senderMembership = getMembership(room, userId);
         User me = senderMembership.getUser();
 
+        Route linkedRoute = room.getType() == ChatRoom.RoomType.ROUTE
+                ? routeRepository.findByChatRoomIdAndStatusNot(room.getId(), Route.RouteStatus.DELETED).orElse(null)
+                : null;
+
         ChatMessage message = ChatMessage.builder()
                 .uuid(UUID.randomUUID().toString())
                 .room(room)
                 .sender(me)
                 .type(ChatMessage.MessageType.TEXT)
                 .content(req.content())
+                .route(linkedRoute)
                 .build();
         chatMessageRepository.save(message);
         senderMembership.updateLastReadAt();
-
-        if (room.getType() == ChatRoom.RoomType.ROUTE) {
-            routeRepository.findByChatRoomIdAndStatusNot(room.getId(), Route.RouteStatus.DELETED)
-                    .ifPresent(route -> routeHistoryLogRepository.save(RouteHistoryLog.builder()
-                            .route(route)
-                            .actor(me)
-                            .type(RouteHistoryLog.Type.CHAT)
-                            .content(req.content())
-                            .editAction("CHAT_SENDED")
-                            .build()));
-        }
 
         String senderNickname = profileRepository.findByUser(me)
                 .map(Profile::getNickname).orElse(me.getUserId());
@@ -388,17 +380,6 @@ public class ChatService {
             throw new ChatException("메시지 수정 권한이 없습니다.", HttpStatus.FORBIDDEN);
         }
 
-        if (room.getType() == ChatRoom.RoomType.ROUTE) {
-            routeRepository.findByChatRoomIdAndStatusNot(room.getId(), Route.RouteStatus.DELETED)
-                    .ifPresent(route -> routeHistoryLogRepository.save(RouteHistoryLog.builder()
-                            .route(route)
-                            .actor(message.getSender())
-                            .type(RouteHistoryLog.Type.CHAT)
-                            .content(req.content())
-                            .editAction("CHAT_EDITED")
-                            .build()));
-        }
-
         message.edit(req.content());
         ChatMessageResponse response = toMessageResponse(message);
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
@@ -424,17 +405,6 @@ public class ChatService {
         boolean isAdmin = membership.getRole() == ChatRoomMember.MemberRole.ADMIN;
         if (!isSender && !isAdmin) {
             throw new ChatException("메시지 삭제 권한이 없습니다.", HttpStatus.FORBIDDEN);
-        }
-
-        if (room.getType() == ChatRoom.RoomType.ROUTE) {
-            routeRepository.findByChatRoomIdAndStatusNot(room.getId(), Route.RouteStatus.DELETED)
-                    .ifPresent(route -> routeHistoryLogRepository.save(RouteHistoryLog.builder()
-                            .route(route)
-                            .actor(membership.getUser())
-                            .type(RouteHistoryLog.Type.CHAT)
-                            .content(message.getContent())
-                            .editAction("CHAT_DELETED")
-                            .build()));
         }
 
         ChatMessageResponse deleteResponse = toMessageResponse(message);

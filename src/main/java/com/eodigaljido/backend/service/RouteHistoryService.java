@@ -1,9 +1,9 @@
 package com.eodigaljido.backend.service;
 
+import com.eodigaljido.backend.domain.chat.ChatMessage;
 import com.eodigaljido.backend.domain.chat.ChatRoom;
 import com.eodigaljido.backend.domain.group.Group;
 import com.eodigaljido.backend.domain.route.Route;
-import com.eodigaljido.backend.domain.route.RouteHistoryLog;
 import com.eodigaljido.backend.domain.user.Profile;
 import com.eodigaljido.backend.domain.user.User;
 import com.eodigaljido.backend.dto.course.PageInfo;
@@ -33,8 +33,8 @@ public class RouteHistoryService {
 
     private final ChatRoomRepository chatRoomRepository;
     private final ChatRoomMemberRepository chatRoomMemberRepository;
+    private final ChatMessageRepository chatMessageRepository;
     private final RouteRepository routeRepository;
-    private final RouteHistoryLogRepository routeHistoryLogRepository;
     private final CourseMemberRepository courseMemberRepository;
     private final UserRepository userRepository;
     private final ProfileRepository profileRepository;
@@ -70,7 +70,7 @@ public class RouteHistoryService {
     }
 
     // ──────────────────────────────────────────────────────────
-    // 루트 기록 상세 피드 (불변 RouteHistoryLog 기반)
+    // 루트 기록 상세 피드 (루트에 연결된 채팅방의 chat_messages 기반)
     // ──────────────────────────────────────────────────────────
 
     public RouteHistoryFeedResponse getRouteHistoryFeed(Long userId, String courseId, int page, int size) {
@@ -80,20 +80,24 @@ public class RouteHistoryService {
         User user = findUser(userId);
         verifyFeedAccess(route, user);
 
-        Page<RouteHistoryLog> logPage = routeHistoryLogRepository.findByRouteOrderByCreatedAtAsc(
+        if (route.getChatRoom() == null) {
+            return new RouteHistoryFeedResponse(List.of(), new PageInfo(page, size, 0, 0));
+        }
+
+        Page<ChatMessage> messagePage = chatMessageRepository.findByRouteOrderByCreatedAtAsc(
                 route, PageRequest.of(page, size));
 
-        List<User> actors = logPage.getContent().stream().map(RouteHistoryLog::getActor).distinct().toList();
-        Map<Long, Profile> profiles = profileRepository.findByUserIn(actors)
+        List<User> senders = messagePage.getContent().stream().map(ChatMessage::getSender).distinct().toList();
+        Map<Long, Profile> profiles = profileRepository.findByUserIn(senders)
                 .stream()
                 .collect(Collectors.toMap(p -> p.getUser().getId(), Function.identity(), (a, b) -> a));
 
-        List<RouteHistoryFeedItem> items = logPage.getContent().stream()
-                .map(log -> RouteHistoryFeedItem.from(log, profiles.get(log.getActor().getId())))
+        List<RouteHistoryFeedItem> items = messagePage.getContent().stream()
+                .map(message -> RouteHistoryFeedItem.from(message, profiles.get(message.getSender().getId())))
                 .toList();
 
-        PageInfo pageInfo = new PageInfo(logPage.getNumber(), logPage.getSize(),
-                logPage.getTotalElements(), logPage.getTotalPages());
+        PageInfo pageInfo = new PageInfo(messagePage.getNumber(), messagePage.getSize(),
+                messagePage.getTotalElements(), messagePage.getTotalPages());
         return new RouteHistoryFeedResponse(items, pageInfo);
     }
 

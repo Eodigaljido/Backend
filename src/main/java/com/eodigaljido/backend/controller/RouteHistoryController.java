@@ -84,20 +84,18 @@ public class RouteHistoryController {
     @Operation(
             summary = "루트 기록 상세 피드 조회",
             description = """
-                    특정 루트의 실시간 공동 편집 세션 중 발생한 채팅 메시지와 루트 수정 이벤트를
-                    발생 시각 오름차순으로 반환합니다.
+                    특정 루트에 연결된 채팅방(`chat_messages`)에서 발생한 채팅 메시지와 루트 수정 이벤트를
+                    발생 시각 오름차순으로 반환합니다. 루트에 연결된 채팅방이 없으면 빈 목록을 반환합니다.
 
-                    이벤트는 발생 시점에 불변 로그로 저장되므로, 원본 채팅 메시지를 이후에
-                    수정·삭제하더라도 기록 자체는 유지됩니다.
+                    채팅 메시지를 실제로 수정/삭제하면 그 메시지 row 자체가 바뀌거나 사라지므로,
+                    이 피드에 보이는 내용도 함께 바뀌거나 사라집니다(불변 로그가 아닙니다).
 
                     **`type` 값에 따른 응답 필드 사용 방법**
 
                     | `type` | `action` | 설명 | 유효 필드 |
                     |--------|----------|------|-----------|
-                    | `CHAT` | `CHAT_SENDED` | 채팅 메시지 전송 | `content`(전송 내용), `editDescription`, `actorNickname`, `actorProfileImageUrl` |
-                    | `CHAT` | `CHAT_EDITED` | 채팅 메시지 수정 | `content`(수정 후 내용), `editDescription`, `actorNickname`, `actorProfileImageUrl` |
-                    | `CHAT` | `CHAT_DELETED` | 채팅 메시지 삭제 | `content`(삭제 직전 내용), `editDescription`, `actorNickname`, `actorProfileImageUrl` |
-                    | `COURSE` | `ROUTE_UPDATED` | 그 외 루트 편집(위 항목에 해당 없음) | `editDescription`, `actorNickname`, `actorProfileImageUrl` (`content`는 null) |
+                    | `CHAT` | `CHAT_SENDED` | 일반 채팅 메시지 | `content`(메시지 내용), `editDescription`, `actorNickname`, `actorProfileImageUrl` |
+                    | `COURSE` | `ROUTE_UPDATED` | 그 외 루트 편집(아래 항목에 해당 없음) | `editDescription`, `actorNickname`, `actorProfileImageUrl`, `editDetails` (`content`는 null) |
                     | `COURSE` | `TITLE_CHANGED` | 루트 제목 변경 | 〃 |
                     | `COURSE` | `STOP_ADDED` | 경유지 추가 | 〃 |
                     | `COURSE` | `STOP_REMOVED` | 경유지 삭제 | 〃 |
@@ -114,8 +112,12 @@ public class RouteHistoryController {
                     - `EDITING_COMPLETED` → "홍길동님이 편집을 완료했습니다"
                     - `EDITING_RESUMED` → "홍길동님이 편집을 재개했습니다"
                     - `CHAT_SENDED` → "홍길동님이 메시지를 보냈습니다"
-                    - `CHAT_EDITED` → "홍길동님이 메시지를 수정했습니다"
-                    - `CHAT_DELETED` → "홍길동님이 메시지를 삭제했습니다"
+
+                    **`editDetails` (구체적 변경 내용, JSON 문자열, 없으면 null)**
+                    - `TITLE_CHANGED` → `{"before":"이전 제목","after":"새 제목"}`
+                    - `STOP_ADDED` / `STOP_REMOVED` → `{"stopNames":["신세계백화점"]}`
+                    - `LEG_UPDATED` → `{"previousLegCount":2,"newLegCount":3}`
+                    - 그 외 액션은 `editDetails`가 항상 null입니다.
 
                     **조회 권한:** 루트의 CourseMember이거나, 루트 전용 채팅방 멤버이거나,
                     루트가 속한 그룹의 채팅방 멤버인 경우 조회 가능합니다.
