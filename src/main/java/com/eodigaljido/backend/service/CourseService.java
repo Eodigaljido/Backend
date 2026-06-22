@@ -530,9 +530,6 @@ public class CourseService {
                     waypointRepository.findByRouteOrderBySequenceAsc(route),
                     legRepository.findByRouteOrderBySequenceAsc(route)));
         }
-        if (Boolean.TRUE.equals(req.collaborative()) && route.isShared()) {
-            throw new RouteException("COURSE_NOT_COLLABORATIVE", HttpStatus.BAD_REQUEST);
-        }
         if (req.collaborative() != null) {
             if (req.collaborative()) {
                 route.enableCollaboration();
@@ -565,14 +562,23 @@ public class CourseService {
             route.updateTags(processTags(req.tags()));
         }
 
-        waypointRepository.deleteAllByRoute(route);
-        legRepository.deleteAllByRoute(route);
+        List<RouteWaypoint> waypoints;
+        if (req.stops() != null) {
+            waypointRepository.deleteAllByRoute(route);
+            waypoints = buildWaypoints(route, req.stops());
+            waypointRepository.saveAll(waypoints);
+        } else {
+            waypoints = waypointRepository.findByRouteOrderBySequenceAsc(route);
+        }
 
-        List<RouteWaypoint> waypoints = buildWaypoints(route, req.stops());
-        waypointRepository.saveAll(waypoints);
-
-        List<RouteLeg> legs = buildLegs(route, req.legs());
-        legRepository.saveAll(legs);
+        List<RouteLeg> legs;
+        if (req.legs() != null) {
+            legRepository.deleteAllByRoute(route);
+            legs = buildLegs(route, req.legs());
+            legRepository.saveAll(legs);
+        } else {
+            legs = legRepository.findByRouteOrderBySequenceAsc(route);
+        }
 
         route.incrementVersion();
         routeHistoryLogRepository.save(RouteHistoryLog.builder()
@@ -943,9 +949,12 @@ public class CourseService {
     }
 
     private Route findCollaborativeRoute(String courseId) {
-        return routeRepository.findByUuidAndStatusNot(courseId, RouteStatus.DELETED)
-                .filter(Route::isCollaborative)
-                .orElseThrow(() -> new RouteException("COURSE_NOT_COLLABORATIVE", HttpStatus.NOT_FOUND));
+        Route route = routeRepository.findByUuidAndStatusNot(courseId, RouteStatus.DELETED)
+                .orElseThrow(() -> new RouteException("코스를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        if (!route.isCollaborative()) {
+            throw new RouteException("루트를 공동 편집 모드로 전환해주세요", HttpStatus.BAD_REQUEST);
+        }
+        return route;
     }
 
     private CourseMember ensureCourseMember(Route route, User user, CourseMember.Role role) {
