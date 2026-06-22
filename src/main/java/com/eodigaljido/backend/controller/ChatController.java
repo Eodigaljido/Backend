@@ -394,6 +394,7 @@ public class ChatController {
             description = """
                     기존 채팅방에 새로운 유저를 초대합니다.
                     **친구 관계(ACCEPTED)인 유저만 초대할 수 있습니다.**
+                    **1:1(DIRECT) 채팅방에는 초대할 수 없습니다.** (GROUP 채팅방만 가능)
 
                     **Request Body:**
                     - `userUuid` (필수): 초대할 유저의 UUID (`GET /api/friends`의 `uuid` 필드)

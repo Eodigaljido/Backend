@@ -163,6 +163,10 @@ public class ChatService {
         User requester = getUser(requesterId);
         getMembership(room, requesterId);
 
+        if (room.getType() == ChatRoom.RoomType.DIRECT) {
+            throw new ChatException("1:1 채팅방에는 다른 사용자를 초대할 수 없습니다.", HttpStatus.BAD_REQUEST);
+        }
+
         User target = userRepository.findByUuid(targetUserUuid)
                 .orElseThrow(() -> new ChatException("존재하지 않는 유저입니다: " + targetUserUuid, HttpStatus.NOT_FOUND));
 
@@ -181,11 +185,6 @@ public class ChatService {
                         ChatRoomMember.builder().room(room).user(target).role(ChatRoomMember.MemberRole.MEMBER).build()
                 )
         );
-
-        if (room.getType() == ChatRoom.RoomType.DIRECT
-                && chatRoomMemberRepository.findByRoomAndLeftAtIsNull(room).size() > 2) {
-            room.promoteToGroup();
-        }
 
         String requesterNickname = profileRepository.findByUser(requester)
                 .map(Profile::getNickname).orElse(requester.getUserId());

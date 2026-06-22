@@ -76,12 +76,6 @@ public class ChatRoom extends BaseTimeEntity {
         this.parentRoom = parentRoom;
     }
 
-    public void promoteToGroup() {
-        if (this.type == RoomType.DIRECT) {
-            this.type = RoomType.GROUP;
-        }
-    }
-
     public void assignGroup(Group group) {
         this.group = group;
     }

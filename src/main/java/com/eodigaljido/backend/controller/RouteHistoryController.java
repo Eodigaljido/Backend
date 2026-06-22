@@ -97,10 +97,22 @@ public class RouteHistoryController {
                     | `CHAT` | `CHAT_SENDED` | 채팅 메시지 전송 | `content`(전송 내용), `editDescription`, `actorNickname`, `actorProfileImageUrl` |
                     | `CHAT` | `CHAT_EDITED` | 채팅 메시지 수정 | `content`(수정 후 내용), `editDescription`, `actorNickname`, `actorProfileImageUrl` |
                     | `CHAT` | `CHAT_DELETED` | 채팅 메시지 삭제 | `content`(삭제 직전 내용), `editDescription`, `actorNickname`, `actorProfileImageUrl` |
-                    | `COURSE` | `ROUTE_UPDATED` | 루트 편집 | `editDescription`, `actorNickname`, `actorProfileImageUrl` (`content`는 null) |
+                    | `COURSE` | `ROUTE_UPDATED` | 그 외 루트 편집(위 항목에 해당 없음) | `editDescription`, `actorNickname`, `actorProfileImageUrl` (`content`는 null) |
+                    | `COURSE` | `TITLE_CHANGED` | 루트 제목 변경 | 〃 |
+                    | `COURSE` | `STOP_ADDED` | 경유지 추가 | 〃 |
+                    | `COURSE` | `STOP_REMOVED` | 경유지 삭제 | 〃 |
+                    | `COURSE` | `LEG_UPDATED` | 이동 구간 수정 | 〃 |
+                    | `COURSE` | `EDITING_COMPLETED` | 공동 편집 완료 처리 | 〃 |
+                    | `COURSE` | `EDITING_RESUMED` | 공동 편집 재개 처리 | 〃 |
 
                     **`editDescription` 예시**
                     - `ROUTE_UPDATED` → "홍길동님이 루트를 수정했습니다"
+                    - `TITLE_CHANGED` → "홍길동님이 루트 이름을 변경했습니다"
+                    - `STOP_ADDED` → "홍길동님이 경유지를 추가했습니다"
+                    - `STOP_REMOVED` → "홍길동님이 경유지를 삭제했습니다"
+                    - `LEG_UPDATED` → "홍길동님이 이동 구간을 수정했습니다"
+                    - `EDITING_COMPLETED` → "홍길동님이 편집을 완료했습니다"
+                    - `EDITING_RESUMED` → "홍길동님이 편집을 재개했습니다"
                     - `CHAT_SENDED` → "홍길동님이 메시지를 보냈습니다"
                     - `CHAT_EDITED` → "홍길동님이 메시지를 수정했습니다"
                     - `CHAT_DELETED` → "홍길동님이 메시지를 삭제했습니다"
