@@ -2,7 +2,6 @@ package com.eodigaljido.backend.service;
 
 import com.eodigaljido.backend.domain.chat.ChatMessage;
 import com.eodigaljido.backend.domain.chat.ChatRoom;
-import com.eodigaljido.backend.domain.group.Group;
 import com.eodigaljido.backend.domain.route.Route;
 import com.eodigaljido.backend.domain.user.Profile;
 import com.eodigaljido.backend.domain.user.User;
@@ -51,21 +50,21 @@ public class RouteHistoryService {
         chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(chatRoom, user)
                 .orElseThrow(() -> new ChatException("채팅방 멤버가 아닙니다.", HttpStatus.FORBIDDEN));
 
-        Group group = chatRoom.getGroup();
-        if (group == null) {
+        List<ChatRoom> childRooms = chatRoomRepository.findByParentRoomAndDeletedAtIsNull(chatRoom);
+        if (childRooms.isEmpty()) {
             return List.of();
         }
 
-        List<Route> routes = routeRepository.findByGroupAndStatusNot(group, Route.RouteStatus.DELETED);
-
-        return routes.stream()
-                .filter(r -> r.getChatRoom() != null)
-                .map(r -> new RouteHistoryItemResponse(
-                        r.getUuid(),
-                        r.getChatRoom().getUuid(),
-                        r.getTitle(),
-                        courseMemberRepository.countByRoute(r)
-                ))
+        return childRooms.stream()
+                .map(room -> routeRepository.findByChatRoomIdAndStatusNot(room.getId(), Route.RouteStatus.DELETED)
+                        .map(route -> new RouteHistoryItemResponse(
+                                route.getUuid(),
+                                room.getUuid(),
+                                route.getTitle(),
+                                courseMemberRepository.countByRoute(route)
+                        ))
+                        .orElse(null))
+                .filter(java.util.Objects::nonNull)
                 .toList();
     }
 
@@ -109,9 +108,15 @@ public class RouteHistoryService {
         if (courseMemberRepository.existsByRouteAndUserAndLeftAtIsNull(route, user)) {
             return;
         }
-        if (route.getChatRoom() != null
-                && chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(route.getChatRoom(), user).isPresent()) {
-            return;
+        if (route.getChatRoom() != null) {
+            if (chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(route.getChatRoom(), user).isPresent()) {
+                return;
+            }
+            ChatRoom parentRoom = route.getChatRoom().getParentRoom();
+            if (parentRoom != null
+                    && chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(parentRoom, user).isPresent()) {
+                return;
+            }
         }
         if (route.getGroup() != null) {
             List<ChatRoom> groupRooms = chatRoomRepository.findByGroupAndDeletedAtIsNull(route.getGroup());

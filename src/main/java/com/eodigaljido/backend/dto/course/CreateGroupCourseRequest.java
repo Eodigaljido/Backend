@@ -37,5 +37,10 @@ public record CreateGroupCourseRequest(
         List<RouteTag> tags,
 
         @Schema(description = "루트 전용 채팅방 자동 생성 여부 (기본값: true)", example = "true", defaultValue = "true")
-        Boolean createChatRoom
+        Boolean createChatRoom,
+
+        @Schema(description = "루트 기록방을 종속시킬 부모 채팅방 UUID. 해당 모임 소속 채팅방이어야 하며, " +
+                "createChatRoom이 true(기본값)일 때 필수입니다.",
+                example = "550e8400-e29b-41d4-a716-446655440000")
+        String chatRoomUuid
 ) {}

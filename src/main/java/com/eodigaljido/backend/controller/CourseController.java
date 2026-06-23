@@ -287,10 +287,11 @@ public class CourseController {
                     - `stops` (선택): 경유지 목록 — `kind`(start|via|end), `title`, `timeLine`, `lat`, `lng`
                     - `legs` (선택): 이동 구간 목록 — `mode`(walk|transit|car|bike), `minutes`, `transitType`, `directionsSummary`, `directionsDetail`, `distanceMeters`
                     - `tags` (선택, 최대 2개): 허용값 `산책 카페 맛집 데이트 관광 야경 쇼핑 역사 해변 가족 운동 반려동물`
-                    - `createChatRoom` (선택, 기본값 `true`): 루트 전용 채팅방 생성 여부. `false`로 설정하면 채팅방 없이 루트만 생성됩니다.
+                    - `createChatRoom` (선택, 기본값 `true`): 루트 기록방 생성 여부. `false`로 설정하면 채팅방 없이 루트만 생성됩니다.
+                    - `chatRoomUuid` (`createChatRoom`이 `true`일 때 필수): 루트 기록방을 종속시킬 부모 채팅방 UUID. 해당 모임 소속 채팅방이어야 합니다.
 
                     **생성 시 자동 처리:**
-                    - `createChatRoom`이 `true`(기본)이면 루트 전용 채팅방이 생성되며 응답의 `chatRoomUuid`로 확인할 수 있습니다.
+                    - `createChatRoom`이 `true`(기본)이면 `chatRoomUuid`로 지정한 채팅방의 자식인 루트 기록방이 생성되며 응답의 `chatRoomUuid`(자식 기록방 UUID)로 확인할 수 있습니다. 이 기록방은 일반 채팅방 목록에는 노출되지 않고, 부모 채팅방에서 `GET /api/route-history`로 조회됩니다.
                     - `createChatRoom`이 `false`이면 채팅방이 생성되지 않으며 응답의 `chatRoomUuid`는 `null`입니다.
                     - 응답의 `collaborative`가 `true`로 반환됩니다.
                     - 모임 멤버 전원이 이 루트를 수정할 수 있습니다. 삭제는 소유자 또는 방장만 가능합니다.
@@ -505,7 +506,13 @@ public class CourseController {
     @PutMapping("/my/{courseId}/chat-room")
     @Operation(
             summary = "공동 루트 채팅방 연결",
-            description = "루트에 아직 채팅방이 연결되지 않은 경우에만 사용하세요. 이미 다른 채팅방이 연결되어 있으면 409 Conflict가 반환됩니다(채팅방을 바꿔치기하지 않음).",
+            description = """
+                    `chatRoomUuid`로 지정한 기존 채팅방을 부모로 하는 루트 기록방(자식 ROUTE 채팅방)을
+                    만들거나(없으면) 재사용합니다(이미 같은 부모로 연결돼 있으면). 지정한 채팅방 자체가
+                    기록방이 되는 것이 아니라, 그 안에 종속된 별도 기록방이 생성/재사용됩니다.
+
+                    이미 다른 채팅방을 부모로 연결한 적이 있으면 409 Conflict가 반환됩니다(부모를 바꿔치기하지 않음).
+                    """,
             security = @SecurityRequirement(name = "Bearer")
     )
     public ResponseEntity<CourseChatRoomResponse> linkCourseChatRoom(
@@ -523,6 +530,49 @@ public class CourseController {
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
         return ResponseEntity.ok(courseService.getCourseChatRoom(userId, courseId));
+    }
+
+    @PostMapping("/my/{courseId}/presence")
+    @Operation(
+            summary = "공동편집 presence 등록/갱신",
+            description = "공동편집 화면에 진입했을 때 호출합니다. 15초간 \"지금 보고 있는 멤버\"로 표시되며, " +
+                    "갱신 없이 15초가 지나면 자동으로 목록에서 제외됩니다(heartbeat와 동일하게 동작).",
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    public ResponseEntity<Void> touchCoursePresence(
+            @PathVariable String courseId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        courseService.touchPresence(userId, courseId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/my/{courseId}/heartbeat")
+    @Operation(
+            summary = "공동편집 presence 유지(heartbeat)",
+            description = "공동편집 화면에 머물러 있는 동안 주기적으로 호출해 presence를 갱신합니다. " +
+                    "동작은 POST .../presence와 동일합니다.",
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    public ResponseEntity<Void> sendCourseHeartbeat(
+            @PathVariable String courseId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        courseService.touchPresence(userId, courseId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/my/{courseId}/presence")
+    @Operation(
+            summary = "공동편집 presence 조회",
+            description = "현재 공동편집 화면을 보고 있는(최근 15초 내 presence/heartbeat를 보낸) 멤버 목록을 반환합니다.",
+            security = @SecurityRequirement(name = "Bearer")
+    )
+    public ResponseEntity<CoursePresenceResponse> getCoursePresence(
+            @PathVariable String courseId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.ok(courseService.getPresence(userId, courseId));
     }
 
     @PostMapping("/my/{courseId}/complete-editing")

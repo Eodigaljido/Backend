@@ -35,6 +35,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -44,6 +45,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -79,7 +81,10 @@ public class CourseService {
     private final ApplicationEventPublisher eventPublisher;
     private final FileStorageService fileStorageService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    private static final long PRESENCE_TTL_MS = 15_000;
 
     // ──────────────────────────────────────────────────────────
     // 코스 공유 링크 preview (비로그인 허용, 조회수 증가 없음)
@@ -344,19 +349,18 @@ public class CourseService {
         ensureCourseMember(route, user, CourseMember.Role.OWNER);
 
         if (!Boolean.FALSE.equals(req.createChatRoom())) {
-            ChatRoom routeRoom = ChatRoom.builder()
-                    .uuid(java.util.UUID.randomUUID().toString())
-                    .name(req.title())
-                    .type(ChatRoom.RoomType.ROUTE)
-                    .createdBy(user)
-                    .build();
-            routeRoom.assignGroup(group);
-            chatRoomRepository.save(routeRoom);
-            chatRoomMemberRepository.save(ChatRoomMember.builder()
-                    .room(routeRoom)
-                    .user(user)
-                    .role(ChatRoomMember.MemberRole.ADMIN)
-                    .build());
+            if (req.chatRoomUuid() == null || req.chatRoomUuid().isBlank()) {
+                throw new RouteException("기록을 남길 채팅방(chatRoomUuid)을 지정해주세요.", HttpStatus.BAD_REQUEST);
+            }
+            ChatRoom parentRoom = chatRoomRepository.findByUuidAndDeletedAtIsNull(req.chatRoomUuid())
+                    .orElseThrow(() -> new RouteException("채팅방을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+            if (parentRoom.getGroup() == null || !parentRoom.getGroup().getId().equals(group.getId())) {
+                throw new RouteException("해당 모임에 속한 채팅방이 아닙니다.", HttpStatus.BAD_REQUEST);
+            }
+            if (chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(parentRoom, user).isEmpty()) {
+                throw new RouteException("채팅방 멤버만 연결할 수 있습니다.", HttpStatus.FORBIDDEN);
+            }
+            ChatRoom routeRoom = createRouteChatRoom(route, user, parentRoom);
             route.assignChatRoom(routeRoom);
         }
 
@@ -540,7 +544,12 @@ public class CourseService {
                 route.enableCollaboration();
                 ensureCourseMember(route, route.getUser(), CourseMember.Role.OWNER);
             } else if (route.getUser().getId().equals(userId)) {
-                route.disableCollaboration();
+                // 이미 초대된 다른 멤버가 있으면 끄지 않는다 — 자동저장 요청이 의도치 않게
+                // collaborative:false를 함께 보내는 경우, 이미 초대된 멤버들이 갑자기
+                // 접근 권한(findCollaborativeRoute)을 잃어버리는 것을 방지한다.
+                if (!hasOtherActiveMembers(route)) {
+                    route.disableCollaboration();
+                }
             } else {
                 throw new RouteException("COURSE_FORBIDDEN", HttpStatus.FORBIDDEN);
             }
@@ -911,7 +920,7 @@ public class CourseService {
     }
 
     /**
-     * 루트에 연결된 채팅방이 없으면 새로 만들어 연결한다.
+     * 루트에 연결된 채팅방이 없으면 새로 만들어 연결한다(부모 없는 독립 기록방).
      * 이미 연결된 채팅방이 있으면 그대로 재사용한다 — 친구를 추가로 초대할 때마다
      * 새 채팅방이 생기지 않고 항상 같은 방으로 모이도록 하기 위함.
      */
@@ -919,15 +928,27 @@ public class CourseService {
         if (route.getChatRoom() != null) {
             return route.getChatRoom();
         }
+        ChatRoom room = createRouteChatRoom(route, route.getUser(), null);
+        route.assignChatRoom(room);
+        return room;
+    }
+
+    /**
+     * 루트 기록용 ROUTE 채팅방을 새로 만든다. parent가 주어지면 그 채팅방의 자식으로 연결되어
+     * 일반 채팅방 목록에는 노출되지 않고 부모 채팅방 안에서만 "루트 기록방"으로 조회된다.
+     */
+    private ChatRoom createRouteChatRoom(Route route, User creator, ChatRoom parent) {
         ChatRoom room = ChatRoom.builder()
                 .uuid(java.util.UUID.randomUUID().toString())
                 .name(route.getTitle())
                 .type(ChatRoom.RoomType.ROUTE)
-                .createdBy(route.getUser())
+                .createdBy(creator)
                 .build();
+        if (parent != null) {
+            room.assignParent(parent);
+        }
         chatRoomRepository.save(room);
-        route.assignChatRoom(room);
-        ensureChatRoomMember(room, route.getUser(), ChatRoomMember.MemberRole.ADMIN);
+        ensureChatRoomMember(room, creator, ChatRoomMember.MemberRole.ADMIN);
         return room;
     }
 
@@ -954,6 +975,11 @@ public class CourseService {
         removeCourseMember(userId, courseId, user.getUuid());
     }
 
+    /**
+     * 사용자가 고른 기존 채팅방을 "부모"로 지정하고, 그 채팅방의 자식인 루트 기록방을
+     * 만들거나(없으면) 재사용한다(이미 같은 부모로 연결돼 있으면). 고른 방 자체를 기록방으로
+     * 쓰지 않는 이유: 자유 채팅과 루트 수정 기록이 한 방에 섞이는 것을 막기 위함.
+     */
     @Transactional
     public CourseChatRoomResponse linkCourseChatRoom(Long userId, String courseId, LinkCourseChatRoomRequest req) {
         Route route = findCollaborativeRoute(courseId);
@@ -962,22 +988,34 @@ public class CourseService {
         if (!requester.canEdit()) {
             throw new RouteException("COURSE_FORBIDDEN", HttpStatus.FORBIDDEN);
         }
-        ChatRoom room = chatRoomRepository.findByUuidAndDeletedAtIsNull(req.chatRoomUuid())
+        ChatRoom parentRoom = chatRoomRepository.findByUuidAndDeletedAtIsNull(req.chatRoomUuid())
                 .orElseThrow(() -> new RouteException("채팅방을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
-        if (chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(room, requesterUser).isEmpty()) {
+        if (parentRoom.getType() == ChatRoom.RoomType.ROUTE) {
+            throw new RouteException("루트 기록방은 부모 채팅방으로 지정할 수 없습니다.", HttpStatus.BAD_REQUEST);
+        }
+        if (chatRoomMemberRepository.findByRoomAndUserAndLeftAtIsNull(parentRoom, requesterUser).isEmpty()) {
             throw new RouteException("채팅방 멤버만 연결할 수 있습니다.", HttpStatus.FORBIDDEN);
         }
-        if (route.getChatRoom() != null && !route.getChatRoom().getId().equals(room.getId())) {
-            throw new RouteException("이미 다른 채팅방이 연결되어 있습니다.", HttpStatus.CONFLICT);
+
+        ChatRoom existingRoom = route.getChatRoom();
+        if (existingRoom != null) {
+            ChatRoom existingParent = existingRoom.getParentRoom();
+            if (existingParent == null || !existingParent.getId().equals(parentRoom.getId())) {
+                throw new RouteException("이미 다른 채팅방이 연결되어 있습니다.", HttpStatus.CONFLICT);
+            }
+            courseMemberRepository.findByRouteAndLeftAtIsNull(route)
+                    .forEach(member -> ensureChatRoomMember(existingRoom, member.getUser(), ChatRoomMember.MemberRole.MEMBER));
+            return CourseChatRoomResponse.of(route.getUuid(), existingRoom,
+                    chatRoomMemberRepository.findByRoomAndLeftAtIsNull(existingRoom).size());
         }
-        boolean chatRoomChanged = route.getChatRoom() == null;
-        route.assignChatRoom(room);
+
+        ChatRoom routeRoom = createRouteChatRoom(route, requesterUser, parentRoom);
+        route.assignChatRoom(routeRoom);
         courseMemberRepository.findByRouteAndLeftAtIsNull(route)
-                .forEach(member -> ensureChatRoomMember(room, member.getUser(), ChatRoomMember.MemberRole.MEMBER));
-        if (chatRoomChanged) {
-            notifyChatCourseChanged(route, requesterUser, "채팅방에 연결했습니다");
-        }
-        return CourseChatRoomResponse.of(route.getUuid(), room, chatRoomMemberRepository.findByRoomAndLeftAtIsNull(room).size());
+                .forEach(member -> ensureChatRoomMember(routeRoom, member.getUser(), ChatRoomMember.MemberRole.MEMBER));
+        notifyChatCourseChanged(route, requesterUser, "채팅방에 연결했습니다");
+        return CourseChatRoomResponse.of(route.getUuid(), routeRoom,
+                chatRoomMemberRepository.findByRoomAndLeftAtIsNull(routeRoom).size());
     }
 
     @Transactional(readOnly = true)
@@ -986,6 +1024,55 @@ public class CourseService {
         requireCourseMember(route, findUser(userId));
         int memberCount = route.getChatRoom() == null ? 0 : chatRoomMemberRepository.findByRoomAndLeftAtIsNull(route.getChatRoom()).size();
         return CourseChatRoomResponse.of(route.getUuid(), route.getChatRoom(), memberCount);
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 공동편집 presence (지금 편집 화면을 보고 있는 멤버, TTL 기반 휘발성 상태)
+    // ──────────────────────────────────────────────────────────
+
+    /**
+     * 사용자가 지금 이 루트의 공동편집 화면을 보고 있음을 기록/갱신한다(presence 진입, heartbeat 갱신 공용).
+     * Redis ZSET에 score=마지막 갱신 시각(ms)으로 저장하고, 매 호출마다 TTL을 넘은 멤버를 정리한다.
+     */
+    @Transactional(readOnly = true)
+    public void touchPresence(Long userId, String courseId) {
+        Route route = findCollaborativeRoute(courseId);
+        requireCourseMember(route, findUser(userId));
+        String key = presenceKey(route.getUuid());
+        long now = System.currentTimeMillis();
+        redisTemplate.opsForZSet().add(key, String.valueOf(userId), now);
+        redisTemplate.opsForZSet().removeRangeByScore(key, 0, now - PRESENCE_TTL_MS);
+        redisTemplate.expire(key, Duration.ofMinutes(1));
+    }
+
+    @Transactional(readOnly = true)
+    public CoursePresenceResponse getPresence(Long userId, String courseId) {
+        Route route = findCollaborativeRoute(courseId);
+        requireCourseMember(route, findUser(userId));
+        String key = presenceKey(route.getUuid());
+        long now = System.currentTimeMillis();
+        redisTemplate.opsForZSet().removeRangeByScore(key, 0, now - PRESENCE_TTL_MS);
+        Set<String> activeUserIds = redisTemplate.opsForZSet().rangeByScore(key, now - PRESENCE_TTL_MS, now);
+        if (activeUserIds == null || activeUserIds.isEmpty()) {
+            return new CoursePresenceResponse(List.of());
+        }
+
+        List<Long> ids = activeUserIds.stream().map(Long::valueOf).toList();
+        List<User> users = userRepository.findAllById(ids);
+        Map<Long, Profile> profiles = profileRepository.findByUserIn(users).stream()
+                .collect(Collectors.toMap(p -> p.getUser().getId(), Function.identity()));
+        List<PresenceMemberResponse> members = users.stream()
+                .map(u -> new PresenceMemberResponse(
+                        u.getUuid(),
+                        displayName(u),
+                        Optional.ofNullable(profiles.get(u.getId())).map(Profile::getProfileImageUrl).orElse(null)
+                ))
+                .toList();
+        return new CoursePresenceResponse(members);
+    }
+
+    private String presenceKey(String routeUuid) {
+        return "course:presence:" + routeUuid;
     }
 
     private Route findSharedRoute(String courseId) {
@@ -997,6 +1084,11 @@ public class CourseService {
     private User findUser(Long userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new RouteException("사용자를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+    }
+
+    private boolean hasOtherActiveMembers(Route route) {
+        return courseMemberRepository.findByRouteAndLeftAtIsNull(route).stream()
+                .anyMatch(member -> !member.getUser().getId().equals(route.getUser().getId()));
     }
 
     private User findTargetUser(AddCourseMemberRequest req) {

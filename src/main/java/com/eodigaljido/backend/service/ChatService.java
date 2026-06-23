@@ -262,6 +262,9 @@ public class ChatService {
         Route linkedRoute = room.getType() == ChatRoom.RoomType.ROUTE
                 ? routeRepository.findByChatRoomIdAndStatusNot(room.getId(), Route.RouteStatus.DELETED).orElse(null)
                 : null;
+        if (linkedRoute != null && linkedRoute.getCollaborationStatus() != Route.CollaborationStatus.EDITING) {
+            throw new ChatException("편집이 완료된 루트의 기록방에는 채팅을 보낼 수 없습니다.", HttpStatus.FORBIDDEN);
+        }
 
         ChatMessage message = ChatMessage.builder()
                 .uuid(UUID.randomUUID().toString())
@@ -457,6 +460,13 @@ public class ChatService {
         ChatRoom room = getActiveRoom(roomUuid);
         ChatRoomMember senderMembership = getMembership(room, userId);
         User me = senderMembership.getUser();
+
+        if (room.getType() == ChatRoom.RoomType.ROUTE) {
+            Route linkedRoute = routeRepository.findByChatRoomIdAndStatusNot(room.getId(), Route.RouteStatus.DELETED).orElse(null);
+            if (linkedRoute != null && linkedRoute.getCollaborationStatus() != Route.CollaborationStatus.EDITING) {
+                throw new ChatException("편집이 완료된 루트의 기록방에는 채팅을 보낼 수 없습니다.", HttpStatus.FORBIDDEN);
+            }
+        }
 
         String messageUuid = UUID.randomUUID().toString();
         String attachmentUrl;

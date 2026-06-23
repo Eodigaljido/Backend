@@ -37,22 +37,22 @@ public class RouteHistoryController {
     @Operation(
             summary = "루트 기록 목록 조회",
             description = """
-                    그룹 채팅방에 속한 루트 기록 목록을 반환합니다.
+                    부모 채팅방 안에 종속된 루트 기록방(ROUTE 타입 자식 채팅방) 목록을 반환합니다.
 
                     **요청 조건**
-                    - `chatRoomUuid`: GROUP 타입 채팅방 UUID
+                    - `chatRoomUuid`: 부모로 사용 중인 채팅방 UUID (DIRECT/GROUP 등 타입 무관)
                     - 해당 채팅방 멤버만 조회 가능합니다.
 
                     **반환 조건**
-                    - 해당 그룹 내 루트 중, 실시간 공동 편집 세션을 위한 전용 채팅방(ROUTE 타입)이
-                      생성된 적 있는 루트만 목록에 포함됩니다.
-                    - 일반 채팅만 나눈 루트(전용 채팅방이 없는 루트)는 목록에 표시되지 않습니다.
+                    - 이 채팅방을 부모로 하는 루트 기록방(ROUTE 타입 자식 채팅방)에 연결된 루트만 포함됩니다.
+                    - 공동편집 친구 초대(addCourseMember)로 만들어진, 부모가 없는 독립 기록방은
+                      이 목록에 나타나지 않습니다(해당 루트 화면에서 별도로 조회해야 함).
 
                     **응답 필드**
                     | 필드 | 설명 |
                     |------|------|
                     | `courseUuid` | 루트 UUID |
-                    | `routeChatRoomUuid` | 루트 전용 채팅방 UUID |
+                    | `routeChatRoomUuid` | 루트 기록방(자식 채팅방) UUID |
                     | `name` | 루트 기록방 이름 (루트 제목) |
                     | `participantCount` | 실시간 공동 편집에 참여한 전체 인원 수 |
                     """,
@@ -69,7 +69,7 @@ public class RouteHistoryController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<List<RouteHistoryItemResponse>> getRouteHistories(
-            @Parameter(description = "그룹 채팅방 UUID (GROUP 타입)", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
+            @Parameter(description = "부모 채팅방 UUID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
             @RequestParam String chatRoomUuid,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());

@@ -17,7 +17,7 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, Long> {
 
     @Query("""
         SELECT r FROM ChatRoom r JOIN FETCH r.createdBy JOIN ChatRoomMember m ON m.room = r
-        WHERE m.user = :user AND m.leftAt IS NULL AND r.deletedAt IS NULL
+        WHERE m.user = :user AND m.leftAt IS NULL AND r.deletedAt IS NULL AND r.type <> 'ROUTE'
         ORDER BY COALESCE(
             (SELECT MAX(msg.createdAt) FROM ChatMessage msg WHERE msg.room = r),
             r.createdAt
