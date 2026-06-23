@@ -382,6 +382,7 @@ public class GroupController {
                     모임에 게시물을 작성합니다. 모임 멤버만 작성할 수 있습니다.
 
                     **Request (multipart/form-data):**
+                    - `title` (필수, 텍스트): 게시물 제목
                     - `content` (필수, 텍스트): 게시물 내용
                     - `images` (선택): 이미지 파일 목록 (JPEG·PNG·GIF·WebP, 최대 10MB, 최대 10장)
                     """,
@@ -397,11 +398,12 @@ public class GroupController {
     })
     public ResponseEntity<GroupPostResponse> createPost(
             @Parameter(description = "모임 UUID", required = true) @PathVariable String groupUuid,
+            @RequestParam @NotBlank String title,
             @RequestParam @NotBlank String content,
             @RequestPart(value = "images", required = false) List<MultipartFile> images,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
-        return ResponseEntity.status(201).body(groupService.createPost(userId, groupUuid, content, images));
+        return ResponseEntity.status(201).body(groupService.createPost(userId, groupUuid, title, content, images));
     }
 
     // ──────────────────────────────────────────────────────────
@@ -466,6 +468,7 @@ public class GroupController {
                     게시물을 수정합니다. 작성자만 수정할 수 있습니다.
 
                     **Request (multipart/form-data):**
+                    - `title` (필수, 텍스트): 게시물 제목
                     - `content` (필수, 텍스트): 게시물 내용
                     - `images` (선택): 새 이미지 파일 목록 (JPEG·PNG·GIF·WebP, 최대 10MB). 전달하면 기존 이미지를 교체하고, 생략하면 기존 이미지 유지
                     """,
@@ -483,11 +486,12 @@ public class GroupController {
     })
     public ResponseEntity<GroupPostResponse> updatePost(
             @Parameter(description = "게시물 UUID", required = true) @PathVariable String postUuid,
+            @RequestParam @NotBlank String title,
             @RequestParam @NotBlank String content,
             @RequestPart(value = "images", required = false) List<MultipartFile> images,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = Long.parseLong(userDetails.getUsername());
-        return ResponseEntity.ok(groupService.updatePost(userId, postUuid, content, images));
+        return ResponseEntity.ok(groupService.updatePost(userId, postUuid, title, content, images));
     }
 
     // ──────────────────────────────────────────────────────────

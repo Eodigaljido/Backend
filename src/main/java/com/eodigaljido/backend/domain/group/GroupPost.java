@@ -39,6 +39,9 @@ public class GroupPost extends BaseTimeEntity {
     @JoinColumn(name = "author_id", nullable = false)
     private User author;
 
+    @Column(length = 100, nullable = false)
+    private String title;
+
     @Column(columnDefinition = "TEXT", nullable = false)
     private String content;
 
@@ -51,7 +54,8 @@ public class GroupPost extends BaseTimeEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
-    public void update(String content, List<String> imageUrls) {
+    public void update(String title, String content, List<String> imageUrls) {
+        this.title = title;
         this.content = content;
         this.imageUrls.clear();
         if (imageUrls != null) {

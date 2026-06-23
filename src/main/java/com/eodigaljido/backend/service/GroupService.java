@@ -330,7 +330,7 @@ public class GroupService {
     // ──────────────────────────────────────────────────────────
 
     @Transactional
-    public GroupPostResponse createPost(Long userId, String groupUuid, String content, List<MultipartFile> images) {
+    public GroupPostResponse createPost(Long userId, String groupUuid, String title, String content, List<MultipartFile> images) {
         Group group = findActiveGroup(groupUuid);
         requireMember(group, userId);
         User author = findUser(userId);
@@ -342,10 +342,11 @@ public class GroupService {
                 .uuid(postUuid)
                 .group(group)
                 .author(author)
+                .title(title)
                 .content(content)
                 .build();
         if (!uploadedUrls.isEmpty()) {
-            post.update(content, uploadedUrls);
+            post.update(title, content, uploadedUrls);
         }
         groupPostRepository.save(post);
 
@@ -395,7 +396,7 @@ public class GroupService {
     // ──────────────────────────────────────────────────────────
 
     @Transactional
-    public GroupPostResponse updatePost(Long userId, String postUuid, String content, List<MultipartFile> images) {
+    public GroupPostResponse updatePost(Long userId, String postUuid, String title, String content, List<MultipartFile> images) {
         GroupPost post = groupPostRepository.findByUuidAndDeletedAtIsNull(postUuid)
                 .orElseThrow(() -> new GroupException("게시물을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
         if (!post.getAuthor().getId().equals(userId)) {
@@ -409,7 +410,7 @@ public class GroupService {
         } else {
             newUrls = post.getImageUrls();
         }
-        post.update(content, newUrls);
+        post.update(title, content, newUrls);
         return GroupPostResponse.of(post, profileRepository.findByUser(post.getAuthor()).orElse(null));
     }
 
