@@ -133,8 +133,8 @@ public class CourseService {
 
     @Transactional(readOnly = true)
     public CoursePageResponse getPublicCourses(String tab, String category, String region,
-                                               String sort, String q, int page, int size,
-                                               Long currentUserId) {
+                                               String sort, String q, String nickname,
+                                               int page, int size, Long currentUserId) {
         Sort sortSpec = resolveSort(tab, sort);
         Pageable pageable = PageRequest.of(page, size, sortSpec);
 
@@ -142,10 +142,10 @@ public class CourseService {
 
         if ("friends".equals(tab) && currentUserId != null) {
             result = routeRepository.findSharedCoursesByFriends(
-                    currentUserId, RouteStatus.DELETED, category, region, q, pageable);
+                    currentUserId, RouteStatus.DELETED, category, region, q, nickname, pageable);
         } else {
             result = routeRepository.findSharedCourses(
-                    RouteStatus.DELETED, category, region, q, pageable);
+                    RouteStatus.DELETED, category, region, q, nickname, pageable);
         }
 
         List<Route> routes = result.getContent();
@@ -218,7 +218,7 @@ public class CourseService {
     }
 
     // ──────────────────────────────────────────────────────────
-    // 코스 즐겨찾기 저장 (내 루트 추가)
+    // 코스 즐겨찾기 추가
     // ──────────────────────────────────────────────────────────
 
     @Transactional

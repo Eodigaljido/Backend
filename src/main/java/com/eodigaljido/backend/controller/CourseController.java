@@ -47,6 +47,8 @@ public class CourseController {
 
                     로그인 상태이면 각 아이템에 **`savedByMe`** 필드가 포함됩니다.
                     미로그인 시 `savedByMe`는 항상 `false`입니다.
+
+                    `q`는 제목/설명 검색, `nickname`은 작성자 닉네임 검색입니다. 두 파라미터는 동시에 사용할 수 있습니다.
                     """,
             security = {}
     )
@@ -65,6 +67,8 @@ public class CourseController {
             @RequestParam(required = false) String sort,
             @Parameter(description = "제목/설명 검색어", example = "고궁")
             @RequestParam(required = false) String q,
+            @Parameter(description = "작성자 닉네임 검색어", example = "여행러")
+            @RequestParam(required = false) String nickname,
             @Parameter(description = "페이지 번호 (0부터 시작)", example = "0")
             @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "페이지 크기", example = "20")
@@ -72,7 +76,7 @@ public class CourseController {
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = userDetails != null ? Long.parseLong(userDetails.getUsername()) : null;
         return ResponseEntity.ok(
-                courseService.getPublicCourses(tab, category, region, sort, q, page, size, userId));
+                courseService.getPublicCourses(tab, category, region, sort, q, nickname, page, size, userId));
     }
 
     // ──────────────────────────────────────────────────────────
@@ -145,22 +149,22 @@ public class CourseController {
     }
 
     // ──────────────────────────────────────────────────────────
-    // 코스 즐겨찾기 저장
+    // 코스 즐겨찾기 추가
     // ──────────────────────────────────────────────────────────
 
     @PostMapping("/{courseId}/save")
     @Operation(
-            summary = "코스 내 루트에 저장",
-            description = "공유된 코스를 내 루트에 추가합니다. 같은 코스를 중복 저장할 수 없습니다.",
+            summary = "코스 즐겨찾기 추가",
+            description = "공유된 코스를 즐겨찾기에 추가합니다. 같은 코스를 중복 추가할 수 없습니다.",
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "저장 성공"),
+            @ApiResponse(responseCode = "204", description = "즐겨찾기 추가 성공"),
             @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "없는 ID 또는 비공개 코스",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "409", description = "이미 저장된 코스",
+            @ApiResponse(responseCode = "409", description = "이미 즐겨찾기한 코스",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<Void> saveCourse(
@@ -171,25 +175,25 @@ public class CourseController {
     }
 
     // ──────────────────────────────────────────────────────────
-    // 저장한 코스 목록 (페이징)
+    // 즐겨찾기한 코스 목록 (페이징)
     // ──────────────────────────────────────────────────────────
 
     @GetMapping("/saved")
     @Operation(
-            summary = "저장한 코스 목록 조회",
+            summary = "즐겨찾기한 코스 목록 조회",
             description = """
-                    로그인 사용자가 저장(북마크)한 공유 코스 목록을 페이징하여 반환합니다.
+                    로그인 사용자가 즐겨찾기한 공유 코스 목록을 페이징하여 반환합니다.
 
-                    - `userUuid` 생략 시: **로그인 본인**의 저장 목록
-                    - `userUuid` 지정 시: **해당 사용자**의 저장 목록 (타인 프로필 조회)
+                    - `userUuid` 생략 시: **로그인 본인**의 즐겨찾기 목록
+                    - `userUuid` 지정 시: **해당 사용자**의 즐겨찾기 목록 (타인 프로필 조회)
 
                     응답 아이템의 `savedByMe`는 **로그인 본인** 기준으로 표시됩니다.
-                    타인 목록을 조회할 때 내가 저장한 항목이면 `savedByMe: true`입니다.
+                    타인 목록을 조회할 때 내가 즐겨찾기한 항목이면 `savedByMe: true`입니다.
                     """,
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "저장한 코스 목록 반환",
+            @ApiResponse(responseCode = "200", description = "즐겨찾기한 코스 목록 반환",
                     content = @Content(schema = @Schema(implementation = CoursePageResponse.class))),
             @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
@@ -765,20 +769,20 @@ public class CourseController {
     }
 
     // ──────────────────────────────────────────────────────────
-    // 저장 취소
+    // 즐겨찾기 취소
     // ──────────────────────────────────────────────────────────
 
     @DeleteMapping("/{courseId}/save")
     @Operation(
-            summary = "저장된 코스 취소",
-            description = "내 루트에 저장했던 공유 코스를 제거합니다.",
+            summary = "코스 즐겨찾기 취소",
+            description = "즐겨찾기한 공유 코스를 즐겨찾기에서 제거합니다.",
             security = @SecurityRequirement(name = "Bearer")
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "저장 취소 성공"),
+            @ApiResponse(responseCode = "204", description = "즐겨찾기 취소 성공"),
             @ApiResponse(responseCode = "401", description = "인증 토큰 없음/만료",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "코스 또는 저장 기록을 찾을 수 없음",
+            @ApiResponse(responseCode = "404", description = "코스 또는 즐겨찾기 기록을 찾을 수 없음",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<Void> unsaveCourse(
