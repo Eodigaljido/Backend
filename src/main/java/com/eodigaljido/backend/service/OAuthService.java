@@ -30,6 +30,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -148,13 +149,16 @@ public class OAuthService {
 
     private OAuthLoginResponse resolveOAuthLogin(UserOAuthProvider oap, OAuthProvider provider,
                                                  String providerId, String email, String name) {
-        User user = oap.getUser();
-        if (user.getStatus() == User.UserStatus.DELETED) {
-            // 탈퇴한 계정에 남아있는 OAuth 레코드 정리 후 신규 계정으로 처리
+        // oap.getUser()는 Hibernate 프록시라 getId()는 안전하지만 .getStatus() 등 프로퍼티 접근 시
+        // user row가 물리 삭제된 경우 ObjectNotFoundException이 발생한다.
+        // findById로 명시적으로 조회해 hard-delete / soft-delete 모두 처리한다.
+        Long userId = oap.getUser().getId();
+        Optional<User> userOpt = userRepository.findById(userId);
+        if (userOpt.isEmpty() || userOpt.get().getStatus() == User.UserStatus.DELETED) {
             oAuthProviderRepository.delete(oap);
             return findOrCreateUser(provider, providerId, email, name);
         }
-        return issueTokens(user, false);
+        return issueTokens(userOpt.get(), false);
     }
 
     private OAuthLoginResponse findOrCreateUser(OAuthProvider provider, String providerId,
