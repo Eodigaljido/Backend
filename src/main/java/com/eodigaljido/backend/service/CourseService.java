@@ -46,8 +46,10 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -1162,30 +1164,80 @@ public class CourseService {
                                           String previousTitle, List<RouteWaypoint> previousWaypoints,
                                           List<RouteWaypoint> waypoints, List<RouteLeg> previousLegs,
                                           List<RouteLeg> legs) {
-        List<CourseEditEvent> events = new java.util.ArrayList<>();
+        List<CourseEditEvent> events = new ArrayList<>();
         if (req.title() != null && !req.title().equals(previousTitle)) {
             events.add(new CourseEditEvent(ChatMessage.MessageType.TITLE_CHANGED,
                     Map.of("before", previousTitle, "after", req.title())));
         }
-        if (req.stops() != null && waypoints.size() != previousWaypoints.size()) {
-            boolean added = waypoints.size() > previousWaypoints.size();
-            Set<String> previousNames = previousWaypoints.stream().map(RouteWaypoint::getName).collect(Collectors.toSet());
-            Set<String> newNames = waypoints.stream().map(RouteWaypoint::getName).collect(Collectors.toSet());
-            List<String> changedNames = added
-                    ? newNames.stream().filter(name -> !previousNames.contains(name)).toList()
-                    : previousNames.stream().filter(name -> !newNames.contains(name)).toList();
-            events.add(new CourseEditEvent(
-                    added ? ChatMessage.MessageType.STOP_ADDED : ChatMessage.MessageType.STOP_REMOVED,
-                    Map.of("stopNames", changedNames)));
+        if (req.stops() != null) {
+            if (waypoints.size() != previousWaypoints.size()) {
+                boolean added = waypoints.size() > previousWaypoints.size();
+                Set<String> previousNames = previousWaypoints.stream().map(RouteWaypoint::getName).collect(Collectors.toSet());
+                Set<String> newNames = waypoints.stream().map(RouteWaypoint::getName).collect(Collectors.toSet());
+                List<String> changedNames = added
+                        ? newNames.stream().filter(name -> !previousNames.contains(name)).toList()
+                        : previousNames.stream().filter(name -> !newNames.contains(name)).toList();
+                events.add(new CourseEditEvent(
+                        added ? ChatMessage.MessageType.STOP_ADDED : ChatMessage.MessageType.STOP_REMOVED,
+                        Map.of("stopNames", changedNames)));
+            } else {
+                List<Map<String, String>> modifications = new ArrayList<>();
+                for (int i = 0; i < previousWaypoints.size(); i++) {
+                    String prevName = previousWaypoints.get(i).getName();
+                    String newName = waypoints.get(i).getName();
+                    if (!Objects.equals(prevName, newName)) {
+                        modifications.add(Map.of(
+                                "sequence", String.valueOf(i + 1),
+                                "before", prevName != null ? prevName : "",
+                                "after", newName != null ? newName : ""));
+                    }
+                }
+                if (!modifications.isEmpty()) {
+                    events.add(new CourseEditEvent(ChatMessage.MessageType.STOP_MODIFIED,
+                            Map.of("modifications", modifications)));
+                }
+            }
         }
-        if (req.legs() != null) {
+        if (req.legs() != null && legsChanged(previousLegs, legs)) {
             events.add(new CourseEditEvent(ChatMessage.MessageType.LEG_UPDATED,
-                    Map.of("previousLegCount", previousLegs.size(), "newLegCount", legs.size())));
-        }
-        if (events.isEmpty()) {
-            events.add(new CourseEditEvent(ChatMessage.MessageType.ROUTE_UPDATED, null));
+                    buildLegUpdateDetails(previousLegs, legs)));
         }
         events.forEach(event -> recordCourseEvent(route, editor, event.type(), event.details()));
+    }
+
+    private boolean legsChanged(List<RouteLeg> previousLegs, List<RouteLeg> legs) {
+        if (previousLegs.size() != legs.size()) return true;
+        for (int i = 0; i < previousLegs.size(); i++) {
+            RouteLeg prev = previousLegs.get(i);
+            RouteLeg curr = legs.get(i);
+            if (!Objects.equals(prev.getMode(), curr.getMode())
+                    || !Objects.equals(prev.getTransitType(), curr.getTransitType())
+                    || !Objects.equals(prev.getMinutes(), curr.getMinutes())
+                    || !Objects.equals(prev.getDistanceMeters(), curr.getDistanceMeters())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private Map<String, Object> buildLegUpdateDetails(List<RouteLeg> previousLegs, List<RouteLeg> legs) {
+        Map<String, Object> details = new java.util.LinkedHashMap<>();
+        details.put("previousLegCount", previousLegs.size());
+        details.put("newLegCount", legs.size());
+        if (previousLegs.size() == legs.size()) {
+            List<String> modeChanges = new ArrayList<>();
+            for (int i = 0; i < previousLegs.size(); i++) {
+                String prevMode = previousLegs.get(i).getMode();
+                String newMode = legs.get(i).getMode();
+                if (!Objects.equals(prevMode, newMode)) {
+                    modeChanges.add((prevMode != null ? prevMode : "unknown") + "→" + (newMode != null ? newMode : "unknown"));
+                }
+            }
+            if (!modeChanges.isEmpty()) {
+                details.put("modesChanged", modeChanges);
+            }
+        }
+        return details;
     }
 
     /**
@@ -1212,12 +1264,80 @@ public class CourseService {
                 .room(route.getChatRoom())
                 .sender(editor)
                 .type(type)
-                .content(type.describe(nickname))
+                .content(buildContentMessage(type, nickname, details))
                 .route(route)
                 .editDetails(detailsJson)
                 .build();
         chatMessageRepository.save(message);
         broadcastCourseChatMessage(route.getChatRoom(), message, profile);
+    }
+
+    @SuppressWarnings("unchecked")
+    private String buildContentMessage(ChatMessage.MessageType type, String nickname, Map<String, ?> details) {
+        if (details == null) return type.describe(nickname);
+        return switch (type) {
+            case TITLE_CHANGED -> {
+                String before = (String) details.get("before");
+                String after = (String) details.get("after");
+                yield nickname + "님이 루트 이름을 '" + before + "'에서 '" + after + "'로 변경하였습니다";
+            }
+            case STOP_ADDED -> {
+                List<String> names = (List<String>) details.get("stopNames");
+                String joined = names.stream().map(n -> "'" + n + "'").collect(Collectors.joining(", "));
+                yield nickname + "님이 " + joined + " 경유지를 추가하였습니다";
+            }
+            case STOP_REMOVED -> {
+                List<String> names = (List<String>) details.get("stopNames");
+                String joined = names.stream().map(n -> "'" + n + "'").collect(Collectors.joining(", "));
+                yield nickname + "님이 " + joined + " 경유지를 삭제하였습니다";
+            }
+            case STOP_MODIFIED -> {
+                List<Map<String, String>> mods = (List<Map<String, String>>) details.get("modifications");
+                if (mods.size() == 1) {
+                    String seq = mods.get(0).get("sequence");
+                    String before = mods.get(0).get("before");
+                    String after = mods.get(0).get("after");
+                    yield nickname + "님이 " + seq + "번째 경유지를 '" + before + "'에서 '" + after + "'로 수정하였습니다";
+                } else {
+                    String summary = mods.stream()
+                            .map(m -> m.get("sequence") + "번째: '" + m.get("before") + "'→'" + m.get("after") + "'")
+                            .collect(Collectors.joining(", "));
+                    yield nickname + "님이 경유지 " + mods.size() + "개를 수정하였습니다 (" + summary + ")";
+                }
+            }
+            case LEG_UPDATED -> {
+                int prev = ((Number) details.get("previousLegCount")).intValue();
+                int next = ((Number) details.get("newLegCount")).intValue();
+                List<String> modesChanged = details.containsKey("modesChanged")
+                        ? (List<String>) details.get("modesChanged") : List.of();
+                if (prev != next) {
+                    yield nickname + "님이 이동 구간을 " + prev + "개에서 " + next + "개로 변경하였습니다";
+                } else if (modesChanged.size() == 1) {
+                    String[] parts = modesChanged.get(0).split("→");
+                    String from = modeToKorean(parts[0]);
+                    String to = modeToKorean(parts[1]);
+                    yield nickname + "님이 이동 수단을 '" + from + "'에서 '" + to + "'로 변경하였습니다";
+                } else if (!modesChanged.isEmpty()) {
+                    String summary = modesChanged.stream()
+                            .map(m -> { String[] p = m.split("→"); return modeToKorean(p[0]) + "→" + modeToKorean(p[1]); })
+                            .collect(Collectors.joining(", "));
+                    yield nickname + "님이 이동 수단을 변경하였습니다 (" + summary + ")";
+                } else {
+                    yield nickname + "님이 이동 구간을 수정하였습니다";
+                }
+            }
+            default -> type.describe(nickname);
+        };
+    }
+
+    private String modeToKorean(String mode) {
+        return switch (mode.trim()) {
+            case "walk" -> "도보";
+            case "transit" -> "대중교통";
+            case "car" -> "자동차";
+            case "bike" -> "자전거";
+            default -> mode;
+        };
     }
 
     private void broadcastCourseChatMessage(ChatRoom room, ChatMessage message, Profile senderProfile) {

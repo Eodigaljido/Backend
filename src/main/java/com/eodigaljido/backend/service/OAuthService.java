@@ -57,7 +57,7 @@ public class OAuthService {
         String name = userInfo.path("name").asText("Google User");
 
         return oAuthProviderRepository.findByProviderAndProviderId(OAuthProvider.GOOGLE, providerId)
-                .map(oap -> issueTokens(oap.getUser(), false))
+                .map(oap -> resolveOAuthLogin(oap, OAuthProvider.GOOGLE, providerId, email, name))
                 .orElseGet(() -> findOrCreateUser(OAuthProvider.GOOGLE, providerId, email, name));
     }
 
@@ -73,7 +73,7 @@ public class OAuthService {
         String name = account.path("profile").path("nickname").asText("Kakao User");
 
         return oAuthProviderRepository.findByProviderAndProviderId(OAuthProvider.KAKAO, providerId)
-                .map(oap -> issueTokens(oap.getUser(), false))
+                .map(oap -> resolveOAuthLogin(oap, OAuthProvider.KAKAO, providerId, email, name))
                 .orElseGet(() -> findOrCreateUser(OAuthProvider.KAKAO, providerId, email, name));
     }
 
@@ -146,19 +146,39 @@ public class OAuthService {
 
     // ── 공통 사용자 처리 ─────────────────────────────────────────────────────
 
+    private OAuthLoginResponse resolveOAuthLogin(UserOAuthProvider oap, OAuthProvider provider,
+                                                 String providerId, String email, String name) {
+        User user = oap.getUser();
+        if (user.getStatus() == User.UserStatus.DELETED) {
+            // 탈퇴한 계정에 남아있는 OAuth 레코드 정리 후 신규 계정으로 처리
+            oAuthProviderRepository.delete(oap);
+            return findOrCreateUser(provider, providerId, email, name);
+        }
+        return issueTokens(user, false);
+    }
+
     private OAuthLoginResponse findOrCreateUser(OAuthProvider provider, String providerId,
                                                 String email, String name) {
         // 동일 이메일 계정 존재 시 자동 연동 금지 — 명시적 연동 엔드포인트 사용 안내
-        if (email != null && userRepository.findByEmail(email).isPresent()) {
-            throw new AuthException(
-                    "동일한 이메일로 이미 가입된 계정이 있습니다. 기존 계정으로 로그인한 후 소셜 계정 연동 기능을 이용해 주세요.",
-                    HttpStatus.CONFLICT);
+        // 단, 탈퇴 계정의 이메일은 무시 (새 계정 생성 허용, 이메일은 null로 처리)
+        String effectiveEmail = email;
+        if (email != null) {
+            userRepository.findByEmail(email).ifPresent(existing -> {
+                if (existing.getStatus() != User.UserStatus.DELETED) {
+                    throw new AuthException(
+                            "동일한 이메일로 이미 가입된 계정이 있습니다. 기존 계정으로 로그인한 후 소셜 계정 연동 기능을 이용해 주세요.",
+                            HttpStatus.CONFLICT);
+                }
+            });
+            if (userRepository.findByEmail(email).isPresent()) {
+                effectiveEmail = null;
+            }
         }
 
         // 신규 계정 생성
         User newUser = User.builder()
                 .uuid(UUID.randomUUID().toString())
-                .email(email)
+                .email(effectiveEmail)
                 .friendCode(friendCodeService.generateUniqueCode())
                 .build();
         userRepository.save(newUser);

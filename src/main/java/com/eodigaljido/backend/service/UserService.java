@@ -80,6 +80,7 @@ public class UserService {
     @Transactional
     public void withdraw(Long userId) {
         User user = findActiveUser(userId);
+        oAuthProviderRepository.deleteAllByUser(user);
         user.markDeleted();
     }
 

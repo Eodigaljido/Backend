@@ -77,10 +77,10 @@ public class ChatMessage {
 
     public enum MessageType {
         TEXT, IMAGE, ROUTE, SYSTEM,
-        ROUTE_UPDATED, STOP_ADDED, STOP_REMOVED, LEG_UPDATED, TITLE_CHANGED, EDITING_COMPLETED, EDITING_RESUMED;
+        ROUTE_UPDATED, STOP_ADDED, STOP_REMOVED, STOP_MODIFIED, LEG_UPDATED, TITLE_CHANGED, EDITING_COMPLETED, EDITING_RESUMED;
 
         public boolean isCourseEvent() {
-            return this == ROUTE_UPDATED || this == STOP_ADDED || this == STOP_REMOVED
+            return this == ROUTE_UPDATED || this == STOP_ADDED || this == STOP_REMOVED || this == STOP_MODIFIED
                     || this == LEG_UPDATED || this == TITLE_CHANGED
                     || this == EDITING_COMPLETED || this == EDITING_RESUMED;
         }
@@ -89,6 +89,7 @@ public class ChatMessage {
             String suffix = switch (this) {
                 case STOP_ADDED -> "님이 경유지를 추가했습니다";
                 case STOP_REMOVED -> "님이 경유지를 삭제했습니다";
+                case STOP_MODIFIED -> "님이 경유지를 수정했습니다";
                 case LEG_UPDATED -> "님이 이동 구간을 수정했습니다";
                 case TITLE_CHANGED -> "님이 루트 이름을 변경했습니다";
                 case EDITING_COMPLETED -> "님이 편집을 완료했습니다";
