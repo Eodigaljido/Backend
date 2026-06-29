@@ -35,16 +35,20 @@ public interface RouteRepository extends JpaRepository<Route, Long> {
 
     // 공유 코스 목록 (필터/검색/페이징)
     @Query("""
-            SELECT r FROM Route r JOIN FETCH r.user
+            SELECT r FROM Route r JOIN FETCH r.user u
             WHERE r.isShared = true AND r.status <> :status
               AND (:category IS NULL OR r.activityType = :category)
               AND (:region IS NULL OR r.region = :region)
               AND (:q IS NULL OR r.title LIKE %:q% OR r.description LIKE %:q%)
+              AND (:nickname IS NULL OR EXISTS (
+                    SELECT p FROM Profile p WHERE p.user = u AND p.nickname LIKE %:nickname%
+                  ))
             """)
     Page<Route> findSharedCourses(@Param("status") RouteStatus status,
                                   @Param("category") String category,
                                   @Param("region") String region,
                                   @Param("q") String q,
+                                  @Param("nickname") String nickname,
                                   Pageable pageable);
 
     // 친구들의 공유 코스 목록
@@ -60,12 +64,16 @@ public interface RouteRepository extends JpaRepository<Route, Long> {
               AND (:category IS NULL OR r.activityType = :category)
               AND (:region IS NULL OR r.region = :region)
               AND (:q IS NULL OR r.title LIKE %:q% OR r.description LIKE %:q%)
+              AND (:nickname IS NULL OR EXISTS (
+                    SELECT p FROM Profile p WHERE p.user = u AND p.nickname LIKE %:nickname%
+                  ))
             """)
     Page<Route> findSharedCoursesByFriends(@Param("userId") Long userId,
                                            @Param("status") RouteStatus status,
                                            @Param("category") String category,
                                            @Param("region") String region,
                                            @Param("q") String q,
+                                           @Param("nickname") String nickname,
                                            Pageable pageable);
 
     // 내 코스 목록 (직접 만들거나 저장한 코스, 또는 공동작업 모임 루트)
